@@ -9,18 +9,23 @@ Example work flow
 
 1. start julia
 2. execute the following
-#+BEGIN_JULIA:
+
+``` julia
 using Revise
 includet("EarthMover.jl")
 Q = [0. 1.; 1. 0.]; a = [2.0; 0]; b = [0.; 2]; N = 100;
 vector, dist = BBD(Q, a, b, N)
-#+END_JULIA
+```
+
 
 Testing individual files
 
-#+BEGIN_JULIA:
+``` julia
+
 using Revise
 includet("src/KProjection.jl")
 includet("tests/KProjectionTest.jl")
 test_proj_ktop()
-#+END_JULIA:
+```
+
+
