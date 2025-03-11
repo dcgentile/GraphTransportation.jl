@@ -47,25 +47,35 @@ function proj_B(x, y; maxiter=50, tol=1e-10)
     end
     # otherwise, make an initial guess by projecting onto a linear approximation
     # of the objective function
+    #try
+    #catch error
+        #project_by_GD(x,y)
+    #end
+
+
+    #return newton_projection(x0, x, y)
+
     x0 = 0
     if x ≤ y
         x0 = (y - x) / 2
     elseif x ≤ -y
         x0 = (x - y) / 2
     end
+    for initial_guess in collect(-100:100)#[n*x0 for n=1:100]
+        try
+            return newton_projection(initial_guess, x, y, maxiter=maxiter, tol=tol)
+        catch error
+            continue
+        end
 
-    return newton_projection(x0, x, y)
 
-    #for x0 in collect(-100:10:100)
-        #try
-            #return newton_projection(x0, x, y, maxiter=maxiter, tol=tol)
-        #catch error
-            #continue
-        #end
-#
-#
-    #end
+    end
 end
+
+function project_by_GD()
+
+end
+
 
 function newton_projection(x0, x, y;tol=1e-10, maxiter=500)
     """

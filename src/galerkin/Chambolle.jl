@@ -147,7 +147,7 @@ function prox_G!(targ, bundle)
     u = targ.vector
     proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
     project_K!(v.ρ_minus, v.ρ_plus, v.θ)
-    proximal_IJeq!(v.ρ_avg, v.q)
+    project_IJeq!(v.ρ_avg, v.q)
 
     u.ρ .= v.ρ
     u.θ .= v.θ
@@ -168,8 +168,8 @@ function prox_Fstar(σ::Float64, b::ErbarBundle, a_bar::ErbarBundle)
     u = b + σ * a_bar
     v = u.vector
     θ, m = prox_Astar(v.θ, v.m)
-    q, ρ_minus, ρ_plus = proximal_IJpm(v.q, v.ρ_minus, v.ρ_plus, cache.Q)
-    ρ, ρ_avg = prox_IJavg(v.ρ, v.ρ_avg, cache.μ, cache.ν, cache.avg_sys)
+    q, ρ_minus, ρ_plus = proximal_IJpm_star(v.q, v.ρ_minus, v.ρ_plus, cache.Q)
+    ρ, ρ_avg = prox_IJavg_star(v.ρ, v.ρ_avg, cache.μ, cache.ν, cache.avg_sys)
     vprime = ErbarVector(ρ, m, θ, ρ_minus, ρ_plus, ρ_avg, q)
     return ErbarBundle(b.cache, vprime)
 
@@ -187,7 +187,7 @@ function prox_G(τ::Float64, a::ErbarBundle, b::ErbarBundle)
 
     ρ, m = proj_CE(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
     ρ_minus, ρ_plus, θ = project_K_routine(v.ρ_minus, v.ρ_plus, v.θ)
-    ρ_avg, q = proximal_IJeq(v.ρ_avg, v.q)
+    ρ_avg, q = project_IJeq(v.ρ_avg, v.q)
 
     vprime = ErbarVector(ρ, m, θ, ρ_minus, ρ_plus, ρ_avg, q)
     return ErbarBundle(a.cache, vprime)

@@ -12,12 +12,16 @@ function BBD(Q::AbstractMatrix,
 end
 
 
-Q = [0. 1.; 1. 0.]
-μ = [2.; 0.]
-ν = [0.; 2.]
+Q = [
+    0. 0.5 0.5;
+    0.5 0. 0.5;
+    0.5 0.5 0
+]
+μ = [3.; 0.; 0.]
+ν = [0.; 3.; 0.]
 
 geodesic_μν, dist1 = BBD(Q, μ, ν, 100, tol=1e-6)
-geodesic_νμ, dist2 = BBD(Q, μ, ν, 100, tol=1e-6)
+geodesic_νμ, dist2 = BBD(Q, ν, μ, 100, tol=1e-6)
 
 println(dist1 - dist2)
 

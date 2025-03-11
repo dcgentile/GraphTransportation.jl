@@ -8,7 +8,7 @@ function test()
     ρ = [1/3; 1/3; 1/3;; 2/3; 1/6; 1/6;; 1; 0; 0]
     q = [1/2; 1/2; 0;; 3/4; 1/4; 0;; 1; 0; 0]
     answer = [5/12; 5/12; 1/6;; 17/24; 5/24; 1/12;; 1; 0; 0]
-    ρ_pr, q_pr = proximal_IJeq(ρ, q)
+    ρ_pr, q_pr = project_IJeq(ρ, q)
     ec = 0
     try
 	    @assert isapprox(answer, ρ_pr)

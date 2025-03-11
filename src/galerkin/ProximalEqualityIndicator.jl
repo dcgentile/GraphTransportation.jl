@@ -1,5 +1,5 @@
 
-function proximal_IJeq(ρ::AbstractArray, q::AbstractArray)
+function project_IJeq(ρ::AbstractArray, q::AbstractArray)
     """
     compute the proximal mapping of IJ_eq in place
 
@@ -12,7 +12,7 @@ function proximal_IJeq(ρ::AbstractArray, q::AbstractArray)
     return (x, x)
 end
 
-function proximal_IJeq!(ρ::AbstractArray, q::AbstractArray)
+function project_IJeq!(ρ::AbstractArray, q::AbstractArray)
     """
     compute the proximal mapping of IJ_eq in place
 
