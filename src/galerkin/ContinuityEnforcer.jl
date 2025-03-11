@@ -17,7 +17,7 @@ function form_ceh_system(Q, N)
     D = (∂t^2) + L
     Now because the the value of Lf(x) will in general depend on non-local information
     (i.e values of f away from x), care must be taken when setting up this projection problem,
-    and we must treat it as one simultaneous linear system on \R^{NV + 1 × NV + 1}
+    and we must treat it as one simultaneous linear system on R^{NV + 1 × NV + 1}
     """
 	V = size(Q,1)
     #form the Laplacian, and write N copies of it to an array

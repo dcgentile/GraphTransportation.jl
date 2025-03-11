@@ -36,7 +36,7 @@ function chambolle_pock_me(
 )
     """
     this is a memory efficient version of Chambolle Pock that does computations in place whenever possible
-    iterations cease if ∫||ρ_{k} - ρ_{k + 1}||_\pi dt < tol
+    iterations cease if ∫||ρ_{k} - ρ_{k + 1}||_π dt < tol
 
     arguments
     Q, a Markov kernel defining the graph
@@ -86,7 +86,7 @@ function chambolle_pock_routine(
 )
     """
     the Chambolle Pock routine. vectors are reallocated on every iteration.
-    iterations cease if ∫||ρ_{k} - ρ_{k + 1}||_\pi dt < tol
+    iterations cease if ∫||ρ_{k} - ρ_{k + 1}||_π dt < tol
 
     arguments
     Q, a Markov kernel defining the graph
@@ -125,8 +125,8 @@ function prox_Fstar!(targ, bundle)
     v = bundle.vector
     u = targ.vector
     prox_Astar!(v.θ, v.m)
-    proximal_IJpm!(v.q, v.ρ_minus, v.ρ_plus, cache.Q)
-    prox_IJavg!(v.ρ, v.ρ_avg, cache.μ, cache.ν, cache.avg_sys)
+    proximal_IJpm_star!(v.q, v.ρ_minus, v.ρ_plus, cache.Q)
+    prox_IJavg_star!(v.ρ, v.ρ_avg, cache.μ, cache.ν, cache.avg_sys)
     u.ρ .= v.ρ
     u.θ .= v.θ
     u.m .= v.m

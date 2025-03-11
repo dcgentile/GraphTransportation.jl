@@ -12,13 +12,15 @@ function BBD(Q::AbstractMatrix,
 end
 
 
-#Q = [0. 1.; 1. 0.]
-#μ = [2.; 0.]
-#ν = [0.; 2.]
+Q = [0. 1.; 1. 0.]
+μ = [2.; 0.]
+ν = [0.; 2.]
 
-Q = [0. 1. 1.; 1. 0. 1.; 1. 1. 0.]
-μ = [3.; 0.; 0]
-ν = [0.; 3.; 0]
-dist = BBD(Q, μ, ν, 100, tol=1e-8)
+geodesic_μν, dist1 = BBD(Q, μ, ν, 100, tol=1e-6)
+geodesic_νμ, dist2 = BBD(Q, μ, ν, 100, tol=1e-6)
 
-#println(sqrt(dist))
+println(dist1 - dist2)
+
+#Q = [0. 1. 1.; 1. 0. 1.; 1. 1. 0.]
+#μ = [3.; 0.; 0]
+#ν = [0.; 3.; 0]
