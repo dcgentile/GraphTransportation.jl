@@ -37,46 +37,6 @@ function prox_Astar(θ, m)
     return (θ_pr, m_pr)
 end
 
-function proj_B(x, y; maxiter=50, tol=1e-10)
-    """
-    given real numbers x,y project (x,y) to the set B
-    """
-	if x + 0.25 * y^2 ≤ 0
-        # if you're already in the set, nothing to do
-        return (x, y)
-    end
-    # otherwise, make an initial guess by projecting onto a linear approximation
-    # of the objective function
-    #try
-    #catch error
-        #project_by_GD(x,y)
-    #end
-
-
-    #return newton_projection(x0, x, y)
-
-    x0 = 0
-    if x ≤ y
-        x0 = (y - x) / 2
-    elseif x ≤ -y
-        x0 = (x - y) / 2
-    end
-    for initial_guess in collect(-100:100)#[n*x0 for n=1:100]
-        try
-            return newton_projection(initial_guess, x, y, maxiter=maxiter, tol=tol)
-        catch error
-            continue
-        end
-
-
-    end
-end
-
-function project_by_GD()
-
-end
-
-
 function newton_projection(x0, x, y;tol=1e-10, maxiter=500)
     """
     a naive implementation of Newton's method for projecting onto the parabolic set B
@@ -97,10 +57,52 @@ function newton_projection(x0, x, y;tol=1e-10, maxiter=500)
             return (-(p_curr)^2 / 4, p_curr)
         end
         p_curr = p_next
-        i += 1
     end
     error("Failed to converge")
 end
+
+
+function proj_B(x, y; maxiter=50, tol=1e-10)
+    """
+    given real numbers x,y project (x,y) to the set B
+    """
+
+    return x + 0.25*y^2 ≤ 0 ? (x, y) : newton_projection(-y^2/8, x, y, maxiter=maxiter, tol=tol)
+
+end
+	#if x + 0.25 * y^2 ≤ 0
+        ## if you're already in the set, nothing to do
+        #return (x, y)
+    #end
+    ## otherwise, make an initial guess by projecting onto a linear approximation
+    ## of the objective function
+    ##try
+    ##catch error
+        ##project_by_GD(x,y)
+    ##end
+#
+#
+    ##return newton_projection(x0, x, y)
+#
+    #x0 = -y^2/8
+    #return newton_projection(x0, x, y, maxiter=maxiter, tol=tol)
+    ##if x ≤ y
+        ##Ex0 = (y - x) / 2
+    ##elseif x ≤ -y
+        ##Ex0 = (x - y) / 2
+    ##end
+    ##for initial_guess in collect(-100:100)#[n*x0 for n=1:100]
+        ##try
+            ##return newton_projection(initial_guess, x, y, maxiter=maxiter, tol=tol)
+        ##catch error
+            ##continue
+        ##end
+##
+##
+    ##end
+#end
+
+
 
 
 # Below: various failures of trying to come up with clever, parallelizable, foolproof projection schemes.

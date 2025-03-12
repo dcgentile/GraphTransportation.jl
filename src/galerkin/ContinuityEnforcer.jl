@@ -62,11 +62,11 @@ function form_b(ρ_A, ρ_B, ρ, m, Q)
     h_inv = N
     divm = similar(ρ[1:N,:])
     ∂tρ = similar(divm)
-    for t in 1:N
+    @inbounds for t in 1:N
         divm[t,:] = graph_divergence(Q, m[t,:,:])
     end
     ∂tρ[1,:] = ρ[2,:] - ρ_A
-    for t in 2:N
+    @inbounds for t in 2:N
 	    ∂tρ[t,:] = ρ[t+1,:] - ρ[t,:]
     end
     ∂tρ[N,:] = ρ_B - ρ[N,:]
@@ -126,11 +126,11 @@ function proj_CE(ρ, m, μ, ν, Q,A=nothing)
     ρ_pr[1,:] .= μ
     #ρ_pr[2:N,:] .+= N .* (φ[2:N,:] .- φ[1:N-1,:])
     ρ_pr[N+1,:] .= ν
-    for i=2:N
+    @inbounds for i=2:N
         ρ_pr[i,:] = ρ[i,:] + N * (φ[i,:] - φ[i-1,:])
     end
     m_pr = similar(m)
-    for i=1:N
+    @inbounds for i=1:N
         m_pr[i,:,:] = m[i,:,:] + graph_gradient(Q, φ[i,:])
     end
 

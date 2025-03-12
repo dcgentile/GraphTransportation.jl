@@ -2,15 +2,15 @@ using BenchmarkTools
 using CUDA
 include("../galerkin/ProximalAction.jl")
 
-function test()
+function test(n)
     """
     this test works be generating a random point on the parabola, moving out orthogonally
     by a randome value λ, and then projecting back.
     """
     γ(t) = [-0.25 * t^2; t]
     N(t) = [1, 0.5 * t]
-    s = rand()
-    λ = rand()
+    s = n*rand()
+    λ = n*rand()
     p = γ(s)
     v = p .+ (λ * N(s))
     x, y = proj_B(v[1], v[2])
@@ -59,4 +59,3 @@ function test_gpu()
 
 end
 
-println(test())
