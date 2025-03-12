@@ -18,7 +18,7 @@ let h be the step size, let n be the number of nodes
 ρ_minus, ρ_plus, θ ∈ V_{e,h}^0, i.e. tensors of size (1/h) × n × n
 """
 
-function project_K_routine(ρ_m, ρ_p, θ)
+function project_K(ρ_m, ρ_p, θ)
     """
     for  each index I, we compute the projection onto K of the point
     p = projection((ρ_minus[I], ρ_plus[I], θ[I]))
