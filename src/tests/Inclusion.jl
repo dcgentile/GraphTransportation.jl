@@ -1,3 +1,5 @@
+include("../utils.jl")
+
 function is_in_J_PM(q, ρ_minus, ρ_plus)
     """
     given q ∈ V_{n,h}^{0} and ρ_min, ρ_plus ∈ V_{e, h}^{0}
@@ -34,6 +36,21 @@ function is_in_J_avg(ρ, ρ_bar)
 
 end
 
-function is_in_CE(ρ, m)
+function is_in_CE(ρ, m, Q, u)
+    N, V = size(ρ)
+    ∂tρ = N * (ρ[2:N,:] - ρ[1:N - 1,:])
+    divm = similar(∂tρ)
+    @inbounds for i=1:N-1
+        divm[i,:] = graph_divergence(Q, m[i,:,:])
+    end
+    a = ∂tρ + divm
+    φ = rand(N-1, V)
+    d = (1/N) * sum(a .* φ * u)
+    try
+	    @assert d ≈ 0
+    catch err
+        println(err)
+        println(d)
+    end
 
 end

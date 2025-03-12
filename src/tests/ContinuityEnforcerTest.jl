@@ -1,4 +1,5 @@
 include("../galerkin/ContinuityEnforcer.jl")
+include("Inclusion.jl")
 
 function test_system_formation()
     """
@@ -70,6 +71,7 @@ function test_enforcer()
     ρ_A = [1; 0]
     ρ_B = [0; 1]
     Q = [0 1; 1 0]
+    v = [0.5; 0.5]
     ρ = [1 0; 0.75 0.25; 0.25 0.75; 0 1]
     m = permutedims(cat([0 0.5; -0.5 0],[0 0.5; -0.5 0], [0 0.5; -0.5 0], dims=3), (3, 1, 2))
     φ = (1 / 116) * [-86 86; -89 89; -86 86]
@@ -91,6 +93,14 @@ function test_enforcer()
         ec += 1
     end
 
+	is_in_CE(ρ_pr, m_pr, Q, v)
+    #try
+	    #@assert is_in_CE(ρ_pr, m_pr, Q, v)
+    #catch err
+        #println(err)
+        #ec +=1
+    #end
+
     proj_CE!(ρ, m, ρ_A, ρ_B, Q)
 
     try
@@ -107,6 +117,15 @@ function test_enforcer()
         println(m .- m_pr)
         ec += 1
     end
+
+    is_in_CE(ρ, m, Q, v)
+    #try
+	    #@assert is_in_CE(ρ, m, Q, v)
+    #catch err
+        #println(err)
+        #ec +=1
+    #end
+
 
     return ec
 end

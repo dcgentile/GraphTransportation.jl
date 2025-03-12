@@ -52,15 +52,17 @@ function chambolle_pock_me(
     a_bar_next = ErbarBundle(Q, μ, ν, N, gpu=gpu)
     c = ErbarBundle(Q, μ, ν, N, gpu=gpu)
     d = ErbarBundle(Q, μ, ν, N, gpu=gpu)
+    p = ProgressUnknown(spinner=true)
 
     for i in 1:maxiters
+        next!(p)
         combine!(c, b, a_bar, 1.0, σ)
         prox_Fstar!(b_next, c)
         combine!(c, a, b_next, 1.0, -τ)
         prox_G!(a_next, c)
         combine!(d, a_next, a, 1.0, -1.0)
         normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
-        println(normdiff)
+        #println(normdiff)
         if normdiff < tol
             println("converged on iter $i")
             return a
