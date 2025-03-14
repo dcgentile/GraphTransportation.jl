@@ -2,7 +2,7 @@ include("Inclusion.jl")
 include("../galerkin/ProximalAvgIndicator.jl")
 using CUDA
 
-function test()
+function test_prox_IJavg_star()
     """
     this test computes the proximal mapping of IJAvg at (ρ, ρ_bar). The true basis for the true solution Λ
     was computed externally.

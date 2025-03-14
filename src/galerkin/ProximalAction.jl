@@ -17,6 +17,7 @@ function prox_Astar!(θ::AbstractArray, m::AbstractArray)
     arguments
     θ, m ∈ V_{e,h}^0, i.e. they are tensors of size (1/h) × n × n, where h is the step size and n the number of nodes
     """
+    #θ, m = proj_B.(θ, m)
     for i in eachindex(θ, m)
         θ[i], m[i] = proj_B(θ[i], m[i])
     end
@@ -37,7 +38,50 @@ function prox_Astar(θ, m)
     return (θ_pr, m_pr)
 end
 
-function newton_projection(x0, x, y;tol=1e-10, maxiter=500)
+
+function proj_B(x, y; maxiter=50, tol=1e-10)
+    """
+    given real numbers x,y project (x,y) to the set B
+    """
+	if x + 0.25 * y^2 ≤ 0
+        # if you're already in the set, nothing to do
+        return (x, y)
+    end
+    # otherwise, make an initial guess by projecting onto a linear approximation
+    # of the objective function
+    #try
+    #catch error
+        #project_by_GD(x,y)
+    #end
+
+
+    #return newton_projection(x0, x, y)
+
+    #x0 = 0
+    ##if x ≤ y
+        ##x0 = (y - x) / 2
+    ##elseif x ≤ -y
+        ##x0 = (x - y) / 2
+    ##end
+    try
+        x0 = -y^2/8
+        return newton_projection(x0, x, y)
+    catch err
+        #println("Proximal action failed for initial guess via constraint linearization, brute forcing it")
+    end
+    for initial_guess in collect(-100:100)#[n*x0 for n=1:100]
+        try
+            return newton_projection(initial_guess, x, y, maxiter=maxiter, tol=tol)
+        catch error
+            continue
+        end
+
+
+    end
+end
+
+
+function newton_projection(x0, x, y;tol=1e-15, maxiter=500)
     """
     a naive implementation of Newton's method for projecting onto the parabolic set B
     writing out the minimization problem can be expressed as a 1D convex optimization function,
@@ -49,60 +93,20 @@ function newton_projection(x0, x, y;tol=1e-10, maxiter=500)
 	    f = 0.125 * p_curr^3 + (1 + 0.5*x)*p_curr - y
         fprime = 0.375 * p_curr^2 + (1 + 0.5*x)
         if abs(fprime) < tol
+            #println("Got a zero derivative, returning on iter $i")
             return (-(p_curr)^2 / 4, p_curr) # if the derivative is zero, the next iteration will be undefined, so tap out and return
         end
         p_next = p_curr - f / fprime
         d = abs(p_curr - p_next)
         if d < tol
+            #println("Converged, returning on iter $i")
             return (-(p_curr)^2 / 4, p_curr)
         end
         p_curr = p_next
+        i += 1
     end
     error("Failed to converge")
 end
-
-
-function proj_B(x, y; maxiter=50, tol=1e-10)
-    """
-    given real numbers x,y project (x,y) to the set B
-    """
-
-    return x + 0.25*y^2 ≤ 0 ? (x, y) : newton_projection(-y^2/8, x, y, maxiter=maxiter, tol=tol)
-
-end
-	#if x + 0.25 * y^2 ≤ 0
-        ## if you're already in the set, nothing to do
-        #return (x, y)
-    #end
-    ## otherwise, make an initial guess by projecting onto a linear approximation
-    ## of the objective function
-    ##try
-    ##catch error
-        ##project_by_GD(x,y)
-    ##end
-#
-#
-    ##return newton_projection(x0, x, y)
-#
-    #x0 = -y^2/8
-    #return newton_projection(x0, x, y, maxiter=maxiter, tol=tol)
-    ##if x ≤ y
-        ##Ex0 = (y - x) / 2
-    ##elseif x ≤ -y
-        ##Ex0 = (x - y) / 2
-    ##end
-    ##for initial_guess in collect(-100:100)#[n*x0 for n=1:100]
-        ##try
-            ##return newton_projection(initial_guess, x, y, maxiter=maxiter, tol=tol)
-        ##catch error
-            ##continue
-        ##end
-##
-##
-    ##end
-#end
-
-
 
 
 # Below: various failures of trying to come up with clever, parallelizable, foolproof projection schemes.

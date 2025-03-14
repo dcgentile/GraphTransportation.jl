@@ -13,18 +13,22 @@ function BBD(Q::AbstractMatrix,
 end
 
 
-Q = [
-    0. 0.5 0. 0.5;
-    0.5 0. 0.5 0.;
-    0. 0.5 0. 0.5;
-    0.5 0. 0.5 0.
-]
-μ = [4.; 0.; 0.; 0.]
-ν = [0.; 4.; 0.; 0.]
+#Q = [
+    #0. 0.5 0. 0.5;
+    #0.5 0. 0.5 0.;
+    #0. 0.5 0. 0.5;
+    #0.5 0. 0.5 0.
+#]
+#μ = [4.; 0.; 0.; 0.]
+#ν = [0.; 4.; 0.; 0.]
 
-for i=2:9
-    N = 2^i
-    γ, d = BBD(Q, μ, ν, N)
-    println("Approximated distance for h = 2^$(-i): d = $(d)")
-    is_in_CE(γ.vector.ρ, γ.vector.m, γ.cache.Q, γ.cache.π)
-end
+#Q = [0. 1.; 1. 0.]
+#μ = [2.; 0]
+#ν = [0.; 2]
+#
+#for i=2:9
+    #N = 2^i
+    #γ, d = BBD(Q, μ, ν, N)
+    #println("Approximated distance for h = 2^$(-i): d = $(d)")
+    #is_in_CE(γ.vector.ρ, γ.vector.m, γ.cache.Q, γ.cache.π)
+#end

@@ -1,3 +1,5 @@
+using SuiteSparse
+using SparseArrays
 using LinearAlgebra
 using CUDA
 include("utils.jl")
@@ -29,8 +31,10 @@ struct ErbarCache
     N::Int               # number of steps in geodesic
     #ceh_sys::AbstractMatrix      # system defining the Continuity Enforcement problem
     #avg_sys::AbstractMatrix      # system defining the Averaging Enforcement problem
-    ceh_sys::LU
-    avg_sys::LU
+    D
+    avg_mat
+    ceh_sys
+    avg_sys
 
     function ErbarCache(Q, μ, ν, N; gpu=false)
 
@@ -40,12 +44,24 @@ struct ErbarCache
         vhat = v[:, idx]
         π = vhat / sum(vhat)
 
+        D = finite_difference_operator(N + 1)
+        avg_mat = avg_operator(N)
+
         # form the linear systems we'll be solving in each step
         ceh_sys = form_ceh_system(Q, N)
         #avg_sys = factorize(form_avg_system(N))
         avg_sys = form_avg_system(N)
 
-        gpu ? new(CuArray(Q), CuArray(μ), CuArray(ν), CuArray(π), N, lu(CuArray(ceh_sys)), lu(CuArray(avg_sys))) : new(Q, μ, ν, π, N, lu(ceh_sys), lu(avg_sys))
+        gpu ? new(
+            CuArray(Q),
+            CuArray(μ),
+            CuArray(ν),
+            CuArray(π),
+            N,
+            CuArray(D),
+            CuArray(avg_mat),
+            CuArray(ceh_sys),
+            CuArray(avg_sys)) : new(Q, μ, ν, π, N, D, avg_mat, ceh_sys, avg_sys)
 
     end
 end

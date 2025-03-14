@@ -1,7 +1,8 @@
 include("../galerkin/ContinuityEnforcer.jl")
 include("Inclusion.jl")
+using SparseArrays
 
-function test_system_formation()
+function test_ce_system_formation()
     """
     this test forms the linear system for projecting onto the set of solutions to the Galerkin-discretized discrete continuity
     eqaution. A was computed by hand for a simple graph on 2 nodes, with 6 time steps.
@@ -29,8 +30,9 @@ function test_system_formation()
             0 0 0 0 0 0 0 0 0 36 1 -37 1;
             1 1 1 1 1 1 1 1 1 1  1  1  0 ]
     ec = 0
+    A = lu(sparse(A))
     try
-	    @assert isapprox(A, system)
+	    @assert isapprox(A.L * A.U, system.L * system.U)
     catch e
         println(e)
         println(A - system)
@@ -39,7 +41,7 @@ function test_system_formation()
     return ec
 end
 
-function test_target_formation()
+function test_ce_target_formation()
     """
     this test forms the target vector b for projecting onto the set of solutions to the Galerkin-discretized discrete continuity
     eqaution. the true answer, target, was computed by hand for a simple graph on 2 nodes, with 4 time steps.
@@ -49,7 +51,8 @@ function test_target_formation()
     Q = [0 1; 1 0]
     ρ = [1 0; 0.75 0.25; 0.25 0.75; 0 1]
     m = permutedims(cat([0 0.5; -0.5 0],[0 0.5; -0.5 0], [0 0.5; -0.5 0], dims=3), (3, 1, 2))
-    v = form_b(ρ_A, ρ_B, ρ, m, Q)
+    D = finite_difference_operator(4)
+    v = form_b(ρ_A, ρ_B, ρ, m, Q, D)
     target = -1 * [-5/4, 5/4, -2, 2, -5/4, 5/4, 0]
     ec = 0
     try
@@ -63,7 +66,7 @@ function test_target_formation()
     return ec
 end
 
-function test_enforcer()
+function test_ce_enforcer()
     """
     this test projects a pair(ρ, m) onto the set of solutions to the Galerkin-discretized discrete continuity
     eqaution. the true solution vector, φ, was computed in Mathmetica
@@ -78,7 +81,8 @@ function test_enforcer()
     ∇φ = [0 0; -3/116 3/116; 3/116 -3/116; 0 0]
     ρ_pr = ρ + 3 * ∇φ
     m_pr = m + permutedims(cat([0 -86/58; 86/58 0], [0 -89/58; 89/58 0], [0 -86/58; 86/58 0], dims=3), (3,1,2))
-    ρ_hat, m_hat = proj_CE(ρ, m, ρ_A, ρ_B, Q)
+    D = finite_difference_operator(4)
+    ρ_hat, m_hat = proj_CE(ρ, m, ρ_A, ρ_B, Q, D)
     ec = 0
     try
 	    @assert isapprox(ρ_hat, ρ_pr)
@@ -92,17 +96,9 @@ function test_enforcer()
         println(e)
         ec += 1
     end
-
 	is_in_CE(ρ_pr, m_pr, Q, v)
-    #try
-	    #@assert is_in_CE(ρ_pr, m_pr, Q, v)
-    #catch err
-        #println(err)
-        #ec +=1
-    #end
 
-    proj_CE!(ρ, m, ρ_A, ρ_B, Q)
-
+    proj_CE!(ρ, m, ρ_A, ρ_B, Q, D)
     try
 	    @assert isapprox(ρ, ρ_pr)
     catch e
@@ -117,17 +113,9 @@ function test_enforcer()
         println(m .- m_pr)
         ec += 1
     end
-
     is_in_CE(ρ, m, Q, v)
-    #try
-	    #@assert is_in_CE(ρ, m, Q, v)
-    #catch err
-        #println(err)
-        #ec +=1
-    #end
 
 
     return ec
 end
 
-println(test_target_formation() + test_system_formation() + test_enforcer())

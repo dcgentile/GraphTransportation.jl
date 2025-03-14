@@ -44,6 +44,7 @@ function is_in_CE(ρ, m, Q, u)
         divm[i,:] = graph_divergence(Q, m[i,:,:])
     end
     a = ∂tρ + divm
+    #φ = ones(N-1, V)
     φ = rand(N-1, V)
     d = (1/N) * sum(a .* φ * u)
     try

@@ -1,7 +1,7 @@
 include("Inclusion.jl")
 include("../galerkin/ProximalEqualityIndicator.jl")
 
-function test()
+function test_proj_IJeq()
     """
     this test projects ρ and q onto the set Jeq by computing their average
     """
@@ -30,5 +30,3 @@ function test()
     end
     return ec
 end
-
-println(test())

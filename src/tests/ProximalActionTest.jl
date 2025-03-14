@@ -2,7 +2,7 @@ using BenchmarkTools
 using CUDA
 include("../galerkin/ProximalAction.jl")
 
-function test(n)
+function test_proj_B(n)
     """
     this test works be generating a random point on the parabola, moving out orthogonally
     by a randome value λ, and then projecting back.
@@ -24,6 +24,45 @@ function test(n)
     end
 end
 
+function test_action()
+    """
+    similar to the above test, but now with CUDA arrays
+    """
+    γ(t) = [-0.25 * t^2; t]
+    N(t) = [1; 0.5 * t]
+
+    M = 2
+    T = zeros(M,M,M)
+    S = zeros(M,M,M)
+    Tproj = zeros(M,M,M)
+    Sproj = zeros(M,M,M)
+
+    for i in eachindex(T)
+        s = rand()
+        p = γ(s)
+        λ = rand()
+        v = p .+ (λ * N(s))
+        Tproj[i] = p[1]
+        Sproj[i] = p[2]
+        T[i] = v[1]
+        S[i] = v[2]
+    end
+
+    prox_Astar!(T, S)
+    try
+        @assert T ≈ Tproj
+    catch err
+        println(T - Tproj)
+    end
+    try
+        @assert S ≈ Sproj
+    catch err
+        println(S - Sproj)
+    end
+
+
+end
+
 function test_gpu()
     """
     similar to the above test, but now with CUDA arrays
@@ -31,10 +70,12 @@ function test_gpu()
     γ(t) = [-0.25 * t^2; t]
     N(t) = [1; 0.5 * t]
 
-    T = zeros(10,10,10)
-    S = zeros(10,10,10)
-    Tproj = zeros(10,10,10)
-    Sproj = zeros(10,10,10)
+    N = 2
+
+    T = zeros(N,N,N)
+    S = zeros(N,N,N)
+    Tproj = zeros(N,N,N)
+    Sproj = zeros(N,N,N)
 
     for i in eachindex(T)
         s = rand()

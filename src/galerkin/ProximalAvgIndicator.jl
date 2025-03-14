@@ -1,4 +1,5 @@
 include("../utils.jl")
+using SparseArrays
 using LinearAlgebra
 
 """
@@ -32,7 +33,7 @@ function form_avg_system(N)
     diag[1] = 5
     diag[N] = 5
     M = Tridiagonal(off_diag, diag, off_diag)
-    return 0.25 * M
+    return lu(sparse(0.25 * M))
 end
 
 # functions needed to solve the relevant problem
@@ -78,7 +79,7 @@ function prox_IJavg_star(ρ, ρ_bar, ρ_A, ρ_B, M)
 	Λ = M \ B
 
     ρ_bar_pr = ρ_bar - Λ
-    Λ_bar = vcat(zeros(V)', avg_operator(Λ), zeros(V)')
+    Λ_bar = vcat(zeros(V)', 0.5 * (Λ[2:N-1,:] + Λ[1:N-2,:]), zeros(V)')
     ρ_pr = ρ + Λ_bar
     ρ_pr[1,:] = ρ_A
     ρ_pr[N,:] = ρ_B

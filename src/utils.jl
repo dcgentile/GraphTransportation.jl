@@ -90,18 +90,15 @@ function laplacian_from_transition(Q)
 end
 
 
-function avg_operator(ρ)
-    """
-    assumes rho is in V_{n \\times h}^{1}, i.e. that it is an
-    (N + 1) \\times V matrix
-    """
-    N = size(ρ, 1) - 1
-    V = size(ρ, 2)
-    arr = zeros(N, V)
-    for (idx, _) in pairs(arr)
-        t, x = Tuple(idx)
-        arr[t,x] = 0.5 * (ρ[t,x] + ρ[t + 1, x])
-    end
-    return arr
+function avg_operator(N)
+    return sparse(0.5 * Tridiagonal(zeros(N-1), ones(N), ones(N-1)))
+
 end
 
+function finite_difference_operator(N)
+    d = -1. * ones(N)
+    u = ones(N-1)
+    l = zeros(N-1)
+    A = Tridiagonal(l, d ,u)
+    return sparse(A[1:N-1,:])
+end

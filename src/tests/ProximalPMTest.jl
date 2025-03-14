@@ -2,7 +2,7 @@ include("Inclusion.jl")
 include("../galerkin/ProximalSignIndicator.jl")
 using CUDA
 
-function test()
+function test_prox_IJpm_star()
     """
     this test computes the proximal mapping of IJpm_star at (ρ, ρ_minus, ρ_plus)
     via Moreau's identity. The projections were computed by hand.

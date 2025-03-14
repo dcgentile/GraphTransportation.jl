@@ -16,7 +16,7 @@ function chambolle_pock_routine_stepper(
     μ::AbstractVector,
     ν::AbstractVector,
     N::Int64;
-    maxiters=1000,
+    maxiters=2,
     σ=0.5,
     τ=0.5,
     λ=1.0,
@@ -74,24 +74,24 @@ function chambolle_pock_routine_stepper(
         v = d.vector
         u = mutable_d.vector
 
-        #println("************ρ")
-        #println(v.ρ - u.ρ)
-        #println("************θ")
-        #println(v.θ - u.θ)
-        #println("************m")
-        #println(v.m - u.m)
-        #println("************ρ_minus")
-        #println(v.ρ_minus - u.ρ_minus)
-        #println("************ρ_plus")
-        #println(v.ρ_plus - u.ρ_plus)
-        #println("************ρ_avg")
-        #println(v.ρ_avg - u.ρ_avg)
-        #println("************q")
-        #println(v.q - u.q)
-#
-        #if i == maxiters
-            #return (u, v)
-        #end
+        println("************ρ")
+        println(v.ρ - u.ρ)
+        println("************θ")
+        println(v.θ - u.θ)
+        println("************m")
+        println(v.m - u.m)
+        println("************ρ_minus")
+        println(v.ρ_minus - u.ρ_minus)
+        println("************ρ_plus")
+        println(v.ρ_plus - u.ρ_plus)
+        println("************ρ_avg")
+        println(v.ρ_avg - u.ρ_avg)
+        println("************q")
+        println(v.q - u.q)
+
+        if i == maxiters
+            return (u, v)
+        end
 
     end
 

@@ -77,12 +77,12 @@ function time_proj_CE()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking proj_CE!")
-    @btime proj_CE!(a.vector.ρ, a.vector.m, μ, ν, Q, A)
+    @time proj_CE!(a.vector.ρ, a.vector.m, μ, ν, Q, A)
     # time prox_IJpm_star
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking proj_CE")
-    _ = @btime proj_CE(a.vector.ρ, a.vector.m, μ, ν, Q, A);
+    _ = @time proj_CE(a.vector.ρ, a.vector.m, μ, ν, Q, A);
 end
 
 function time_proj_K()

@@ -1,4 +1,5 @@
 include("../utils.jl")
+using SparseArrays
 using LinearAlgebra
 using BlockBandedMatrices
 """
@@ -44,10 +45,10 @@ function form_ceh_system(Q, N)
     A = cat(A, ones(N*V)', dims=1)
     A = cat(A, ones(N*V + 1), dims=2)
     A[end, end] = 0
-    return A
+    return lu(sparse(A))
 end
 
-function form_b(ρ_A, ρ_B, ρ, m, Q)
+function form_b(ρ_A, ρ_B, ρ, m, Q, D)
     """
     succintly, the target b in the system Ax=b that we need to solve can be written
     b = - ∂tρ - div m
@@ -61,14 +62,11 @@ function form_b(ρ_A, ρ_B, ρ, m, Q)
     N = size(ρ, 1) - 1
     h_inv = N
     divm = similar(ρ[1:N,:])
-    ∂tρ = similar(divm)
     @inbounds for t in 1:N
         divm[t,:] = graph_divergence(Q, m[t,:,:])
     end
+    ∂tρ = D * ρ
     ∂tρ[1,:] = ρ[2,:] - ρ_A
-    @inbounds for t in 2:N
-	    ∂tρ[t,:] = ρ[t+1,:] - ρ[t,:]
-    end
     ∂tρ[N,:] = ρ_B - ρ[N,:]
     ∂tρ = h_inv * ∂tρ
     v = vec(permutedims(∂tρ .+ divm))
@@ -77,7 +75,7 @@ function form_b(ρ_A, ρ_B, ρ, m, Q)
 end
 
 
-function proj_CE!(ρ, m, μ, ν, Q,A=nothing)
+function proj_CE!(ρ, m, μ, ν, Q, D, A=nothing)
     """
     solves the projection problem in place, updating ρ and m to satisying the Galerkin-discretized discrete continuity equation
     if φ solves the linear system, the update is given by
@@ -92,7 +90,7 @@ function proj_CE!(ρ, m, μ, ν, Q,A=nothing)
         A = form_ceh_system(Q, N)
     end
 
-    b = form_b(μ, ν, ρ, m, Q)
+    b = form_b(μ, ν, ρ, m, Q, D)
     ϕ = A \ b
     # reshape the solution to be compatible with ρ
     φ = reshape(ϕ[1:end-1], V, N)'
@@ -106,7 +104,7 @@ function proj_CE!(ρ, m, μ, ν, Q,A=nothing)
     end
 end
 
-function proj_CE(ρ, m, μ, ν, Q,A=nothing)
+function proj_CE(ρ, m, μ, ν, Q, D, A=nothing)
     """
     solves the projection problem returning ρ and m satisying the Galerkin-discretized discrete continuity equation
     if φ solves the linear system, the update is given by
@@ -119,7 +117,7 @@ function proj_CE(ρ, m, μ, ν, Q,A=nothing)
     if isnothing(A)
         A = form_ceh_system(Q, N)
     end
-    b = form_b(μ, ν, ρ, m, Q)
+    b = form_b(μ, ν, ρ, m, Q, D)
     ϕ = A \ b
     φ = reshape(ϕ[1:end-1], V, N)'
     ρ_pr = copy(ρ)
