@@ -36,9 +36,9 @@ function is_in_J_avg(ρ, ρ_bar)
 
 end
 
-function is_in_CE(ρ, m, Q, u)
+function is_in_CE_weakly(ρ, m, Q, u)
     N, V = size(ρ)
-    ∂tρ = N * (ρ[2:N,:] - ρ[1:N - 1,:])
+    ∂tρ = (N - 1) * (ρ[2:N,:] - ρ[1:N - 1,:])
     divm = similar(∂tρ)
     @inbounds for i=1:N-1
         divm[i,:] = graph_divergence(Q, m[i,:,:])
@@ -46,12 +46,31 @@ function is_in_CE(ρ, m, Q, u)
     a = ∂tρ + divm
     #φ = ones(N-1, V)
     φ = rand(N-1, V)
-    d = (1/N) * sum(a .* φ * u)
+    ce_discrepancy = sum(a .* φ * u)
     try
-	    @assert d ≈ 0
+	    @assert ce_discrepancy ≈ 0
     catch err
         println(err)
-        println(d)
+        println(ce_discrepancy)
+    end
+
+end
+
+function is_in_CE_strongly(ρ, m, Q)
+    N, V = size(ρ)
+    ∂tρ = N * (ρ[2:N,:] - ρ[1:N - 1,:])
+    divm = similar(∂tρ)
+    @inbounds for i=1:N-1
+        divm[i,:] = graph_divergence(Q, m[i,:,:])
+    end
+    a = (1/(N-1))*∂tρ + divm
+    try
+	    @assert all(x -> (sum(x) ≈ 0), eachrow(a))
+        println("Assertion check passed, for each timestep we have ∂tρ + divm ≈ 0")
+    catch err
+        println(err)
+        #println(a)
+        #println(sum(a, dims=2))
     end
 
 end

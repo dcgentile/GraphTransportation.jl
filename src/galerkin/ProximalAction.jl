@@ -19,7 +19,8 @@ function prox_Astar!(θ::AbstractArray, m::AbstractArray)
     """
     #θ, m = proj_B.(θ, m)
     for i in eachindex(θ, m)
-        θ[i], m[i] = proj_B(θ[i], m[i])
+        #θ[i], m[i] = proj_B(θ[i], m[i])
+        θ[i], m[i] = project_by_bisection(θ[i], m[i])
     end
 end
 
@@ -32,12 +33,46 @@ function prox_Astar(θ, m)
     """
 	θ_pr, m_pr = similar(θ), similar(m)
     for idx in eachindex(θ)
-        θ_pr[idx], m_pr[idx] = proj_B(θ[idx], m[idx])
+        θ_pr[idx], m_pr[idx] = project_by_bisection(θ[idx], m[idx])
     end
 
     return (θ_pr, m_pr)
 end
 
+
+function project_by_bisection(a,b; tol=1e-8, maxiters=100)
+    if a + 0.25 * b^2 ≤ 0
+        return (a,b)
+    end
+
+    s = sign(b)
+    bhat = s * b
+    u = bhat
+    l = 0
+    t0 = 0.5 * u
+    tlist = [t0]
+    ylist = [0.]
+
+    for _ in 1:maxiters
+        t0 = 0.5 * (u + l)
+        y = 0.5 * t0 * (a + 0.25 * t0^2) + t0
+        if abs(y - bhat) < tol
+            return (-0.25 * t0^2, s * t0)
+        else
+            y > bhat ? u = t0 : l = t0
+        end
+        push!(tlist, t0)
+        push!(ylist, y)
+    end
+    println(tlist)
+    println(ylist)
+    println(bhat)
+    println([a,b])
+    error("Failed to converge in $(maxiters) steps!")
+
+
+
+end
 
 function proj_B(x, y; maxiter=50, tol=1e-10)
     """
@@ -75,8 +110,6 @@ function proj_B(x, y; maxiter=50, tol=1e-10)
         catch error
             continue
         end
-
-
     end
 end
 

@@ -96,7 +96,11 @@ function test_ce_enforcer()
         println(e)
         ec += 1
     end
-	is_in_CE(ρ_pr, m_pr, Q, v)
+    println("Immutable Inclustion Weak Test")
+	is_in_CE_weakly(ρ_pr, m_pr, Q, v)
+    println("Immutable Inclustion Strong Test")
+	is_in_CE_strongly(ρ_pr, m_pr, Q)
+
 
     proj_CE!(ρ, m, ρ_A, ρ_B, Q, D)
     try
@@ -113,7 +117,10 @@ function test_ce_enforcer()
         println(m .- m_pr)
         ec += 1
     end
-    is_in_CE(ρ, m, Q, v)
+    println("Mutable Inclustion Weak Test")
+    is_in_CE_weakly(ρ, m, Q, v)
+    println("Mutable Inclustion Strong Test")
+    is_in_CE_strongly(ρ, m, Q)
 
 
     return ec

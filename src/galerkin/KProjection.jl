@@ -1,7 +1,8 @@
+using Base: signequal
 using LinearAlgebra
 include("../utils.jl")
 
-tolerance = 1e-15
+tolerance = 1e-10
 
 """
 This file contains functionality for solving the projection to K problem, as described in Erbar et al 2020,
@@ -74,7 +75,9 @@ function proj_K(x, y, z)
         convex program, which we solve via gradient descent. It is also possible to solve this via Newton's
         method, but then we need some way to guarantee convergence
         """
-        return project_by_GD(x,y,z)
+        return project_by_bisection(x,y,z)
+        #return project_by_newton(x, y, z)
+        #return project_by_GD(x,y,z)
         #return proj_Ktop(x, y, z)
     end
 end
@@ -90,11 +93,57 @@ end
 
 function project_by_newton(a,b,c; tol=tolerance, maxiters=50)
     # we would like to choose an initial condition which projects onto a linearization of the constraint set
-    #
-    #N = [-0.5; -0.5; 1]
-    #p = [a;b;c] - dot(p, N) / dot(N,N) N
-    #x0 = a / b
+    println("a = $(a);\nb = $(b);\n c=$(c);\n")
+    l, u = find_bracket(a,b,c)
+    println([l, u])
+    #x0 = (l + u) / 2
+    x0 = l
+    d = Inf
+    for _ in 1:maxiters
+        if d < tol
+            α = ((a * √x0) + (b / √x0) + c) / (x0 + 1/x0 + 1)
+            return α * [√x0; 1/√x0; 1]
+        end
+        f = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
+        fprime = (-0.5 * c)  + (0.5 * (0.5 * a + b) / √x0) - (0.5 * (a - 0.5 * b) / (√x0^3)) - (0.5 * c / x0^2)
+        x1 = x0 - f/fprime
+        d = abs(x1 - x0)
+        x0 = x1
+    end
+    error("Newton failed to converge in $(maxiters) iterations")
+end
 
+function project_by_bisection(a,b,c; tol=tolerance, maxiters=500)
+    l, u = find_bracket(a,b,c)
+    x0 = 0
+    for _ in 1:maxiters
+        x0 = (l + u) / 2
+        f = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
+        if abs(f) < tol
+            α = ((a * √x0) + (b / √x0) + c) / (x0 + 1/x0 + 1)
+            return α * [√x0; 1/√x0; 1]
+        else
+            f > 0 ? l=x0 : u=x0
+        end
+    end
+    println([a, b, c])
+    l, u = find_bracket(a,b,c)
+    println([l,u])
+    println(x0)
+    error("Failed to find root!")
+end
+
+function find_bracket(a, b, c, maxiters = 32)
+    for n=1:maxiters
+        x0 = 1/2^n
+        x1 = 2^n
+        f0 = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
+        f1 = (-0.5 * c * x1) + ((0.5 * a - b) * √x1) + ((a - 0.5 * b) / √x1) + (0.5 * c / x1)
+        if !signequal(f0, f1)
+            return (x0, x1)
+        end
+    end
+    error("Could not find bracket")
 
 end
 

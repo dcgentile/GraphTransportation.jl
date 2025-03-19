@@ -13,7 +13,8 @@ function test_proj_B(n)
     λ = n*rand()
     p = γ(s)
     v = p .+ (λ * N(s))
-    x, y = proj_B(v[1], v[2])
+    #x, y = proj_B(v[1], v[2])
+    x, y = project_by_bisection(v[1], v[2])
     try
         @assert isapprox(x, p[1], atol=1e-8) && isapprox(y, p[2], atol=1e-8)
     catch e

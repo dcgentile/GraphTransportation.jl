@@ -64,7 +64,7 @@ function chambolle_pock_me(
         normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
         #println(normdiff)
         if normdiff < tol
-            println("converged on iter $i")
+            #println("converged on iter $i")
             return a
         end
         combine!(a_bar_next, a_next, d, 1.0, λ)

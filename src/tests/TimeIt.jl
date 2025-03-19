@@ -23,16 +23,16 @@ M = form_avg_system(T)
 A = form_ceh_system(Q,T)
 
 function time_prox_Astar()
-    # time prox_Astar!
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_Astar!")
-    @btime prox_Astar!(a.vector.θ, b.vector.m)
     # time prox_Astar
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking prox_Astar")
-    @btime c = prox_Astar(a.vector.θ, b.vector.m);
+    @time c = prox_Astar(a.vector.θ, b.vector.m);
+    # time prox_Astar!
+    a = ErbarBundle(Q, μ, ν, T)
+    b = ErbarBundle(Q, μ, ν, T)
+    println("Benchmarking prox_Astar!")
+    @time prox_Astar!(a.vector.θ, b.vector.m)
 
 end
 
@@ -40,12 +40,12 @@ function time_prox_IJpm_star()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking prox_IJpm_star!")
-    @btime proximal_IJpm_star!(a.vector.q, a.vector.ρ_minus, a.vector.ρ_plus, Q)
+    @time proximal_IJpm_star!(a.vector.q, a.vector.ρ_minus, a.vector.ρ_plus, Q)
     # time prox_IJpm_star
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking prox_IJpm_star")
-    @btime c = proximal_IJpm_star(a.vector.q, a.vector.ρ_minus, a.vector.ρ_plus, Q);
+    @time c = proximal_IJpm_star(a.vector.q, a.vector.ρ_minus, a.vector.ρ_plus, Q);
 
 end
 
@@ -53,24 +53,24 @@ function time_prox_IJavg_star()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking prox_IJpm_star!")
-    @btime prox_IJavg_star!(a.vector.ρ, a.vector.ρ_avg, μ, ν, M);
+    @time prox_IJavg_star!(a.vector.ρ, a.vector.ρ_avg, μ, ν, M);
     # time prox_IJpm_star
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking prox_IJpm_star")
-    @btime c = prox_IJavg_star(a.vector.ρ, a.vector.ρ_avg, μ, ν, M);
+    @time c = prox_IJavg_star(a.vector.ρ, a.vector.ρ_avg, μ, ν, M);
 end
 
 function time_prox_Fstar()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking prox_Fstar!")
-    @btime prox_Fstar!(a,b)
+    @time prox_Fstar!(a,b)
     # time prox_IJpm_star
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking prox_Fstar")
-    @btime c = prox_Fstar(0.5,a,b);
+    @time c = prox_Fstar(0.5,a,b);
 end
 
 function time_proj_CE()
@@ -82,43 +82,43 @@ function time_proj_CE()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking proj_CE")
-    _ = @time proj_CE(a.vector.ρ, a.vector.m, μ, ν, Q, A);
+    @time proj_CE(a.vector.ρ, a.vector.m, μ, ν, Q, A);
 end
 
 function time_proj_K()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking proj_K!")
-    @btime project_K!(a.vector.ρ_minus, a.vector.ρ_plus, a.vector.θ)
+    @time project_K!(a.vector.ρ_minus, a.vector.ρ_plus, a.vector.θ)
     # time prox_IJpm_star
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking proj_K")
-    @btime c = project_K(a.vector.ρ_minus, a.vector.ρ_plus, a.vector.θ);
+    @time c = project_K(a.vector.ρ_minus, a.vector.ρ_plus, a.vector.θ);
 end
 
 function time_proj_IJeq()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking prox_IJeq!")
-    @btime project_IJeq!(a.vector.ρ_avg, a.vector.q)
+    @time project_IJeq!(a.vector.ρ_avg, a.vector.q)
     # time prox_IJpm_star
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking prox_IJpm_star")
-    @btime c = project_IJeq(a.vector.ρ_avg, a.vector.q);
+    @time c = project_IJeq(a.vector.ρ_avg, a.vector.q);
 end
 
 function time_prox_G()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking prox_G!")
-    @btime prox_G!(a,b)
+    @time prox_G!(a,b)
     # time prox_IJpm_star
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
     println("Benchmarking prox_G")
-    @btime c = prox_G(0.5,a,b);
+    @time c = prox_G(0.5,a,b);
 end
 
 function time_pipeline()
@@ -129,5 +129,5 @@ function time_pipeline()
     time_proj_CE()
     time_proj_K()
     time_proj_IJeq()
-    time_proxG()
+    time_prox_G()
 end
