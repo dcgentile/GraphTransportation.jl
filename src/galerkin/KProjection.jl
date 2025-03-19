@@ -51,7 +51,6 @@ function proj_K(x, y, z)
     for real numbers x,y,z, we project to the convex set K
     """
     if 0 ≤ z && z < geomean(x,y)
-    #if 0 ≤ z && z < logmean(x,y)
         """
         if this is true, the point is already in K and we are done
         """
@@ -76,9 +75,6 @@ function proj_K(x, y, z)
         method, but then we need some way to guarantee convergence
         """
         return project_by_bisection(x,y,z)
-        #return project_by_newton(x, y, z)
-        #return project_by_GD(x,y,z)
-        #return proj_Ktop(x, y, z)
     end
 end
 
@@ -89,28 +85,6 @@ function super_differential_inclusion(s, t)
     can be seen almost immediately by applying lemma 4.6
     """
     return s * t ≥ 0.25 && s > 0 && t > 0
-end
-
-function project_by_newton(a,b,c; tol=tolerance, maxiters=50)
-    # we would like to choose an initial condition which projects onto a linearization of the constraint set
-    println("a = $(a);\nb = $(b);\n c=$(c);\n")
-    l, u = find_bracket(a,b,c)
-    println([l, u])
-    #x0 = (l + u) / 2
-    x0 = l
-    d = Inf
-    for _ in 1:maxiters
-        if d < tol
-            α = ((a * √x0) + (b / √x0) + c) / (x0 + 1/x0 + 1)
-            return α * [√x0; 1/√x0; 1]
-        end
-        f = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
-        fprime = (-0.5 * c)  + (0.5 * (0.5 * a + b) / √x0) - (0.5 * (a - 0.5 * b) / (√x0^3)) - (0.5 * c / x0^2)
-        x1 = x0 - f/fprime
-        d = abs(x1 - x0)
-        x0 = x1
-    end
-    error("Newton failed to converge in $(maxiters) iterations")
 end
 
 function project_by_bisection(a,b,c; tol=tolerance, maxiters=500)
@@ -146,137 +120,3 @@ function find_bracket(a, b, c, maxiters = 32)
     error("Could not find bracket")
 
 end
-
-function project_by_GD(x,y,z; h=1e-3, tol=tolerance, maxiter=50000)
-    """
-    if (x,y,z) is "above" the surface K, then projecting onto it can be solved via gradient descent
-    TODO: gradient descent is terribly slow, so it would be good to solve this via Newton's method
-    the problem with Newton's method is the choice of a good initial guess...
-    """
-    x0 = [sqrt(z); sqrt(z);]
-    x1 = x0
-    for n in 1:maxiter
-        s,t = x0[1], x0[2]
-        ∇f = [
-            -x + s + 0.5 * t - 0.5 * z*sqrt(t/s);
-            -y + t + 0.5 * s - 0.5 * z*sqrt(s/t)
-        ]
-        x1 = x0 .- h*∇f
-        if LinearAlgebra.norm(x1 - x0) < tol
-            v = [x1[1]; x1[2]; sqrt(x1[1]*x1[2])]
-            return v
-        end
-        x0 = x1
-    end
-    println("GD failed to converge with final iteration: $(x1)")
-    error("Gradient Descent did not converge")
-
-end
-
-
-## Functionality for solving the projection problem via
-## Newton's method, currently not contributing
-
-α(q::Number) = 0.5*sqrt(q)
-β(q::Number) = 0.5* (1 / sqrt(q))
-w(q::Number) = [sqrt(q); 1/sqrt(q); 1]
-n(q::Number) = [-0.5 / sqrt(q), (-0.5) * sqrt(q), 1 ]
-f(p,q::Number) = dot(p, cross(w(q), n(q)))
-
-function proj_Ktop_newton(x,y,z)
-    p = [x; y; z]
-    q_star = 1
-    try
-        q_star = find_zero(q -> f(p,q), 4296.34)
-        #q_star = find_unique_root(x,y,z)
-    catch e
-        println(p)
-        error("Failed to find root")
-    end
-    w_star = w(q_star)
-    τ = dot(p, w_star / dot(w_star, w_star))
-    return τ * w_star
-end
-
-
-## Functionality forn
-
-
-
-#function solve_q(x, y)
-    #x ≥ y ? find_zero(t -> α(t) - x, x) : find_zero(t -> β(t) - y, y)
-#end
-
-## Some needed functions, defined here so that we only compile them the once
-
-#α(q::Number; tol=tolerance) = abs(1 - q) < tol ? 0.5 : (q - log(q) - 1) / (log(q)^2)
-#β(q::Number; tol=tolerance) = abs(1 - q) < tol ? 0.5 : α(1 / q)
-#α_prime(q::Number; tol=1e-5) = abs(q - 1) < tol ? 1/6 : (2 * (1 - q) + log(q) * (1 + q)) / (q * (log(q)^3))
-#α_prime(q::Number; tol=tolerance) = abs(q - 1) < tol ? 1/6 : (-2*q + q*log(q) + log(q) + 2) / (q*log(q)^3)
-#β_prime(q::Number; tol=tolerance) = abs(q - 1) < tol ? -1/6 : (2 * (q - 1) - log(q) * (1 + q)) / (q^2 * (log(q)^3))
-#w(q::Number) = [q^0.5; q^-0.5; logmean(q^0.5, q^-0.5)]
-#n(q::Number) = [-logmean_partial_s(q^0.5, q^-0.5); -logmean_partial_t(q^0.5, q^-0.5); 1]
-#fprime(p,q::Number,h) = (f(p, q + h) - f(p, q - h)) / (2*h)
-
-# test for inclusion in the super differential at 0 of the logarithmic mean
-#function super_differential_inclusion(s, t)
-    #if minimum([s t]) ≤ 0 || maximum([[s t]) < 0.5
-        #return false
-    #end
-#
-    #q = solve_q(s, t)
-    #return s > t ? t ≥ β(q) : t ≥ α(q)
-#end
-
-# solve α(q) - x = 0 in a GPU friendly way (i.e. no try catch blocks)
-#function α_root(x; maxiter=500, tol=1e-6)
-    #x0 = 1.0
-    #for _ in 1:maxiter
-        #if x0 < 0
-            #x0 = rand() + 0.5 # if our iterate ever suggests a step < 0, we've lost the plot, we we start over with a random number ∈ [0.5, 1.5]
-        #end
-        #f = α(x0) - x
-        #fprime = α_prime(x0)  # we could check for zero derivative here, but α is easy enough to invert that we can be a little lazy
-        #x1 = x0 - f/fprime
-        #if abs(x1 - x0) < tol
-            #return x1
-        #end
-        #x0 = x1
-    #end
-#end
-#
-## solve β(q) - x = 0 in a GPU friendly way (i.e., no try catch blocks)
-#function β_root(x; maxiter=500, tol=1e-6)
-    #x0 = 1.0
-    #for _ in 1:maxiter
-        #if x0 < 0
-            #x0 = rand() + 0.5 # if our iterate ever suggests a step < 0, we've lost the plot, we we start over with a random number ∈ [0.5, 1.5]
-        #end
-        #f = α(x0) - x
-        #fprime = α_prime(x0)  # we could check for zero derivative here, but α is easy enough to invert that we can be a little lazy
-        #x1 = x0 - f/fprime
-        #if abs(x1 - x0) < tol
-            #return x1
-        #end
-        #x0 = x1
-    #end
-#end
-
-
-#function newton(f::Function, x0::Number, fprime::Function, args::Tuple=();
-                #tol::AbstractFloat=1e-8, maxiter::Integer=50, eps::AbstractFloat=1e-10)
-    #for _ in 1:maxiter
-        #yprime = fprime(x0, args...)
-        #if abs(yprime) < eps
-            #return x0
-        #end
-        #y = f(x0, args...)
-        #x1 = x0 - y/yprime
-        #if abs(x1-x0) < tol
-            #return x1
-        #end
-        #x0 = x1
-    #end
-    #error("Max iteration exceeded")
-#end
-#
