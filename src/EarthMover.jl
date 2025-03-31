@@ -6,29 +6,13 @@ function BBD(Q::AbstractMatrix,
              μ::AbstractVector,
              ν::AbstractVector,
              N=100;
-             tol=1e-8
+             σ=0.5,
+             τ=0.5,
+             maxiters=2^16,
+             tol=1e-10
              )
-    geodesic = chambolle_pock_me(Q, μ, ν, N, tol=tol)
+    geodesic = chambolle_pock_me(Q, μ, ν, N, maxiters=maxiters, σ=σ, τ=τ, tol=tol)
     return (geodesic, sqrt(action(geodesic)))
 end
 
 
-#Q = [
-    #0. 0.5 0. 0.5;
-    #0.5 0. 0.5 0.;
-    #0. 0.5 0. 0.5;
-    #0.5 0. 0.5 0.
-#]
-#μ = [4.; 0.; 0.; 0.]
-#ν = [0.; 4.; 0.; 0.]
-
-#Q = [0. 1.; 1. 0.]
-#μ = [2.; 0]
-#ν = [0.; 2]
-#
-#for i=2:9
-    #N = 2^i
-    #γ, d = BBD(Q, μ, ν, N)
-    #println("Approximated distance for h = 2^$(-i): d = $(d)")
-    #is_in_CE(γ.vector.ρ, γ.vector.m, γ.cache.Q, γ.cache.π)
-#end

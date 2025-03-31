@@ -2,7 +2,7 @@ using Base: signequal
 using LinearAlgebra
 include("../utils.jl")
 
-tolerance = 1e-10
+tolerance = 1e-8
 
 """
 This file contains functionality for solving the projection to K problem, as described in Erbar et al 2020,
@@ -55,7 +55,7 @@ function proj_K(x, y, z)
         if this is true, the point is already in K and we are done
         """
         return (x, y, z)
-    elseif z ≤ 0
+    elseif z ≤ tolerance
         """
         if (x,y,z) is "underneath" K, this is projection onto the first quadrant of the plane,
         i.e. the bottom facet of K
@@ -100,23 +100,63 @@ function project_by_bisection(a,b,c; tol=tolerance, maxiters=500)
             f > 0 ? l=x0 : u=x0
         end
     end
-    println([a, b, c])
-    l, u = find_bracket(a,b,c)
-    println([l,u])
-    println(x0)
+    troubleshooter(a,b,c,maxiters)
     error("Failed to find root!")
 end
 
-function find_bracket(a, b, c, maxiters = 32)
-    for n=1:maxiters
-        x0 = 1/2^n
-        x1 = 2^n
-        f0 = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
-        f1 = (-0.5 * c * x1) + ((0.5 * a - b) * √x1) + ((a - 0.5 * b) / √x1) + (0.5 * c / x1)
-        if !signequal(f0, f1)
-            return (x0, x1)
+
+function troubleshooter(a,b,c,maxiters,tol=tolerance)
+    l, u = find_bracket(a,b,c)
+    for i in 1:maxiters
+        x0 = (l + u) / 2
+        f = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
+        if abs(f) < tol
+            α = ((a * √x0) + (b / √x0) + c) / (x0 + 1/x0 + 1)
+            return α * [√x0; 1/√x0; 1]
+        else
+            f > 0 ? l=x0 : u=x0
+        end
+        if i == maxiters
+            println(f)
         end
     end
+    println([a, b, c])
+    l, u = find_bracket(a,b,c)
+    println([l,u])
+    println(
+         (-0.5 * c * l) + ((0.5 * a - b) * √l) + ((a - 0.5 * b) / √l) + (0.5 * c / l)
+    )
+    println(
+         (-0.5 * c * u) + ((0.5 * a - b) * √u) + ((a - 0.5 * b) / √u) + (0.5 * c / u)
+    )
+    println(x0)
+end
+
+function find_bracket(a, b, c, maxiters = 64)
+    s, t = 0, 0
+    for n=1:maxiters
+        x0 = 1/2^n
+        #x1 = 2^n
+        f0 = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
+        #println(f0)
+        if f0 > 0
+            s = x0
+            break
+        end
+        #f1 = (-0.5 * c * x1) + ((0.5 * a - b) * √x1) + ((a - 0.5 * b) / √x1) + (0.5 * c / x1)
+        #if !signequal(f0, f1)
+            #return (x0, x1)
+        #end
+    end
+    for n = 1:maxiters
+        x0 = s * 2^n
+        f0 = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
+        if f0 < 0
+            t = x0
+            return (s,t)
+        end
+    end
+    println([a, b, c])
     error("Could not find bracket")
 
 end

@@ -27,11 +27,11 @@ function chambolle_pock_me(
     μ::AbstractVector,
     ν::AbstractVector,
     N::Int;
-    maxiters=100,
+    maxiters=2^16,
     σ=0.5,
     τ=0.5,
     λ=1.0,
-    tol=1e-8,
+    tol=1e-10,
     gpu=false
 )
     """
@@ -64,15 +64,19 @@ function chambolle_pock_me(
         normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
         #println(normdiff)
         if normdiff < tol
-            #println("converged on iter $i")
+            println("converged on iter $i")
             return a
         end
+        λ = 1 / √(1 + 2 * τ)
+        τ *= λ
+        σ /= λ
         combine!(a_bar_next, a_next, d, 1.0, λ)
         assign!(a, a_next)
         assign!(b, b_next)
         assign!(a_bar, a_bar_next)
     end
-    return a
+    error("Chambolle Pock did not converge in $(maxiters) steps")
+    #return a
 end
 
 function chambolle_pock_routine(
