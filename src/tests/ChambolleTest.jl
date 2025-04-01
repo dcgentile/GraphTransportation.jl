@@ -1,19 +1,44 @@
 include("../ErbarVector.jl")
 include("../galerkin/Chambolle.jl")
 
-
-Q = [0 1; 1 0]
-μ = [2; 0]
-ν = [0; 2]
-N = 3
-
-σ = 0.5
-τ = 0.5
-λ = 1.0
-
 function chambolle_pock_routine_stepper(
+    a::ErbarBundle,
+    b::ErbarBundle,
+    a_bar::ErbarBundle,
+    σ::AbstractFloat,
+    τ::AbstractFloat,
+    λ::AbstractFloat,)
+
+    Q = a.cache.Q
+    μ = a.cache.μ
+    ν = a.cache.ν
+    N = a.cache.N
+
+    a_next = ErbarBundle(Q, μ, ν, N)
+    b_next = ErbarBundle(Q, μ, ν, N)
+    a_bar_next = ErbarBundle(Q, μ, ν, N)
+    c = ErbarBundle(Q, μ, ν, N)
+    d = ErbarBundle(Q, μ, ν, N)
+
+
+
+    combine!(c, b, a_bar, 1.0, σ)
+    prox_Fstar!(b_next, c)
+    combine!(c, a, b_next, 1.0, -τ)
+    prox_G!(a_next, c)
+    combine!(d, a_next, a, 1.0, -1.0)
+    normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
+    λ = 1 / √(1 + 2 * τ)
+    τ *= λ
+    σ /= λ
+    combine!(a_bar_next, a_next, d, 1.0, λ)
+    return (a_next, b_next, a_bar_next, c, σ, τ, λ, normdiff)
+end
+
+
+function chambolle_pock_routine_mutability_comparator(
     Q::AbstractMatrix,
-    μ::AbstractVector,
+μ::AbstractVector,
     ν::AbstractVector,
     N::Int64;
     maxiters=2,
@@ -37,7 +62,6 @@ function chambolle_pock_routine_stepper(
     b_comp = ErbarBundle(Q, μ, ν, N)
     a_bar_comp = ErbarBundle(Q, μ, ν, N)
     d_comp = ErbarBundle(Q, μ, ν, N)
-
 
     for i in 1:maxiters
         println("ITER $i")
@@ -92,36 +116,5 @@ function chambolle_pock_routine_stepper(
         if i == maxiters
             return (u, v)
         end
-
     end
-
 end
-
-chambolle_pock_routine_stepper(Q, μ, ν, N)
-
-#Abar = ErbarBundle(Q, μ, ν, N)
-#A = ErbarBundle(Q, μ, ν, N)
-#B = ErbarBundle(Q, μ, ν, N)
-#C = ErbarBundle(Q, μ, ν, N)
-#D = ErbarBundle(Q, μ, ν, N)
-#
-#Abarhat = ErbarBundle(Q, μ, ν, N)
-#Ahat = ErbarBundle(Q, μ, ν, N)
-#Bhat = ErbarBundle(Q, μ, ν, N)
-#Dhat = ErbarBundle(Q, μ, ν, N)
-#
-#combine!(C, B, Abar, 1.0, σ)
-#Bhat = prox_Fstar(σ, B, Abar)
-#prox_Fstar!(B, C)
-#
-#combine!(D, B, Bhat, 1.0, -1.0)
-#println(norm(D))
-#
-#println("*********PROX G")
-#combine!(C, B, Abar, 1.0, -σ)
-#Bhat = prox_G(σ, B, Abar)
-#prox_G!(B, C)
-#
-#combine!(D, B, Bhat, 1.0, -1.0)
-#println(norm(D))
-#

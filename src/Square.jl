@@ -12,3 +12,27 @@ function run_experiment()
     end
     return BBD(Q, μ, ν, 100)
 end
+
+function single_run()
+    Q = [0. 0.5 0. 0.5;
+         0.5 0. 0.5 0.;
+         0. 0.5 0. 0.5;
+         0.5 0. 0.5 0.]
+    μ = [4.; 0; 0.; 0.]
+    ν = [0.; 4; 0.; 0.]
+    N = 2^7
+    γ, d = BBD(Q, μ, ν, N)
+    return (γ, d)
+
+end
+
+function export_vars()
+    Q = [0. 0.5 0. 0.5;
+         0.5 0. 0.5 0.;
+         0. 0.5 0. 0.5;
+         0.5 0. 0.5 0.]
+    μ = [4.; 0; 0.; 0.]
+    ν = [0.; 4; 0.; 0.]
+    N = 2^7
+    return (Q, μ, ν, N)
+end

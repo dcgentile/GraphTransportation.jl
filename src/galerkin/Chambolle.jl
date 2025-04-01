@@ -56,13 +56,24 @@ function chambolle_pock_me(
 
     for i in 1:maxiters
         next!(p)
+
         combine!(c, b, a_bar, 1.0, σ)
         prox_Fstar!(b_next, c)
+
         combine!(c, a, b_next, 1.0, -τ)
         prox_G!(a_next, c)
+        try
+            @assert !any(a_next.vector.ρ .< 0)
+        catch error
+            println(i)
+            println("Failed on prox_G")
+            println(minimum(a_next.vector.ρ))
+            error("Nonnegative mass!")
+        end
+
+
         combine!(d, a_next, a, 1.0, -1.0)
         normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
-        #println(normdiff)
         if normdiff < tol
             println("converged on iter $i")
             return a
@@ -70,6 +81,7 @@ function chambolle_pock_me(
         λ = 1 / √(1 + 2 * τ)
         τ *= λ
         σ /= λ
+
         combine!(a_bar_next, a_next, d, 1.0, λ)
         assign!(a, a_next)
         assign!(b, b_next)
@@ -80,9 +92,9 @@ function chambolle_pock_me(
 end
 
 function chambolle_pock_routine(
-    Q::Matrix{Float64},
-    μ::Vector{Float64},
-    ν::Vector{Float64},
+    Q::Matrix{AbstractFloat},
+    μ::Vector{AbstractFloat},
+    ν::Vector{AbstractFloat},
     N::Int64;
     maxiters=1000,
     σ=0.5,
@@ -165,7 +177,7 @@ function prox_G!(targ, bundle)
 end
 
 
-function prox_Fstar(σ::Float64, b::ErbarBundle, a_bar::ErbarBundle)
+function prox_Fstar(σ::AbstractFloat, b::ErbarBundle, a_bar::ErbarBundle)
     """
     compute the proximal mapping of F star
     this amounts to computing the proximal mappings of the conjuage Action, IJPM, and IJAvg
@@ -181,7 +193,7 @@ function prox_Fstar(σ::Float64, b::ErbarBundle, a_bar::ErbarBundle)
 
 end
 
-function prox_G(τ::Float64, a::ErbarBundle, b::ErbarBundle)
+function prox_G(τ::AbstractFloat, a::ErbarBundle, b::ErbarBundle)
     """
     compute the proximal mapping of G
     this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,

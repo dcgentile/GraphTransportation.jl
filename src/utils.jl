@@ -91,7 +91,7 @@ end
 
 
 function avg_operator(N)
-    return sparse(0.5 * Tridiagonal(zeros(N-1), ones(N), ones(N-1)))
+    return sparse(0.5 * Tridiagonal(zeros(N-1), ones(N), ones(N-1))[1:N-1,:])
 
 end
 

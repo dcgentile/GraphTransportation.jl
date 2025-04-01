@@ -1,6 +1,22 @@
 include("../utils.jl")
 
-function is_in_J_PM(q, ρ_minus, ρ_plus)
+function is_in_ScriptK(ρ_min, ρ_pl, θ)
+    @assert size(ρ_min) == size(ρ_pl) && size(ρ_pl) == size(θ)
+    c = 0
+    for idx in eachindex(θ)
+        x = geomean(ρ_min[idx], ρ_pl[idx])
+        y = θ[idx]
+        try
+            @assert 0 ≤ y && y ≤ x
+        catch AssertionError
+            println([y, x, x - y])
+            c += 1
+        end
+    end
+    println(c)
+end
+
+function is_in_JPM(q, ρ_minus, ρ_plus)
     """
     given q ∈ V_{n,h}^{0} and ρ_min, ρ_plus ∈ V_{e, h}^{0}
     checy that the ρ_min[t,x,y] == q[t,x] and ρ_plus[t,x,y] == q[t,y]
@@ -18,21 +34,31 @@ function is_in_J_PM(q, ρ_minus, ρ_plus)
             println("Failed inclusion in J_PM with error $(e)")
         end
     end
-    return true
 end
 
-function is_in_J_eq(ρ, q)
+function is_in_JEq(ρ, q)
     try
         @assert isapprox(ρ, q)
     catch e
         println("Failed inclusion in J_EQ with error $(e)")
     end
-    return true
 end
 
-function is_in_J_avg(ρ, ρ_bar)
-    ρ_avg = avg_operator(ρ)
-    return isapprox(ρ_avg, ρ_bar)
+function is_in_JAvg(ρ, ρ_bar)
+    A = avg_operator(size(ρ,1))
+    println(size(ρ))
+    println(size(A))
+    println(size(ρ_bar))
+    ρ_avg = A * ρ
+    try
+	    @assert isapprox(ρ_bar, ρ_avg)
+    catch
+        for idx in eachindex(ρ_bar)
+            if abs(ρ_bar[idx] - ρ_avg[idx]) > 1e-20
+                println([abs(ρ_bar[idx] - ρ_avg[idx]), ρ_bar[idx], ρ_avg[idx]])
+            end
+        end
+    end
 
 end
 
