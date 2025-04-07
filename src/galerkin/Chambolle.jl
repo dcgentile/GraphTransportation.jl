@@ -81,7 +81,8 @@ function chambolle_pock_me(
             println(i)
             println("Negative mass found after CE projection in prox_G call")
             println(minimum(a_next.vector.ρ))
-            return a
+            combine!(c, a, b_next, 1.0, -τ)
+            return c
             #error("Nonnegative mass!")
         end
 

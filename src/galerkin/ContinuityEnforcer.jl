@@ -50,7 +50,7 @@ function form_ceh_system(Q, N)
     #return A
 end
 
-function form_b(ρ_A, ρ_B, ρ, m, Q, D)
+function form_b(ρ_A, ρ_B, ρ, m, Q)
     """
     succintly, the target b in the system Ax=b that we need to solve can be written
     b = - ∂tρ - div m
@@ -92,13 +92,13 @@ function proj_CE!(ρ, m, μ, ν, Q, D, A=nothing)
         A = form_ceh_system(Q, N)
     end
 
-    b = form_b(μ, ν, ρ, m, Q, D)
+    b = form_b(μ, ν, ρ, m, Q)
     ϕ = A \ b
     # reshape the solution to be compatible with ρ
     φ = reshape(ϕ[1:end-1], V, N)'
     # update ρ
     ρ[1,:] .= μ
-    ρ[2:N,:] .+= N .* (φ[2:N,:] .- φ[1:N-1,:])
+    ρ[2:N,:] .+= N * (φ[2:N,:] - φ[1:N-1,:])
     ρ[N+1,:] .= ν
     # update m
     @inbounds for i in 1:N
@@ -106,7 +106,7 @@ function proj_CE!(ρ, m, μ, ν, Q, D, A=nothing)
     end
 end
 
-function proj_CE(ρ, m, μ, ν, Q, D, A=nothing)
+function proj_CE(ρ, m, μ, ν, Q, A=nothing)
     """
     solves the projection problem returning ρ and m satisying the Galerkin-discretized discrete continuity equation
     if φ solves the linear system, the update is given by
@@ -117,28 +117,85 @@ function proj_CE(ρ, m, μ, ν, Q, D, A=nothing)
     """
     N, V, _ = size(m)
     if isnothing(A)
-        A = form_ceh_system(Q, N)
+        A = form_ceh_system(convert(Array, Q), N)
     end
-    b = form_b(μ, ν, ρ, m, Q, D)
+    b = form_b(μ, ν, ρ, m, Q)
     ϕ = A \ b
     φ = reshape(ϕ[1:end-1], V, N)'
-    println("*************************************")
-    println(A.L * A.U)
-    println("*************************************")
-    println(ϕ)
-    println("*************************************")
-    println(φ)
     ρ_pr = copy(ρ)
     ρ_pr[1,:] .= μ
     ρ_pr[2:N,:] .+= N .* (φ[2:N,:] .- φ[1:N-1,:])
     ρ_pr[N+1,:] .= ν
-    #@inbounds for i=2:N
-        #ρ_pr[i,:] = ρ[i,:] + N * (φ[i,:] - φ[i-1,:])
-    #end
     m_pr = similar(m)
     @inbounds for i=1:N
         m_pr[i,:,:] = m[i,:,:] + graph_gradient(Q, φ[i,:])
     end
 
     return (ρ_pr, m_pr)
+end
+
+function find_lagrange_multiplier(ρ, m, μ, ν, Q, A=nothing)
+    """
+    solves the projection problem returning ρ and m satisying the Galerkin-discretized discrete continuity equation
+    if φ solves the linear system, the update is given by
+    ρ[1,x] = ρ_A
+    ρ[N+1,x] = ρ_B
+    ρ[2:N,x] = ρ[2:N,x] +  h^-1*(φ[2:N,:] - φ[1:N-1,:])
+    m[1:N,:,:] = m[1:N,:,:] + ∇_G(φ[1:N,:])
+    """
+    N, V, _ = size(m)
+    if isnothing(A)
+        A = form_ceh_system(convert(Array, Q), N)
+    end
+    b = form_b(μ, ν, ρ, m, Q)
+    ϕ = A \ b
+    φ = reshape(ϕ[1:end-1], V, N)'
+    ∂tφ = N * (φ[2:N,:] - φ[1:N-1,:])
+    ∇φ = similar(m)
+    @inbounds for i=1:N
+        ∇φ =  graph_gradient(Q, φ[i,:])
+    end
+
+    return (b, ϕ, φ, ∂tφ, ∇φ)
+end
+
+
+function form_dense_ceh_system(Q, N)
+    """
+    let L be the Laplacian associated to Q, and N = 1/h be the number of steps
+    given a ρ ∈ V_{n,h}^1, m ∈ V_{e,h}^0, we want to project onto the set of
+    (ρ, m) satisfying the Galerkin-discretized discrete continuity equation (see eqn (10)
+    in Erbar et al. 2020). A Lagrange mulitpliers argument shows that this can be done by solving
+    a linear system Ax=b, where A is, essentially, the "differential operator"
+    D = (∂t^2) + L
+    Now because the the value of Lf(x) will in general depend on non-local information
+    (i.e values of f away from x), care must be taken when setting up this projection problem,
+    and we must treat it as one simultaneous linear system on R^{NV + 1 × NV + 1}
+    """
+	V = size(Q,1)
+    #form the Laplacian, and write N copies of it to an array
+    L = 1. * laplacian_from_transition(Q)
+    Ld = fill(L, N)
+
+    # form the ∂t^2 operator: h^-2 * (f(t + 1) - 2f(t) + f(t - 1))
+    # form a diagonal -2*N^2*I, representing the middle summand
+    Ad = fill(-2 * N^2 * I(V), N)
+    # adjust the terminal matrices to account for a "one-sided" limit
+    Ad[1] = -N^2 * I(V)
+    Ad[end] = -N^2 * I(V)
+    # the diagonal of our final matrix
+    d = Ad .+ Ld
+    # the off diagonals of our final matrix
+    o = fill(1. * N^2 * I(V), N - 1)
+    #glue it all together
+    A = BlockTridiagonal(o, d, o)
+    # in order to ensure a unique solution, an additional lagrange multiplier is added
+    # which forces the solution to be a "mean zero function" in space and time
+    # this is accomplished by padding the matrix on the right and the bottom by ones,
+    # and setting the very last entry to 0
+    A = cat(A, ones(N*V)', dims=1)
+    A = cat(A, ones(N*V + 1), dims=2)
+
+    A[end, end] = 0
+    return A
 end
