@@ -33,6 +33,8 @@ function form_avg_system(N)
     diag[1] = 5
     diag[N] = 5
     M = Tridiagonal(off_diag, diag, off_diag)
+    #return 0.25 * M
+    #return sparse(0.25 * M)
     return lu(sparse(0.25 * M))
 end
 

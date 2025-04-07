@@ -1,12 +1,23 @@
 include("EarthMover.jl")
 using ProgressMeter
 
+
+function approximate_distance(i; σ=0.5, τ=0.5, maxiters=2^32, tol=1e-10)
+    Q = [0. 1.; 1. 0.]
+    μ = [2.; 0]
+    ν = [0.; 2]
+    N = 2^i
+    γ, d = BBD(Q, μ, ν, N, maxiters=maxiters, σ=σ, τ=τ, tol=tol)
+    println(d)
+    return γ, d
+end
+
 function run_experiment(σ=0.5, τ=0.5, maxiters=2^32, tol=1e-10)
     Q = [0. 1.; 1. 0.]
     μ = [2.; 0]
     ν = [0.; 2]
 
-    for i=2:12
+    for i=2:10
         N = 2^i
         γ, d = BBD(Q, μ, ν, N, maxiters=maxiters, σ=σ, τ=τ, tol=tol)
         println("Approximated distance for h = 2^$(-i): d = $(d)")

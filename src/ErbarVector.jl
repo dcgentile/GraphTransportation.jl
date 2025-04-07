@@ -29,23 +29,22 @@ struct ErbarCache
     ν::AbstractVector            # terminal mass configuration
     π::AbstractVector            # steady state distribution of the Markov kernel
     N::Int               # number of steps in geodesic
-    #ceh_sys::AbstractMatrix      # system defining the Continuity Enforcement problem
-    #avg_sys::AbstractMatrix      # system defining the Averaging Enforcement problem
-    D
-    avg_mat
-    ceh_sys
-    avg_sys
+    ceh_sys      # system defining the Continuity Enforcement problem
+    avg_sys      # system defining the Averaging Enforcement problem
 
     function ErbarCache(Q, μ, ν, N; gpu=false)
-
         # find steady state of Q
-        λ, v = eigen(Q')
-        _, idx = findmin(abs.(λ .- 1.0))
-        vhat = v[:, idx]
-        π = vhat / sum(vhat)
-
-        D = finite_difference_operator(N + 1)
-        avg_mat = avg_operator(N)
+        #λ, v = eigen(Q')
+        #_, idx = findmin(abs.(λ .- 1.0))
+        #vhat = v[:, idx]
+        #π = vhat / sum(vhat)
+        V, _ = size(Q)
+        S = sparse(Q)
+        E = nnz(S)
+        π = zeros(V)
+        for i in 1:V
+            π[i] = nnz(S[i,:]) / E
+        end
 
         # form the linear systems we'll be solving in each step
         ceh_sys = form_ceh_system(Q, N)
@@ -58,10 +57,9 @@ struct ErbarCache
             CuArray(ν),
             CuArray(π),
             N,
-            CuArray(D),
             CuArray(avg_mat),
             CuArray(ceh_sys),
-            CuArray(avg_sys)) : new(Q, μ, ν, π, N, D, avg_mat, ceh_sys, avg_sys)
+            CuArray(avg_sys)) : new(S, μ, ν, π, N, ceh_sys, avg_sys)
 
     end
 end
@@ -81,25 +79,14 @@ mutable struct ErbarBundle
         cache = ErbarCache(Q, μ, ν, N; gpu=gpu)
 
         #### INITIALIZE VECTOR COMPONENTS
-        # ρ will generically initialize to the linear interpolation of the measures
         V, _ = size(Q)
         ρ = zeros(N + 1, V)
-        for i=1:N+1
-            t = 1 - (i-1)/N
-            ρ[i,:] = t*μ + (1-t)*ν
-        end
-
-        # m, θ, ρ_plus, ρ_minus are all time dependent vector fields generically initialized to be all ones
-        m = ones(N, V, V)
-        θ = ones(N, V, V)
-        for t=1:N, x=1:V, y=1:V
-            θ[t,x,y] = geomean(ρ[t,x], ρ[t,y])
-        end
-        ρ_minus = ones(N, V, V)
-        ρ_plus = ones(N, V, V)
-        #ρ_avg and q should have a single row shorter than ρ is
-        ρ_avg = ρ[1:end-1,:]
-        q = ρ[1:end-1,:]
+        m = zeros(N, V, V)
+        θ = zeros(N, V, V)
+        ρ_minus = zeros(N, V, V)
+        ρ_plus = zeros(N, V, V)
+        ρ_avg = zeros(N,V)
+        q = zeros(N,V)
 
         vector = gpu ? ErbarVector(
             CuArray(ρ),
@@ -118,13 +105,13 @@ end
 # combine! computes a linear combination of ErbarVectors and stores the result in a
 # pre-allocated vector c
 function combine!(c::ErbarVector, a::ErbarVector, b::ErbarVector, α::Number, β::Number)
-    c.ρ = (α .* a.ρ) .+ (β .* b.ρ)
-    c.m = (α .* a.m) .+ (β .* b.m)
-    c.θ = (α .* a.θ) .+ (β .* b.θ)
-    c.ρ_minus = (α .* a.ρ_minus) .+ (β .* b.ρ_minus)
-    c.ρ_plus = (α .* a.ρ_plus) .+ (β .* b.ρ_plus)
-    c.ρ_avg = (α .* a.ρ_avg) .+ (β .* b.ρ_avg)
-    c.q = (α .* a.q) .+ (β .* b.q)
+    c.ρ .= (α .* a.ρ) .+ (β .* b.ρ)
+    c.m .= (α .* a.m) .+ (β .* b.m)
+    c.θ .= (α .* a.θ) .+ (β .* b.θ)
+    c.ρ_minus .= (α .* a.ρ_minus) .+ (β .* b.ρ_minus)
+    c.ρ_plus .= (α .* a.ρ_plus) .+ (β .* b.ρ_plus)
+    c.ρ_avg .= (α .* a.ρ_avg) .+ (β .* b.ρ_avg)
+    c.q .= (α .* a.q) .+ (β .* b.q)
 end
 
 # combine! combines the vectors of ErbarBundles a, b, sacled by α,β resp., and stores
@@ -150,86 +137,6 @@ end
 # assign! assign!s the vectors of two bundles
 function assign!(c::ErbarBundle, a::ErbarBundle)
     assign!(c.vector, a.vector)
-end
-
-# you can add vectors together with the expression
-# c = a + b
-# this produces an entirely new vector
-import Base: +
-function +(u::ErbarVector, v::ErbarVector)
-    # if the defining features of the cache differ, it's not legitimate to add u and v
-    ErbarVector(
-        u.ρ + v.ρ,
-        u.m + v.m,
-        u.θ + v.θ,
-        u.ρ_minus + v.ρ_minus,
-        u.ρ_plus + v.ρ_plus,
-        u.ρ_avg + v.ρ_avg,
-        u.q + v.q,
-    )
-end
-
-# you can add bundle together with the expression
-# c = a + b
-# this produces an entirely new bundle
-function +(u::ErbarBundle, v::ErbarBundle)
-	ErbarBundle(u.cache, u.vector + v.vector)
-end
-
-# add!(c, a, b)
-function add!(c::ErbarVector, a::ErbarVector, b::ErbarVector)
-    c.ρ = a.ρ .+ b.ρ
-    c.m = a.m .+ b.m
-    c.θ = a.θ .+ b.θ
-    c.ρ_minus = a.ρ_minus .+ b.ρ_minus
-    c.ρ_plus = a.ρ_plus .+ b.ρ_plus
-    c.ρ_avg = a.ρ_avg .+ b.ρ_avg
-    c.q = a.q .+ b.q
-end
-
-function add!(c::ErbarBundle, a::ErbarBundle, b::ErbarBundle)
-    add!(c.vector, a.vector, b.vector)
-end
-
-
-import Base: *
-function *(α::Number, v::ErbarVector)
-    ErbarVector(
-        α * v.ρ,
-        α * v.m,
-        α * v.θ,
-        α * v.ρ_minus,
-        α * v.ρ_plus,
-        α * v.ρ_avg,
-        α * v.q,
-    )
-end
-
-function scale!(α::Number, v::ErbarVector)
-    v.ρ = α .* v.ρ
-    v.m = α .* v.m
-    v.θ=  α .* v.θ
-    v.ρ_minus = α .* v.ρ_minus
-    v.ρ_plus = α .* v.ρ_plus
-    v.ρ_avg = α .* v.ρ_avg
-    v.q = α .* v.q
-end
-
-function scale!(α::Number, B::ErbarBundle)
-    scale!(α, B.vector)
-end
-
-function *(α::Number, B::ErbarBundle)
-	ErbarBundle(B.cache, α * B.vector)
-end
-
-import Base: -
-function -(u::ErbarVector, v::ErbarVector)
-    return u + (-1) * v
-end
-
-function -(u::ErbarBundle, v::ErbarBundle)
-    ErbarBundle(u.cache, u.vector - v.vector)
 end
 
 # compute the inner product of two vectors in H
@@ -259,28 +166,96 @@ end
 # cf. eqn (18) in Erbar et al 2020
 # TODO: clean this up so that it doesn't work via scalar indexing
 function action(u::ErbarBundle)
-
     m = u.vector.m
     θ = u.vector.θ
-    Q = u.cache.Q
+    Q = convert(Array,u.cache.Q)
     π = u.cache.π
     N, _, _ = size(m)
     h = 1 / N
 
-    integrand = similar(m)
-    for idx in eachindex(m)
-        μ = m[idx]
-        τ = θ[idx]
-        if τ > 0
-            integrand[idx] = μ^2 / τ
-        elseif m == 0 && τ == 0
-            integrand[idx] = 0
-        else
-            integrand[idx] = Inf
-        end
-    end
-
+    integrand = @. ifelse(m == 0, ifelse(θ == 0, 0, Inf), m^2 / θ)
     action = (h / 2) * sum([sum(integrand[i,:,:] .* Q .* π) for i=1:N])
 
     return action
 end
+
+## you can add vectors together with the expression
+## c = a + b
+## this produces an entirely new vector
+#import Base: +
+#function +(u::ErbarVector, v::ErbarVector)
+    ## if the defining features of the cache differ, it's not legitimate to add u and v
+    #ErbarVector(
+        #u.ρ + v.ρ,
+        #u.m + v.m,
+        #u.θ + v.θ,
+        #u.ρ_minus + v.ρ_minus,
+        #u.ρ_plus + v.ρ_plus,
+        #u.ρ_avg + v.ρ_avg,
+        #u.q + v.q,
+    #)
+#end
+#
+## you can add bundle together with the expression
+## c = a + b
+## this produces an entirely new bundle
+#function +(u::ErbarBundle, v::ErbarBundle)
+	#ErbarBundle(u.cache, u.vector + v.vector)
+#end
+#
+## add!(c, a, b)
+#function add!(c::ErbarVector, a::ErbarVector, b::ErbarVector)
+    #c.ρ = a.ρ .+ b.ρ
+    #c.m = a.m .+ b.m
+    #c.θ = a.θ .+ b.θ
+    #c.ρ_minus = a.ρ_minus .+ b.ρ_minus
+    #c.ρ_plus = a.ρ_plus .+ b.ρ_plus
+    #c.ρ_avg = a.ρ_avg .+ b.ρ_avg
+    #c.q = a.q .+ b.q
+#end
+#
+#function add!(c::ErbarBundle, a::ErbarBundle, b::ErbarBundle)
+    #add!(c.vector, a.vector, b.vector)
+#end
+#
+#
+#import Base: *
+#function *(α::Number, v::ErbarVector)
+    #ErbarVector(
+        #α * v.ρ,
+        #α * v.m,
+        #α * v.θ,
+        #α * v.ρ_minus,
+        #α * v.ρ_plus,
+        #α * v.ρ_avg,
+        #α * v.q,
+    #)
+#end
+#
+#function scale!(α::Number, v::ErbarVector)
+    #v.ρ = α .* v.ρ
+    #v.m = α .* v.m
+    #v.θ=  α .* v.θ
+    #v.ρ_minus = α .* v.ρ_minus
+    #v.ρ_plus = α .* v.ρ_plus
+    #v.ρ_avg = α .* v.ρ_avg
+    #v.q = α .* v.q
+#end
+#
+#function scale!(α::Number, B::ErbarBundle)
+    #scale!(α, B.vector)
+#end
+#
+#function *(α::Number, B::ErbarBundle)
+	#ErbarBundle(B.cache, α * B.vector)
+#end
+#
+#import Base: -
+#function -(u::ErbarVector, v::ErbarVector)
+    #return u + (-1) * v
+#end
+#
+#function -(u::ErbarBundle, v::ErbarBundle)
+    #ErbarBundle(u.cache, u.vector - v.vector)
+#end
+#

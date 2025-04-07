@@ -13,14 +13,17 @@ function run_experiment()
     return BBD(Q, μ, ν, 100)
 end
 
-function single_run()
+function single_run(n)
     Q = [0. 0.5 0. 0.5;
          0.5 0. 0.5 0.;
          0. 0.5 0. 0.5;
          0.5 0. 0.5 0.]
     μ = [4.; 0; 0.; 0.]
     ν = [0.; 4; 0.; 0.]
-    N = 2^7
+    N = 2^n
+    #Q = convert(Array{BigFloat}, Q)
+    #μ = convert(Array{BigFloat}, μ)
+    #ν = convert(Array{BigFloat}, ν)
     γ, d = BBD(Q, μ, ν, N)
     return (γ, d)
 

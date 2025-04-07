@@ -54,21 +54,35 @@ function chambolle_pock_me(
     d = ErbarBundle(Q, μ, ν, N, gpu=gpu)
     p = ProgressUnknown(spinner=true)
 
+
+    function assert_unique_pointers(s,t,u,v,w,x,y,z)
+        ptrs = []
+	    for bundle in [s,t,u,v,w,x,y,z]
+            v = bundle.vector
+            for arr in [v.ρ, v.m, v.θ, v.ρ_minus, v.ρ_plus, v.ρ_avg, v.q]
+                push!(ptrs, pointer(arr))
+            end
+        end
+        @assert allunique(ptrs)
+    end
+
+
+
     for i in 1:maxiters
         next!(p)
 
         combine!(c, b, a_bar, 1.0, σ)
         prox_Fstar!(b_next, c)
-
         combine!(c, a, b_next, 1.0, -τ)
         prox_G!(a_next, c)
         try
             @assert !any(a_next.vector.ρ .< 0)
         catch error
             println(i)
-            println("Failed on prox_G")
+            println("Negative mass found after CE projection in prox_G call")
             println(minimum(a_next.vector.ρ))
-            error("Nonnegative mass!")
+            return a
+            #error("Nonnegative mass!")
         end
 
 
@@ -86,6 +100,7 @@ function chambolle_pock_me(
         assign!(a, a_next)
         assign!(b, b_next)
         assign!(a_bar, a_bar_next)
+        #assert_unique_pointers(a,b,a_bar,a_next,b_next, a_bar_next, c, d)
     end
     error("Chambolle Pock did not converge in $(maxiters) steps")
     #return a
@@ -163,7 +178,7 @@ function prox_G!(targ, bundle)
     cache = bundle.cache
     v = bundle.vector
     u = targ.vector
-    proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.D, cache.ceh_sys)
+    proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
     project_K!(v.ρ_minus, v.ρ_plus, v.θ)
     project_IJeq!(v.ρ_avg, v.q)
 

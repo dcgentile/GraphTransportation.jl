@@ -31,7 +31,6 @@ function form_ceh_system(Q, N)
     # adjust the terminal matrices to account for a "one-sided" limit
     Ad[1] = -N^2 * I(V)
     Ad[end] = -N^2 * I(V)
-
     # the diagonal of our final matrix
     d = Ad .+ Ld
     # the off diagonals of our final matrix
@@ -44,8 +43,11 @@ function form_ceh_system(Q, N)
     # and setting the very last entry to 0
     A = cat(A, ones(N*V)', dims=1)
     A = cat(A, ones(N*V + 1), dims=2)
+
     A[end, end] = 0
     return lu(sparse(A))
+    #return sparse(A)
+    #return A
 end
 
 function form_b(ρ_A, ρ_B, ρ, m, Q, D)
@@ -65,7 +67,7 @@ function form_b(ρ_A, ρ_B, ρ, m, Q, D)
     @inbounds for t in 1:N
         divm[t,:] = graph_divergence(Q, m[t,:,:])
     end
-    ∂tρ = D * ρ
+    ∂tρ = ρ[2:N+1,:] - ρ[1:N,:]
     ∂tρ[1,:] = ρ[2,:] - ρ_A
     ∂tρ[N,:] = ρ_B - ρ[N,:]
     ∂tρ = h_inv * ∂tρ
@@ -120,13 +122,19 @@ function proj_CE(ρ, m, μ, ν, Q, D, A=nothing)
     b = form_b(μ, ν, ρ, m, Q, D)
     ϕ = A \ b
     φ = reshape(ϕ[1:end-1], V, N)'
+    println("*************************************")
+    println(A.L * A.U)
+    println("*************************************")
+    println(ϕ)
+    println("*************************************")
+    println(φ)
     ρ_pr = copy(ρ)
     ρ_pr[1,:] .= μ
-    #ρ_pr[2:N,:] .+= N .* (φ[2:N,:] .- φ[1:N-1,:])
+    ρ_pr[2:N,:] .+= N .* (φ[2:N,:] .- φ[1:N-1,:])
     ρ_pr[N+1,:] .= ν
-    @inbounds for i=2:N
-        ρ_pr[i,:] = ρ[i,:] + N * (φ[i,:] - φ[i-1,:])
-    end
+    #@inbounds for i=2:N
+        #ρ_pr[i,:] = ρ[i,:] + N * (φ[i,:] - φ[i-1,:])
+    #end
     m_pr = similar(m)
     @inbounds for i=1:N
         m_pr[i,:,:] = m[i,:,:] + graph_gradient(Q, φ[i,:])

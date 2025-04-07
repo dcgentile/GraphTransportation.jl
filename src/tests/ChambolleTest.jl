@@ -6,8 +6,7 @@ function chambolle_pock_routine_stepper(
     b::ErbarBundle,
     a_bar::ErbarBundle,
     σ::AbstractFloat,
-    τ::AbstractFloat,
-    λ::AbstractFloat,)
+    τ::AbstractFloat,)
 
     Q = a.cache.Q
     μ = a.cache.μ
@@ -32,7 +31,7 @@ function chambolle_pock_routine_stepper(
     τ *= λ
     σ /= λ
     combine!(a_bar_next, a_next, d, 1.0, λ)
-    return (a_next, b_next, a_bar_next, c, σ, τ, λ, normdiff)
+    return (a_next, b_next, a_bar_next, c, σ, τ)
 end
 
 
