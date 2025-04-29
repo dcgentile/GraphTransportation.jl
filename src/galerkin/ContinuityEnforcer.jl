@@ -77,7 +77,7 @@ function form_b(ρ_A, ρ_B, ρ, m, Q)
 end
 
 
-function proj_CE!(ρ, m, μ, ν, Q, D, A=nothing)
+function proj_CE!(ρ, m, μ, ν, Q, A=nothing)
     """
     solves the projection problem in place, updating ρ and m to satisying the Galerkin-discretized discrete continuity equation
     if φ solves the linear system, the update is given by
@@ -87,7 +87,6 @@ function proj_CE!(ρ, m, μ, ν, Q, D, A=nothing)
     m[1:N,:,:] .+= ∇_G(φ[1:N,:])
     """
     N, V, _ = size(m)
-
     if isnothing(A)
         A = form_ceh_system(Q, N)
     end
@@ -104,6 +103,42 @@ function proj_CE!(ρ, m, μ, ν, Q, D, A=nothing)
     @inbounds for i in 1:N
         m[i,:,:] .+= graph_gradient(Q,φ[i,:])
     end
+end
+
+function in_CEplus(ρ, m, μ, ν, Q)
+    return ρ[1,:] == μ && ρ[end,:] == ν && maximum(abs.(CE_operator(ρ,m,Q))) < 1e-10 && !any(ρ .< -1e-10)
+end
+
+
+
+function proj_CENN(ρ, m, μ, ν, Q, A=nothing)
+    """
+    because our curves are not continuous, it's possible for a sequence of measures representing a rectification of a curve to actually leave the simplex
+    while satisfying the continuity equation, so here we employ the POCS routine to identify a curve of strictly non-negative measures
+    """
+    xρ = ρ
+    xm = m
+
+    yρ = zeros(size(ρ))
+    ym = zeros(size(m))
+
+    pρ = zeros(size(ρ))
+    pm = zeros(size(m))
+
+    qρ = zeros(size(ρ))
+    qm = zeros(size(m))
+    while !in_CEplus(xρ, xm ,μ, ν, Q)
+        yρ = max.(xρ + pρ, 0)
+
+        pρ = xρ + pρ - yρ
+        pm = xm + pm - ym
+
+        xρ, xm = proj_CE(yρ + qρ, ym + qm, μ, ν, Q)
+
+        qρ = yρ + qρ - xρ
+        qm = ym + qm - xm
+    end
+    return (xρ, xm)
 end
 
 function proj_CE(ρ, m, μ, ν, Q, A=nothing)
@@ -198,4 +233,28 @@ function form_dense_ceh_system(Q, N)
 
     A[end, end] = 0
     return A
+end
+
+function project_to_simplex!(ρ)
+    σ = sort(ρ, rev=true)
+    N = size(σ, 1)
+    simplicial_condition(idx, v) = v[idx] - (1/idx) * (sum(v[1:idx]) .- 1) > 0
+    n = findlast(i -> simplicial_condition(i, σ), collect(1:N))
+    θ = (1/n) * (sum(σ[1:n]) - 1)
+    ρ .= max.(ρ .- θ, 0)
+end
+
+function project_to_simplex(ρ)
+    σ = sort(ρ, rev=true)
+    N = size(σ, 1)
+    simplicial_condition(idx, v) = v[idx] - (1/idx) * (sum(v[1:idx]) .- 1) > 0
+    n = findlast(i -> simplicial_condition(i, σ), collect(1:N))
+    θ = (1/n) * (sum(σ[1:n]) - 1)
+    return max.(ρ .- θ, 0)
+end
+
+function project_curve_to_simplex!(ρ)
+    for row in eachrow(ρ)
+        project_to_simplex!(row)
+	end
 end

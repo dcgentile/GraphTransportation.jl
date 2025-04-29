@@ -53,6 +53,7 @@ function chambolle_pock_me(
     c = ErbarBundle(Q, μ, ν, N, gpu=gpu)
     d = ErbarBundle(Q, μ, ν, N, gpu=gpu)
     p = ProgressUnknown(spinner=true)
+    normdiff = 0.
 
 
     function assert_unique_pointers(s,t,u,v,w,x,y,z)
@@ -69,28 +70,14 @@ function chambolle_pock_me(
 
 
     for i in 1:maxiters
-        next!(p)
-
+        next!(p; showvalues=[("Difference in norm between iterations", normdiff), ("Current iteration", i)])
         combine!(c, b, a_bar, 1.0, σ)
         prox_Fstar!(b_next, c)
         combine!(c, a, b_next, 1.0, -τ)
         prox_G!(a_next, c)
-        try
-            @assert !any(a_next.vector.ρ .< 0)
-        catch error
-            println(i)
-            println("Negative mass found after CE projection in prox_G call")
-            println(minimum(a_next.vector.ρ))
-            combine!(c, a, b_next, 1.0, -τ)
-            return c
-            #error("Nonnegative mass!")
-        end
-
-
         combine!(d, a_next, a, 1.0, -1.0)
         normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
         if normdiff < tol
-            println("converged on iter $i")
             return a
         end
         λ = 1 / √(1 + 2 * τ)
@@ -101,10 +88,9 @@ function chambolle_pock_me(
         assign!(a, a_next)
         assign!(b, b_next)
         assign!(a_bar, a_bar_next)
-        #assert_unique_pointers(a,b,a_bar,a_next,b_next, a_bar_next, c, d)
     end
-    error("Chambolle Pock did not converge in $(maxiters) steps")
-    #return a
+    @warn "Chambolle Pock did not converge in $(maxiters) steps. Last recorded norm difference: $(normdiff)"
+    return a
 end
 
 function chambolle_pock_routine(
@@ -179,7 +165,8 @@ function prox_G!(targ, bundle)
     cache = bundle.cache
     v = bundle.vector
     u = targ.vector
-    proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
+    #proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
+    v.ρ, v.m = proj_CENN(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
     project_K!(v.ρ_minus, v.ρ_plus, v.θ)
     project_IJeq!(v.ρ_avg, v.q)
 

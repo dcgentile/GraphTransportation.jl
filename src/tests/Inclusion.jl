@@ -92,3 +92,8 @@ function CE_operator(ρ, m, Q)
     a = ∂tρ + divm
     return a
 end
+
+function ∂t(ρ)
+    N, V = size(ρ)
+    return (N - 1) * (ρ[2:N,:] - ρ[1:N-1,:])
+end
