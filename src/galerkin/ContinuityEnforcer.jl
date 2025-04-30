@@ -105,13 +105,17 @@ function proj_CE!(ρ, m, μ, ν, Q, A=nothing)
     end
 end
 
-function in_CEplus(ρ, m, μ, ν, Q)
-    return ρ[1,:] == μ && ρ[end,:] == ν && maximum(abs.(CE_operator(ρ,m,Q))) < 1e-10 && !any(ρ .< -1e-10)
+function in_CEplus(ρ, m, μ, ν, Q; verbose=false)
+    discrep = maximum(abs.(CE_operator(ρ,m,Q)))
+    if verbose
+        println("max{∂tρ + ∇⋅m} = $(discrep),  min{ρ} = $(minimum(ρ))")
+    end
+    return ρ[1,:] == μ && ρ[end,:] == ν &&  discrep < 1e-9 && !any(ρ .< -1e-10)
 end
 
 
 
-function proj_CENN(ρ, m, μ, ν, Q, A=nothing)
+function proj_CENN(ρ, m, μ, ν, Q, A=nothing; verbose=false)
     """
     because our curves are not continuous, it's possible for a sequence of measures representing a rectification of a curve to actually leave the simplex
     while satisfying the continuity equation, so here we employ the POCS routine to identify a curve of strictly non-negative measures
@@ -127,13 +131,14 @@ function proj_CENN(ρ, m, μ, ν, Q, A=nothing)
 
     qρ = zeros(size(ρ))
     qm = zeros(size(m))
-    while !in_CEplus(xρ, xm ,μ, ν, Q)
+    while !in_CEplus(xρ, xm, μ, ν, Q, verbose=verbose)
         yρ = max.(xρ + pρ, 0)
+        ym = xm + pm
 
         pρ = xρ + pρ - yρ
         pm = xm + pm - ym
 
-        xρ, xm = proj_CE(yρ + qρ, ym + qm, μ, ν, Q)
+        xρ, xm = proj_CE(yρ + qρ, ym + qm, μ, ν, Q, A)
 
         qρ = yρ + qρ - xρ
         qm = ym + qm - xm
@@ -192,69 +197,4 @@ function find_lagrange_multiplier(ρ, m, μ, ν, Q, A=nothing)
     end
 
     return (b, ϕ, φ, ∂tφ, ∇φ)
-end
-
-
-function form_dense_ceh_system(Q, N)
-    """
-    let L be the Laplacian associated to Q, and N = 1/h be the number of steps
-    given a ρ ∈ V_{n,h}^1, m ∈ V_{e,h}^0, we want to project onto the set of
-    (ρ, m) satisfying the Galerkin-discretized discrete continuity equation (see eqn (10)
-    in Erbar et al. 2020). A Lagrange mulitpliers argument shows that this can be done by solving
-    a linear system Ax=b, where A is, essentially, the "differential operator"
-    D = (∂t^2) + L
-    Now because the the value of Lf(x) will in general depend on non-local information
-    (i.e values of f away from x), care must be taken when setting up this projection problem,
-    and we must treat it as one simultaneous linear system on R^{NV + 1 × NV + 1}
-    """
-	V = size(Q,1)
-    #form the Laplacian, and write N copies of it to an array
-    L = 1. * laplacian_from_transition(Q)
-    Ld = fill(L, N)
-
-    # form the ∂t^2 operator: h^-2 * (f(t + 1) - 2f(t) + f(t - 1))
-    # form a diagonal -2*N^2*I, representing the middle summand
-    Ad = fill(-2 * N^2 * I(V), N)
-    # adjust the terminal matrices to account for a "one-sided" limit
-    Ad[1] = -N^2 * I(V)
-    Ad[end] = -N^2 * I(V)
-    # the diagonal of our final matrix
-    d = Ad .+ Ld
-    # the off diagonals of our final matrix
-    o = fill(1. * N^2 * I(V), N - 1)
-    #glue it all together
-    A = BlockTridiagonal(o, d, o)
-    # in order to ensure a unique solution, an additional lagrange multiplier is added
-    # which forces the solution to be a "mean zero function" in space and time
-    # this is accomplished by padding the matrix on the right and the bottom by ones,
-    # and setting the very last entry to 0
-    A = cat(A, ones(N*V)', dims=1)
-    A = cat(A, ones(N*V + 1), dims=2)
-
-    A[end, end] = 0
-    return A
-end
-
-function project_to_simplex!(ρ)
-    σ = sort(ρ, rev=true)
-    N = size(σ, 1)
-    simplicial_condition(idx, v) = v[idx] - (1/idx) * (sum(v[1:idx]) .- 1) > 0
-    n = findlast(i -> simplicial_condition(i, σ), collect(1:N))
-    θ = (1/n) * (sum(σ[1:n]) - 1)
-    ρ .= max.(ρ .- θ, 0)
-end
-
-function project_to_simplex(ρ)
-    σ = sort(ρ, rev=true)
-    N = size(σ, 1)
-    simplicial_condition(idx, v) = v[idx] - (1/idx) * (sum(v[1:idx]) .- 1) > 0
-    n = findlast(i -> simplicial_condition(i, σ), collect(1:N))
-    θ = (1/n) * (sum(σ[1:n]) - 1)
-    return max.(ρ .- θ, 0)
-end
-
-function project_curve_to_simplex!(ρ)
-    for row in eachrow(ρ)
-        project_to_simplex!(row)
-	end
 end

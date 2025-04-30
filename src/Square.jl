@@ -18,17 +18,11 @@ function single_run(N=128, ε=0.1)
          0.5 0. 0.5 0.;
          0. 0.5 0. 0.5;
          0.5 0. 0.5 0.]
-    #μ = [3.; 1/3; 1/3; 1/3]
-    #ν = [1/3; 3; 1/3; 1/3]
     μ = [4.; 0; 0.; 0.]
     ν = [0.; 4; 0.; 0.]
     a = [-1; 1/3; 1/3; 1/3;]
     b = [1/3; -1; 1/3; 1/3;]
-    #N = 2^n
-    #Q = convert(Array{BigFloat}, Q)
-    #μ = convert(Array{BigFloat}, μ)
-    #ν = convert(Array{BigFloat}, ν)
-    γ, d = BBD(Q, μ + ε * a, ν + ε * b, N)
+    γ, d = BBD(Q, μ + ε * a, ν + ε * b, N, verbose=true)
     return (γ, d)
 
 end

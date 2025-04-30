@@ -32,7 +32,8 @@ function chambolle_pock_me(
     τ=0.5,
     λ=1.0,
     tol=1e-10,
-    gpu=false
+    gpu=false,
+    verbose=false
 )
     """
     this is a memory efficient version of Chambolle Pock that does computations in place whenever possible
@@ -53,28 +54,14 @@ function chambolle_pock_me(
     c = ErbarBundle(Q, μ, ν, N, gpu=gpu)
     d = ErbarBundle(Q, μ, ν, N, gpu=gpu)
     p = ProgressUnknown(spinner=true)
-    normdiff = 0.
-
-
-    function assert_unique_pointers(s,t,u,v,w,x,y,z)
-        ptrs = []
-	    for bundle in [s,t,u,v,w,x,y,z]
-            v = bundle.vector
-            for arr in [v.ρ, v.m, v.θ, v.ρ_minus, v.ρ_plus, v.ρ_avg, v.q]
-                push!(ptrs, pointer(arr))
-            end
-        end
-        @assert allunique(ptrs)
-    end
-
-
+    normdiff = Inf
 
     for i in 1:maxiters
         next!(p; showvalues=[("Difference in norm between iterations", normdiff), ("Current iteration", i)])
         combine!(c, b, a_bar, 1.0, σ)
-        prox_Fstar!(b_next, c)
+        prox_Fstar!(b_next, c, verbose)
         combine!(c, a, b_next, 1.0, -τ)
-        prox_G!(a_next, c)
+        prox_G!(a_next, c, verbose)
         combine!(d, a_next, a, 1.0, -1.0)
         normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
         if normdiff < tol
@@ -92,6 +79,59 @@ function chambolle_pock_me(
     @warn "Chambolle Pock did not converge in $(maxiters) steps. Last recorded norm difference: $(normdiff)"
     return a
 end
+
+
+
+function prox_Fstar!(targ, bundle, verbose)
+    """
+    compute the proximal mapping of F star in place
+    this amounts to computing the proximal mappings of the conjuage Action, IJPM, and IJAvg
+    """
+    cache = bundle.cache
+    v = bundle.vector
+    u = targ.vector
+    verbose ? println("Computing Proximal Action") : nothing
+    prox_Astar!(v.θ, v.m)
+    verbose ? println("Computing Proximal Mapping of IJ_pm^*") : nothing
+    proximal_IJpm_star!(v.q, v.ρ_minus, v.ρ_plus, cache.Q)
+    verbose ? println("Computing Proximal Mapping of IJ_avg^*") : nothing
+    prox_IJavg_star!(v.ρ, v.ρ_avg, cache.μ, cache.ν, cache.avg_sys)
+    u.ρ .= v.ρ
+    u.θ .= v.θ
+    u.m .= v.m
+    u.ρ_minus .= v.ρ_minus
+    u.ρ_plus .= v.ρ_plus
+    u.ρ_avg .= v.ρ_avg
+    u.q .= v.q
+end
+
+function prox_G!(targ, bundle, verbose)
+    """
+    compute the proximal mapping of G
+    this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,
+    projection to the set Script K, and projection to the set Jeq
+    """
+    cache = bundle.cache
+    v = bundle.vector
+    u = targ.vector
+    #proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
+    verbose ? println("Computing Projection to CE+") : nothing
+    v.ρ, v.m = proj_CENN(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys, verbose=verbose)
+    verbose ? println("Computing Projection to K") : nothing
+    project_K!(v.ρ_minus, v.ρ_plus, v.θ)
+    verbose ? println("Computing Projection to IJ_eq") : nothing
+    project_IJeq!(v.ρ_avg, v.q)
+
+    u.ρ .= v.ρ
+    u.θ .= v.θ
+    u.m .= v.m
+    u.ρ_minus .= v.ρ_minus
+    u.ρ_plus .= v.ρ_plus
+    u.ρ_avg .= v.ρ_avg
+    u.q .= v.q
+end
+
+######## Implementation that avoids in-place computation ############3
 
 function chambolle_pock_routine(
     Q::Matrix{AbstractFloat},
@@ -133,50 +173,6 @@ function chambolle_pock_routine(
 
     return a
 
-end
-
-
-function prox_Fstar!(targ, bundle)
-    """
-    compute the proximal mapping of F star in place
-    this amounts to computing the proximal mappings of the conjuage Action, IJPM, and IJAvg
-    """
-    cache = bundle.cache
-    v = bundle.vector
-    u = targ.vector
-    prox_Astar!(v.θ, v.m)
-    proximal_IJpm_star!(v.q, v.ρ_minus, v.ρ_plus, cache.Q)
-    prox_IJavg_star!(v.ρ, v.ρ_avg, cache.μ, cache.ν, cache.avg_sys)
-    u.ρ .= v.ρ
-    u.θ .= v.θ
-    u.m .= v.m
-    u.ρ_minus .= v.ρ_minus
-    u.ρ_plus .= v.ρ_plus
-    u.ρ_avg .= v.ρ_avg
-    u.q .= v.q
-end
-
-function prox_G!(targ, bundle)
-    """
-    compute the proximal mapping of G
-    this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,
-    projection to the set Script K, and projection to the set Jeq
-    """
-    cache = bundle.cache
-    v = bundle.vector
-    u = targ.vector
-    #proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
-    v.ρ, v.m = proj_CENN(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
-    project_K!(v.ρ_minus, v.ρ_plus, v.θ)
-    project_IJeq!(v.ρ_avg, v.q)
-
-    u.ρ .= v.ρ
-    u.θ .= v.θ
-    u.m .= v.m
-    u.ρ_minus .= v.ρ_minus
-    u.ρ_plus .= v.ρ_plus
-    u.ρ_avg .= v.ρ_avg
-    u.q .= v.q
 end
 
 
