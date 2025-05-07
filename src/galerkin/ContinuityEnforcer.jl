@@ -115,7 +115,7 @@ end
 
 
 
-function proj_CENN(ρ, m, μ, ν, Q, A=nothing; verbose=false)
+function proj_CENN(ρ, m, μ, ν, Q, A=nothing; verbose=false, maxiters=2^32)
     """
     because our curves are not continuous, it's possible for a sequence of measures representing a rectification of a curve to actually leave the simplex
     while satisfying the continuity equation, so here we employ the POCS routine to identify a curve of strictly non-negative measures
@@ -131,17 +131,25 @@ function proj_CENN(ρ, m, μ, ν, Q, A=nothing; verbose=false)
 
     qρ = zeros(size(ρ))
     qm = zeros(size(m))
-    while !in_CEplus(xρ, xm, μ, ν, Q, verbose=verbose)
-        yρ = max.(xρ + pρ, 0)
-        ym = xm + pm
 
-        pρ = xρ + pρ - yρ
-        pm = xm + pm - ym
+    p = ProgressUnknown(spinner=true)
 
-        xρ, xm = proj_CE(yρ + qρ, ym + qm, μ, ν, Q, A)
+    for i in 1:maxiters
+        if !in_CEplus(xρ, xm, μ, ν, Q, verbose=verbose)
+            yρ = max.(xρ + pρ, 0)
+            ym = xm + pm
+            pρ = xρ + pρ - yρ
+            pm = xm + pm - ym
 
-        qρ = yρ + qρ - xρ
-        qm = ym + qm - xm
+            xρ, xm = proj_CE(yρ + qρ, ym + qm, μ, ν, Q, A)
+
+            qρ = yρ + qρ - xρ
+            qm = ym + qm - xm
+            discrep = maximum(abs.(CE_operator(xρ,xm,Q)))
+            next!(p; showvalues=[("max{∂tρ + ∇⋅m} = ", discrep), ("min{ρ} = ", minimum(xρ)), ("Current iteration", i)])
+        else
+            break
+        end
     end
     return (xρ, xm)
 end

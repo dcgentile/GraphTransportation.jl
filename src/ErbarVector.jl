@@ -41,10 +41,13 @@ struct ErbarCache
         V, _ = size(Q)
         S = sparse(Q)
         E = nnz(S)
+        #π = ones(V)
         π = zeros(V)
         for i in 1:V
             π[i] = nnz(S[i,:]) / E
         end
+        @assert μ' * π ≈ 1
+        @assert ν' * π ≈ 1
 
         # form the linear systems we'll be solving in each step
         ceh_sys = form_ceh_system(Q, N)
@@ -100,6 +103,11 @@ mutable struct ErbarBundle
 
     end
 end
+
+
+Base.copy(a::ErbarCache) = ErbarCache(a.Q, a.μ, a.ν, a.N)
+Base.copy(a::ErbarVector) = ErbarVector(copy(a.ρ), copy(a.m), copy(a.θ), copy(a.ρ_minus), copy(a.ρ_plus), copy(a.ρ_avg), copy(a.q))
+Base.copy(a::ErbarBundle) = ErbarBundle(copy(a.cache), copy(a.vector))
 
 
 # combine! computes a linear combination of ErbarVectors and stores the result in a

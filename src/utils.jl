@@ -102,3 +102,15 @@ function finite_difference_operator(N)
     A = Tridiagonal(l, d ,u)
     return sparse(A[1:N-1,:])
 end
+
+
+function steady_state_from_adjacency(Q)
+    V, _ = size(Q)
+    S = sparse(Q)
+    E = nnz(S)
+    π = zeros(V)
+    for i in 1:V
+        π[i] = nnz(S[i,:]) / E
+    end
+    return π
+end

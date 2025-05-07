@@ -21,8 +21,64 @@ K = { x,y,z : 0 ≤ z ≤ T(x,y) } (here T is the chosen admissible mean)
 ScriptK = { ρ_minus, ρ_plus, θ: ρ_minus[t,i,j], ρ_plus[t,i,j], θ[t,i,j] ∈ K}
 """
 
+function chambolle_pock_routine(
+    a::ErbarBundle,
+    b::ErbarBundle,
+    a_bar::ErbarBundle,
+    a_next::ErbarBundle,
+    b_next::ErbarBundle,
+    a_bar_next::ErbarBundle,
+    c::ErbarBundle,
+    d::ErbarBundle;
+    σ=0.5,
+    τ=0.5,
+    λ=1.0,
+    maxiters=2^16,
+    tol=1e-10,
+    verbose=false
+    )
+    p = ProgressUnknown(spinner=true)
+    normdiff = Inf
+
+    for i in 1:maxiters
+        next!(p; showvalues=[("Difference in norm between iterations", normdiff), ("Current iteration", i)])
+        combine!(c, b, a_bar, 1.0, σ)
+        prox_Fstar!(b_next, c, verbose)
+        combine!(c, a, b_next, 1.0, -τ)
+        prox_G!(a_next, c, verbose)
+        combine!(d, a_next, a, 1.0, -1.0)
+        normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
+        if normdiff < tol
+            return a
+        end
+        λ = 1 / √(1 + 2 * τ)
+        τ *= λ
+        σ /= λ
+
+        combine!(a_bar_next, a_next, d, 1.0, λ)
+        assign!(a, a_next)
+        assign!(b, b_next)
+        assign!(a_bar, a_bar_next)
+    end
+    @warn "Chambolle Pock did not converge in $(maxiters) steps. Last recorded norm difference: $(normdiff)"
+    return a
+end
+
+
 # a more memory efficient version of ChamPock
-function chambolle_pock_me(
+function chambolle_pock(a::ErbarBundle;maxiters=2^16, verbose=false, tol=1e-10, σ=0.5, τ=0.5, λ=1.0)
+    b = copy(a)
+    a_bar = copy(a)
+    a_next = copy(a)
+    b_next = copy(a)
+    a_bar_next = copy(a)
+    c = copy(a)
+    d = copy(a)
+    return chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d, σ=σ, τ=τ, λ=λ, maxiters=maxiters, verbose=verbose, tol=tol)
+end
+
+
+function chambolle_pock(
     Q::AbstractMatrix,
     μ::AbstractVector,
     ν::AbstractVector,
@@ -53,36 +109,12 @@ function chambolle_pock_me(
     a_bar_next = ErbarBundle(Q, μ, ν, N, gpu=gpu)
     c = ErbarBundle(Q, μ, ν, N, gpu=gpu)
     d = ErbarBundle(Q, μ, ν, N, gpu=gpu)
-    p = ProgressUnknown(spinner=true)
-    normdiff = Inf
-
-    for i in 1:maxiters
-        next!(p; showvalues=[("Difference in norm between iterations", normdiff), ("Current iteration", i)])
-        combine!(c, b, a_bar, 1.0, σ)
-        prox_Fstar!(b_next, c, verbose)
-        combine!(c, a, b_next, 1.0, -τ)
-        prox_G!(a_next, c, verbose)
-        combine!(d, a_next, a, 1.0, -1.0)
-        normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
-        if normdiff < tol
-            return a
-        end
-        λ = 1 / √(1 + 2 * τ)
-        τ *= λ
-        σ /= λ
-
-        combine!(a_bar_next, a_next, d, 1.0, λ)
-        assign!(a, a_next)
-        assign!(b, b_next)
-        assign!(a_bar, a_bar_next)
-    end
-    @warn "Chambolle Pock did not converge in $(maxiters) steps. Last recorded norm difference: $(normdiff)"
-    return a
+    return chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d, maxiters=maxiters, verbose=verbose, tol=tol)
 end
 
 
 
-function prox_Fstar!(targ, bundle, verbose)
+function prox_Fstar!(targ, bundle, verbose=false)
     """
     compute the proximal mapping of F star in place
     this amounts to computing the proximal mappings of the conjuage Action, IJPM, and IJAvg
@@ -105,7 +137,7 @@ function prox_Fstar!(targ, bundle, verbose)
     u.q .= v.q
 end
 
-function prox_G!(targ, bundle, verbose)
+function prox_G!(targ, bundle, verbose=false)
     """
     compute the proximal mapping of G
     this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,
@@ -114,9 +146,9 @@ function prox_G!(targ, bundle, verbose)
     cache = bundle.cache
     v = bundle.vector
     u = targ.vector
-    #proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
+    proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
     verbose ? println("Computing Projection to CE+") : nothing
-    v.ρ, v.m = proj_CENN(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys, verbose=verbose)
+    #v.ρ, v.m = proj_CENN(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys, verbose=verbose)
     verbose ? println("Computing Projection to K") : nothing
     project_K!(v.ρ_minus, v.ρ_plus, v.θ)
     verbose ? println("Computing Projection to IJ_eq") : nothing

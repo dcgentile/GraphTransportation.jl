@@ -13,7 +13,7 @@ function run_experiment()
     return BBD(Q, μ, ν, 100)
 end
 
-function single_run(N=128, ε=0.1)
+function single_run(;N=128, ε=0.1, verbose=false)
     Q = [0. 0.5 0. 0.5;
          0.5 0. 0.5 0.;
          0. 0.5 0. 0.5;
@@ -22,7 +22,7 @@ function single_run(N=128, ε=0.1)
     ν = [0.; 4; 0.; 0.]
     a = [-1; 1/3; 1/3; 1/3;]
     b = [1/3; -1; 1/3; 1/3;]
-    γ, d = BBD(Q, μ + ε * a, ν + ε * b, N, verbose=true)
+    γ, d = BBD(Q, μ + ε * a, ν + ε * b, N, verbose=verbose)
     return (γ, d)
 
 end
