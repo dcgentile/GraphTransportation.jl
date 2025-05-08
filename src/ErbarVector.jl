@@ -46,8 +46,14 @@ struct ErbarCache
         for i in 1:V
             π[i] = nnz(S[i,:]) / E
         end
-        @assert μ' * π ≈ 1
-        @assert ν' * π ≈ 1
+        try
+            @assert μ' * π ≈ 1
+            @assert ν' * π ≈ 1
+        catch error
+            error("$(μ) or $(ν) is not a density wrt to $(π)")
+        end
+
+
 
         # form the linear systems we'll be solving in each step
         ceh_sys = form_ceh_system(Q, N)

@@ -40,7 +40,7 @@ function prox_Astar(θ, m)
 end
 
 
-function project_by_bisection(a,b; tol=1e-8, maxiters=100)
+function project_by_bisection(a,b; tol=1e-8, maxiters=2^16)
     if a + 0.25 * b^2 ≤ 0
         return (a,b)
     end

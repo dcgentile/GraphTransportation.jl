@@ -35,13 +35,14 @@ function chambolle_pock_routine(
     λ=1.0,
     maxiters=2^16,
     tol=1e-10,
-    verbose=false
+    verbose=false,
+    show_progress=true,
     )
-    p = ProgressUnknown(spinner=true)
+    show_progress ? p = ProgressUnknown(spinner=true) : 0
     normdiff = Inf
 
     for i in 1:maxiters
-        next!(p; showvalues=[("Difference in norm between iterations", normdiff), ("Current iteration", i)])
+        show_progress ? next!(p; showvalues=[("Difference in norm between iterations", normdiff), ("Current iteration", i)]) : nothing
         combine!(c, b, a_bar, 1.0, σ)
         prox_Fstar!(b_next, c, verbose)
         combine!(c, a, b_next, 1.0, -τ)
