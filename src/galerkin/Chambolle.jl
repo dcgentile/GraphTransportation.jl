@@ -1,5 +1,4 @@
 include("../ErbarVector.jl")
-include("./ContinuityEnforcer.jl")
 include("./ProximalAvgIndicator.jl")
 include("./ProximalEqualityIndicator.jl")
 include("./ProximalSignIndicator.jl")

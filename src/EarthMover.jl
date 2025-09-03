@@ -1,7 +1,7 @@
-using LinearAlgebra
-include("ErbarVector.jl")
-include("galerkin/Chambolle.jl")
-include("utils.jl")
+#using LinearAlgebra
+#include("utils.jl")
+#include("ErbarVector.jl")
+#include("galerkin/Chambolle.jl")
 
 function BBD(Q::AbstractMatrix,
              μ::AbstractVector,

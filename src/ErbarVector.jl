@@ -2,7 +2,6 @@ using SuiteSparse
 using SparseArrays
 using LinearAlgebra
 using CUDA
-include("utils.jl")
 include("./galerkin/ContinuityEnforcer.jl")
 include("./galerkin/ProximalAvgIndicator.jl")
 
