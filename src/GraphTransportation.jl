@@ -20,11 +20,13 @@ include("galerkin/ProximalSignIndicator.jl")
 include("galerkin/ProximalEqualityIndicator.jl")
 include("galerkin/KProjection.jl")
 
+# include the abstraction for the vector space defined in Erbar et al 2020
+include("ErbarVector.jl")
+
 # include the Chambolle-Pock routine
 include("galerkin/Chambolle.jl")
 
 # include functionality for computing geodesics
-include("ErbarVector.jl")
 include("EarthMover.jl")
 
 
