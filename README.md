@@ -1,12 +1,19 @@
 # Optimal Transport on Graphs
 ## Installation
 
-To install this package, start a Julia instance and run
+To install this package, navigate in the commandline to your project directory, and start a Julia instance. Activate a virtual environment with
+
+``` julia
+]activate .
+```
+
+Now install the package with
 
 ``` julia
 ]add https://github.com/dcgentile/GraphTransportation.jl.git
 ```
 
+Finally, you can test out the module with the following little example, which approximates the geodesic between two Dirac masses on a 2 point graph.
 
 ``` julia
 using GraphTransportation
