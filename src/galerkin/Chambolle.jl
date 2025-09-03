@@ -1,12 +1,3 @@
-include("../ErbarVector.jl")
-include("./ProximalAvgIndicator.jl")
-include("./ProximalEqualityIndicator.jl")
-include("./ProximalSignIndicator.jl")
-include("./ProximalAction.jl")
-include("./KProjection.jl")
-using ProgressMeter
-
-
 """
 this file contains the Chambolle pock routine for minimizing the objective function described in eqn (26)
 of Erbar et al 2020.

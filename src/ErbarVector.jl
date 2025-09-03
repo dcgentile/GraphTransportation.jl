@@ -1,11 +1,3 @@
-using SuiteSparse
-using SparseArrays
-using LinearAlgebra
-using CUDA
-include("./galerkin/ContinuityEnforcer.jl")
-include("./galerkin/ProximalAvgIndicator.jl")
-
-
 # An ErbarVector is an element of the Hilbert space H, described in eqn (27)
 # of Erbar et al. 2020
 mutable struct ErbarVector

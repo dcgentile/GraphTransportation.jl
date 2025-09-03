@@ -1,6 +1,3 @@
-#using SparseArrays
-#using LinearAlgebra
-
 """
 this file contains the functions needed to compute the proximal mapping of IJ_avg_star
 as described in Erbar et al 2020, section 4.6.

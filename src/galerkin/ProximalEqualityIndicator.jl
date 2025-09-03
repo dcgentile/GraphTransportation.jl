@@ -1,4 +1,3 @@
-
 function project_IJeq(ρ::AbstractArray, q::AbstractArray)
     """
     compute the proximal mapping of IJ_eq in place

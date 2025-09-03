@@ -1,11 +1,7 @@
-using SparseArrays
-using LinearAlgebra
-using BlockBandedMatrices
 """
 this file contains functionality for projecting pairs of discretized curves and vector fields
 on graphs onto the set of such pairs which satisfies the (graph, discretized) continuity equation
 """
-
 
 function form_ceh_system(Q, N)
     """

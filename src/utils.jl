@@ -1,5 +1,3 @@
-using LinearAlgebra
-
 # various utility functions that don't belong to any particular subroutine
 
 # check that a vector μ is a probability density w.r.t the steady state π
