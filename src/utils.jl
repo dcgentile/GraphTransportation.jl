@@ -58,13 +58,11 @@ function graph_gradient(Q, f)
     @assert size(Q,1) == size(f,1)
     ∇f = zeros(size(Q))
     N = size(Q,1)
-    for i = 1:N
-        for j = i:N
-            ∇f[i,j] = Q[i,j] != 0 ? f[i] - f[j] : 0
-            ∇f[j,i] = -∇f[i,j]
-        end
+    for i = 1:N, j=1:N
+        ∇f[i,j] = f[i] - f[j]
+        ∇f[j,i] = -∇f[i,j]
     end
-    return ∇f
+    return ∇f .* (Q .!= 0)
 end
 
 function graph_divergence(Q, m)

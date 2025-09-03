@@ -1,5 +1,6 @@
 module GraphTransportation
+include("EarthMover.jl")
 
-# Write your package code here.
+export BBD
 
 end
