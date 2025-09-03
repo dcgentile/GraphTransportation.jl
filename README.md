@@ -27,7 +27,7 @@ b = [0.; 2];
 # set number of steps (optional, will default to 128)
 N = 100;
 
-# call the Benamou Brenier Distances (BBD) f
+# call the Benamou Brenier Distance (BBD) function
 v, dist = BBD(Q, a, b, N)
 ```
 
