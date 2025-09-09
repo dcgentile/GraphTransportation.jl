@@ -1,6 +1,3 @@
-#using Base: signequal
-#using LinearAlgebra
-
 tolerance = 1e-8
 
 """

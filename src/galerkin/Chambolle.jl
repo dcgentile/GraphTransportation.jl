@@ -57,7 +57,7 @@ end
 
 
 # a more memory efficient version of ChamPock
-function chambolle_pock(a::ErbarBundle;maxiters=2^16, verbose=false, tol=1e-10, σ=0.5, τ=0.5, λ=1.0)
+function chambolle_pock(a::ErbarBundle;maxiters=2^16, verbose=false, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
     b = copy(a)
     a_bar = copy(a)
     a_next = copy(a)
@@ -65,7 +65,7 @@ function chambolle_pock(a::ErbarBundle;maxiters=2^16, verbose=false, tol=1e-10, 
     a_bar_next = copy(a)
     c = copy(a)
     d = copy(a)
-    return chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d, σ=σ, τ=τ, λ=λ, maxiters=maxiters, verbose=verbose, tol=tol)
+    return chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d, σ=σ, τ=τ, λ=λ, maxiters=maxiters, verbose=verbose, tol=tol, show_progress=show_progress)
 end
 
 
@@ -80,7 +80,8 @@ function chambolle_pock(
     λ=1.0,
     tol=1e-10,
     gpu=false,
-    verbose=false
+    verbose=false,
+    show_progress=false
 )
     """
     this is a memory efficient version of Chambolle Pock that does computations in place whenever possible

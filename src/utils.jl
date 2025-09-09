@@ -110,3 +110,15 @@ function steady_state_from_adjacency(Q)
     end
     return π
 end
+
+function metric_tensor(ρ, mean=logmean)
+    N = size(ρ, 1)
+    g = zeros(N,N)
+    for i in 1:N
+        for j in i+1:N
+            g[i, j] = mean(ρ[i], ρ[j])
+            g[j, i] = mean(ρ[i], ρ[j])
+        end
+    end
+    return g
+end

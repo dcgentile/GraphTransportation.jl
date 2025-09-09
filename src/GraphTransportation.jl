@@ -29,6 +29,8 @@ include("galerkin/Chambolle.jl")
 # include functionality for computing geodesics
 include("EarthMover.jl")
 
+# include functionality for graident flows
+include("GradientFlows.jl")
 
 # expose functionality for computing geodesics
 export BBD
