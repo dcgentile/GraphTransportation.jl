@@ -11,6 +11,13 @@ K = { x,y,z : 0 ≤ z ≤ T(x,y) } (here T is the chosen admissible mean)
 ScriptK = { ρ_minus, ρ_plus, θ: ρ_minus[t,i,j], ρ_plus[t,i,j], θ[t,i,j] ∈ K}
 """
 
+"""
+    chambolle_pock_routine(a::ErbarBundle, b::ErbarBundle, a_bar::ErbarBundle, a_next::ErbarBundle, b_next::ErbarBundle, a_bar_next::ErbarBundle, c::ErbarBundle, d::ErbarBundle; σ=0.5, τ=0.5, λ=1.0, maxiters=2^16, tol=1e-10, verbose=false, show_progress=true)
+
+Description of the function.
+
+#TODO
+"""
 function chambolle_pock_routine(
     a::ErbarBundle,
     b::ErbarBundle,
@@ -40,11 +47,11 @@ function chambolle_pock_routine(
         combine!(d, a_next, a, 1.0, -1.0)
         normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
         if normdiff < tol
-            return a
+            return (a_next, b_next)
         end
-        λ = 1 / √(1 + 2 * τ)
-        τ *= λ
-        σ /= λ
+        #λ = 1 / √(1 + 2 * τ)
+        #τ *= λ
+        #σ /= λ
 
         combine!(a_bar_next, a_next, d, 1.0, λ)
         assign!(a, a_next)
@@ -52,11 +59,18 @@ function chambolle_pock_routine(
         assign!(a_bar, a_bar_next)
     end
     @warn "Chambolle Pock did not converge in $(maxiters) steps. Last recorded norm difference: $(normdiff)"
-    return a
+    return (a, b)
 end
 
 
 # a more memory efficient version of ChamPock
+"""
+    chambolle_pock(a::ErbarBundle;maxiters=2^16, verbose=false, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
+
+Description of the function.
+
+#TODO
+"""
 function chambolle_pock(a::ErbarBundle;maxiters=2^16, verbose=false, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
     b = copy(a)
     a_bar = copy(a)
@@ -115,11 +129,11 @@ function prox_Fstar!(targ, bundle, verbose=false)
     v = bundle.vector
     u = targ.vector
     verbose ? println("Computing Proximal Action") : nothing
-    prox_Astar!(v.θ, v.m)
+    v.θ, v.m = prox_Astar!(v.θ, v.m)
     verbose ? println("Computing Proximal Mapping of IJ_pm^*") : nothing
-    proximal_IJpm_star!(v.q, v.ρ_minus, v.ρ_plus, cache.Q)
+    v.q, v.ρ_minus, v.ρ_plus = proximal_IJpm_star!(v.q, v.ρ_minus, v.ρ_plus, cache.Q)
     verbose ? println("Computing Proximal Mapping of IJ_avg^*") : nothing
-    prox_IJavg_star!(v.ρ, v.ρ_avg, cache.μ, cache.ν, cache.avg_sys)
+    v.ρ, v.ρ_avg = prox_IJavg_star!(v.ρ, v.ρ_avg, cache.μ, cache.ν, cache.avg_sys)
     u.ρ .= v.ρ
     u.θ .= v.θ
     u.m .= v.m
@@ -129,7 +143,7 @@ function prox_Fstar!(targ, bundle, verbose=false)
     u.q .= v.q
 end
 
-function prox_G!(targ, bundle, verbose=false)
+function prox_G!(targ, bundle, verbose=false, safe=false)
     """
     compute the proximal mapping of G
     this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,
@@ -138,13 +152,16 @@ function prox_G!(targ, bundle, verbose=false)
     cache = bundle.cache
     v = bundle.vector
     u = targ.vector
-    proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
+    v.ρ, v.m = proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
     verbose ? println("Computing Projection to CE+") : nothing
+    if safe @assert is_in_CE_weakly(v.ρ, v.m, cache.Q, cache.π) end
     #v.ρ, v.m = proj_CENN(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys, verbose=verbose)
     verbose ? println("Computing Projection to K") : nothing
-    project_K!(v.ρ_minus, v.ρ_plus, v.θ)
+    v.ρ_minus, v.ρ_plus, v.θ = project_K!(v.ρ_minus, v.ρ_plus, v.θ)
+    if safe @assert is_in_ScriptK(v.ρ_minus, v.ρ_plus, v.θ) end
     verbose ? println("Computing Projection to IJ_eq") : nothing
-    project_IJeq!(v.ρ_avg, v.q)
+    v.ρ_avg, v.q = project_IJeq!(v.ρ_avg, v.q)
+    if safe @assert is_in_JEq(v.ρ_avg, v.q) end
 
     u.ρ .= v.ρ
     u.θ .= v.θ
@@ -226,7 +243,7 @@ function prox_G(τ::AbstractFloat, a::ErbarBundle, b::ErbarBundle)
     u = a - (τ * b)
     v = u.vector
 
-    ρ, m = proj_CE(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.D, cache.ceh_sys)
+    ρ, m = proj_CE(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
     ρ_minus, ρ_plus, θ = project_K(v.ρ_minus, v.ρ_plus, v.θ)
     ρ_avg, q = project_IJeq(v.ρ_avg, v.q)
 

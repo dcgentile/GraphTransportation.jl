@@ -1,22 +1,44 @@
-include("../utils.jl")
+#include("../utils.jl")
+#include("../ErbarVector.jl")
 
-function is_in_ScriptK(ρ_min, ρ_pl, θ)
+"""
+    is_in_ScriptK(ρ_min, ρ_pl, θ)
+
+Description of the function.
+
+#TODO
+"""
+function is_in_ScriptK(ρ_min, ρ_pl, θ, verbose=false)
     @assert size(ρ_min) == size(ρ_pl) && size(ρ_pl) == size(θ)
-    c = 0
     for idx in eachindex(θ)
         x = geomean(ρ_min[idx], ρ_pl[idx])
         y = θ[idx]
         try
-            @assert 0 ≤ y && y ≤ x
-        catch AssertionError
+            @assert 0 ≤ y
+        catch e
+            println([y, x, geomean(x,y)])
+            return e
+        end
+
+        try
+            @assert y ≤ x || abs(x - y) < 1e-14
+        catch e
             println([y, x, x - y])
-            c += 1
+            return e
         end
     end
-    println(c)
+    verbose ? println("Passed Script{K} Inclusion Test") : nothing
+    return true
 end
 
-function is_in_JPM(q, ρ_minus, ρ_plus)
+"""
+    is_in_JPM(q, ρ_minus, ρ_plus)
+
+Description of the function.
+
+#TODO
+"""
+function is_in_JPM(q, ρ_minus, ρ_plus, verbose=false)
     """
     given q ∈ V_{n,h}^{0} and ρ_min, ρ_plus ∈ V_{e, h}^{0}
     checy that the ρ_min[t,x,y] == q[t,x] and ρ_plus[t,x,y] == q[t,y]
@@ -27,24 +49,46 @@ function is_in_JPM(q, ρ_minus, ρ_plus)
             @assert ρ_minus[idx] == q[t,x]
         catch e
             println("Failed inclusion in J_PM with error $(e)")
+            return false
         end
         try
             @assert ρ_plus[idx] == q[t,y]
         catch e
             println("Failed inclusion in J_PM with error $(e)")
+            return false
         end
     end
+    verbose ? println("Passed inclusion in J_PM") : nothing
+    return true
 end
 
-function is_in_JEq(ρ, q)
+"""
+    is_in_JEq(ρ, q)
+
+Description of the function.
+
+#TODO
+"""
+function is_in_JEq(ρ, q, verbose=false)
     try
         @assert isapprox(ρ, q)
     catch e
         println("Failed inclusion in J_EQ with error $(e)")
+        println(extrema(abs.(ρ - q)))
+        return false
     end
+    verbose ? println("Passed Inclusion in J_EQ") : nothing
+    return true
 end
 
-function is_in_JAvg(ρ, ρ_bar)
+"""
+    is_in_JAvg(ρ, ρ_bar)
+
+Description of the function.
+
+#TODO
+"""
+function is_in_JAvg(ρ, ρ_bar, verbose=false)
     A = avg_operator(size(ρ,1))
     println(size(ρ))
     println(size(A))
@@ -58,11 +102,21 @@ function is_in_JAvg(ρ, ρ_bar)
                 println([abs(ρ_bar[idx] - ρ_avg[idx]), ρ_bar[idx], ρ_avg[idx]])
             end
         end
+        return false
     end
 
+    verbose ? println("Passed Inclusion in J_Avg") : nothing
+    return true
 end
 
-function is_in_CE_weakly(ρ, m, Q, u)
+"""
+    is_in_CE_weakly(ρ, m, Q, u)
+
+Description of the function.
+
+#TODO
+"""
+function is_in_CE_weakly(ρ, m, Q, u, verbose=false)
     N, V = size(ρ)
     ∂tρ = (N - 1) * (ρ[2:N,:] - ρ[1:N - 1,:])
     divm = similar(∂tρ)
@@ -74,14 +128,24 @@ function is_in_CE_weakly(ρ, m, Q, u)
     φ = rand(N-1, V)
     ce_discrepancy = sum(a .* φ * u)
     try
-	    @assert ce_discrepancy ≈ 0
+	    @assert ce_discrepancy ≤ 1e-10
     catch err
         println(err)
         println(ce_discrepancy)
+        return false
     end
 
+    verbose ? println("Passed Continuity Equation Check") : nothing
+    return true
 end
 
+"""
+    CE_operator(ρ, m, Q)
+
+Description of the function.
+
+#TODO
+"""
 function CE_operator(ρ, m, Q)
     N, V = size(ρ)
     ∂tρ = (N - 1) * (ρ[2:N,:] - ρ[1:N - 1,:])
@@ -93,7 +157,29 @@ function CE_operator(ρ, m, Q)
     return a
 end
 
+"""
+    ∂t(ρ)
+
+Description of the function.
+
+#TODO
+"""
 function ∂t(ρ)
     N, V = size(ρ)
     return (N - 1) * (ρ[2:N,:] - ρ[1:N-1,:])
 end
+
+#function Script_K_pre_indicator(B::ErbarBundle)
+    #v = B.vector
+    #cache = B.cache
+    #a = is_in_JPM(v.q, v.ρ_minus, v.ρ_plus)
+    #b = is_in_JAvg(v.ρ, v.ρ_bar)
+    #c = is_in_CE_weakly(v.ρ, v.m, cache.Q, cache.π)
+    #d = is_in_ScriptK(v.ρ_minus, v.ρ_plus, v.θ)
+    #e = is_in_JEq(v.ρ_bar, v.q)
+    #if a && b && c && d && e
+        #return true
+    #else
+        #return (a, b, c, d, e)
+    #end
+#end

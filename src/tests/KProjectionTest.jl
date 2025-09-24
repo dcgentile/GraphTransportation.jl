@@ -1,6 +1,13 @@
 include("../galerkin/KProjection.jl")
 
 
+"""
+    test_proj_ktop()
+
+Description of the function.
+
+#TODO
+"""
 function test_proj_ktop()
     """
     this test works be generating a random point on the surface K, moving out orthogonally
@@ -12,7 +19,7 @@ function test_proj_ktop()
     λ = rand()
     p = γ(s,t)
     v = p .+ (λ * N(s,t))
-    x, y, z = project_by_GD(v[1], v[2], v[3])
+    x, y, z = project_by_claude(v[1], v[2], v[3])
     try
         @assert isapprox(x, p[1], atol=1e-10)
         @assert isapprox(y, p[2], atol=1e-10)
@@ -24,3 +31,4 @@ function test_proj_ktop()
         println(v)
     end
 end
+

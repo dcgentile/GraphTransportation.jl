@@ -1,6 +1,13 @@
 include("Inclusion.jl")
 include("../galerkin/ProximalEqualityIndicator.jl")
 
+"""
+    test_proj_IJeq()
+
+Description of the function.
+
+#TODO
+"""
 function test_proj_IJeq()
     """
     this test projects ρ and q onto the set Jeq by computing their average
@@ -23,7 +30,7 @@ function test_proj_IJeq()
         ec += 1
     end
     try
-	    @assert is_in_J_eq(ρ_pr, q_pr)
+	    @assert is_in_JEq(ρ_pr, q_pr)
     catch e
         println(e)
         ec += 1

@@ -1,4 +1,11 @@
 
+"""
+    barycenter(M, weights, Q, h=0.1, maxiters=100, tol=1e-8)
+
+Description of the function.
+
+#TODO
+"""
 function barycenter(M, weights, Q, h=0.1, maxiters=100, tol=1e-8)
     ν_old = ones(size(G,1)) # inital condition of flow
     ν_new = ones(size(G,1)) # inital condition of flow
@@ -13,6 +20,13 @@ function barycenter(M, weights, Q, h=0.1, maxiters=100, tol=1e-8)
     return ν_new
 end
 
+"""
+    step_direction(ν, M, weights, Q)
+
+Description of the function.
+
+#TODO
+"""
 function step_direction(ν, M, weights, Q)
     tangent_vector = zeros(size(Q))
     p = size(M, 2)
@@ -24,6 +38,13 @@ function step_direction(ν, M, weights, Q)
 end
 
 
+"""
+    coordinates(ν, M, Q, maxiters=100, tol=1e-8, h=0.01)
+
+Description of the function.
+
+#TODO
+"""
 function coordinates(ν, M, Q, maxiters=100, tol=1e-8, h=0.01)
     p = size(M,2)
     coords_new = (1/p) * ones(p)

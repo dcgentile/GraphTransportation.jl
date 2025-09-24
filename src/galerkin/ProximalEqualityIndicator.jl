@@ -20,5 +20,6 @@ function project_IJeq!(ρ::AbstractArray, q::AbstractArray)
 
     given ρ and q, this function returns their vector average
     """
-	ρ .= q.= 0.5 .* (ρ .+ q)
+	ρ .= q .= 0.5 .* (ρ .+ q)
+    return (ρ, q)
 end

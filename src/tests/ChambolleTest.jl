@@ -1,6 +1,13 @@
 include("../ErbarVector.jl")
 include("../galerkin/Chambolle.jl")
 
+"""
+    chambolle_pock_routine_stepper(a::ErbarBundle, b::ErbarBundle, a_bar::ErbarBundle, σ::AbstractFloat, τ::AbstractFloat)
+
+Description of the function.
+
+#TODO
+"""
 function chambolle_pock_routine_stepper(
     a::ErbarBundle,
     b::ErbarBundle,
@@ -35,6 +42,13 @@ function chambolle_pock_routine_stepper(
 end
 
 
+"""
+    chambolle_pock_routine_mutability_comparator(Q::AbstractMatrix, μ::AbstractVector, ν::AbstractVector, N::Int64; maxiters=2, σ=0.5, τ=0.5, λ=1.0, tol=1e-3)
+
+Description of the function.
+
+#TODO
+"""
 function chambolle_pock_routine_mutability_comparator(
     Q::AbstractMatrix,
 μ::AbstractVector,
