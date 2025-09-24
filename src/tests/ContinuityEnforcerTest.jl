@@ -1,7 +1,15 @@
 include("../galerkin/ContinuityEnforcer.jl")
 include("Inclusion.jl")
 using SparseArrays
+using BlockBandedMatrices
 
+"""
+    test_ce_system_formation()
+
+Description of the function.
+
+#TODO
+"""
 function test_ce_system_formation()
     """
     this test forms the linear system for projecting onto the set of solutions to the Galerkin-discretized discrete continuity
@@ -41,6 +49,13 @@ function test_ce_system_formation()
     return ec
 end
 
+"""
+    test_ce_target_formation()
+
+Description of the function.
+
+#TODO
+"""
 function test_ce_target_formation()
     """
     this test forms the target vector b for projecting onto the set of solutions to the Galerkin-discretized discrete continuity
@@ -52,7 +67,7 @@ function test_ce_target_formation()
     ρ = [1 0; 0.75 0.25; 0.25 0.75; 0 1]
     m = permutedims(cat([0 0.5; -0.5 0],[0 0.5; -0.5 0], [0 0.5; -0.5 0], dims=3), (3, 1, 2))
     D = finite_difference_operator(4)
-    v = form_b(ρ_A, ρ_B, ρ, m, Q, D)
+    v = form_b(ρ_A, ρ_B, ρ, m, Q)
     target = -1 * [-5/4, 5/4, -2, 2, -5/4, 5/4, 0]
     ec = 0
     try
@@ -66,6 +81,13 @@ function test_ce_target_formation()
     return ec
 end
 
+"""
+    test_ce_enforcer()
+
+Description of the function.
+
+#TODO
+"""
 function test_ce_enforcer()
     """
     this test projects a pair(ρ, m) onto the set of solutions to the Galerkin-discretized discrete continuity
@@ -82,7 +104,7 @@ function test_ce_enforcer()
     ρ_pr = ρ + 3 * ∇φ
     m_pr = m + permutedims(cat([0 -86/58; 86/58 0], [0 -89/58; 89/58 0], [0 -86/58; 86/58 0], dims=3), (3,1,2))
     D = finite_difference_operator(4)
-    ρ_hat, m_hat = proj_CE(ρ, m, ρ_A, ρ_B, Q, D)
+    ρ_hat, m_hat = proj_CE(ρ, m, ρ_A, ρ_B, Q)
     ec = 0
     try
 	    @assert isapprox(ρ_hat, ρ_pr)
@@ -98,11 +120,9 @@ function test_ce_enforcer()
     end
     println("Immutable Inclustion Weak Test")
 	is_in_CE_weakly(ρ_pr, m_pr, Q, v)
-    println("Immutable Inclustion Strong Test")
-	is_in_CE_strongly(ρ_pr, m_pr, Q)
 
 
-    proj_CE!(ρ, m, ρ_A, ρ_B, Q, D)
+    proj_CE!(ρ, m, ρ_A, ρ_B, Q)
     try
 	    @assert isapprox(ρ, ρ_pr)
     catch e
@@ -119,8 +139,6 @@ function test_ce_enforcer()
     end
     println("Mutable Inclustion Weak Test")
     is_in_CE_weakly(ρ, m, Q, v)
-    println("Mutable Inclustion Strong Test")
-    is_in_CE_strongly(ρ, m, Q)
 
 
     return ec

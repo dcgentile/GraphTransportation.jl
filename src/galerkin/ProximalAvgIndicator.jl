@@ -60,6 +60,32 @@ function form_b(ρ, ρ_bar, ρ_A, ρ_B)
     return B
 end
 
+function proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M)
+
+    N, V = size(ρ_bar)
+
+    B = form_b(ρ, ρ_bar, ρ_A, ρ_B)
+    Λ = M \ B
+
+    ρ_proj = similar(ρ)
+    ρ_proj[1,:] = ρ_A
+    ρ_proj[2:N,:] = ρ[2:N,:] + 0.5 * (Λ[1:N-1,:] + Λ[2:N,:])
+    ρ_proj[N + 1,:] = ρ_B
+
+    ρ_bar_proj = ρ_bar - Λ
+
+    try
+        A = avg_operator(size(ρ, 1))
+        @assert isapprox(A*ρ_proj, ρ_bar_proj)
+    catch error
+        println("Failed projection to J_avg")
+    end
+
+    return (ρ_proj, ρ_bar_proj)
+
+
+end
+
 function prox_IJavg_star(ρ, ρ_bar, ρ_A, ρ_B, M)
     """
     compute the proximal mapping of IJavg_star via Moreau's identity
@@ -71,18 +97,20 @@ function prox_IJavg_star(ρ, ρ_bar, ρ_A, ρ_B, M)
     ρ_A, ρ_B ∈ R^n are column vectors
     M is the matrix defining the linear system to be solved
     """
-    N, V = size(ρ)
-    Λ = similar(ρ_bar)
-    B = form_b(ρ, ρ_bar, ρ_A, ρ_B)
-	Λ = M \ B
+    #N, V = size(ρ)
+    #B = form_b(ρ, ρ_bar, ρ_A, ρ_B)
+	#Λ = M \ B
+#
+    #ρ_bar_pr = ρ_bar - Λ
+    #Λ_bar = vcat(zeros(V)', 0.5 * (Λ[2:N-1,:] + Λ[1:N-2,:]), zeros(V)')
+    #ρ_pr = ρ + Λ_bar
+    #ρ_pr[1,:] = ρ_A
+    #ρ_pr[N,:] = ρ_B
+    #return (ρ - ρ_pr, ρ_bar - ρ_bar_pr)
 
-    ρ_bar_pr = ρ_bar - Λ
-    Λ_bar = vcat(zeros(V)', 0.5 * (Λ[2:N-1,:] + Λ[1:N-2,:]), zeros(V)')
-    ρ_pr = ρ + Λ_bar
-    ρ_pr[1,:] = ρ_A
-    ρ_pr[N,:] = ρ_B
-
-    return (ρ - ρ_pr, ρ_bar - ρ_bar_pr)
+    ρ_proj, ρ_bar_proj = proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M)
+    @assert is_in_JAvg(ρ_proj, ρ_bar_proj)
+    return (ρ - ρ_proj, ρ_bar - ρ_bar_proj)
 
 end
 
@@ -97,14 +125,18 @@ function prox_IJavg_star!(ρ, ρ_bar, ρ_A, ρ_B, M)
     ρ_A, ρ_B ∈ R^n are column vectors
     M is the matrix defining the linear system to be solved
     """
-    N, V = size(ρ)
-    B = form_b(ρ, ρ_bar, ρ_A, ρ_B)
-	Λ = M \ B
+    #N, V = size(ρ)
+    #B = form_b(ρ, ρ_bar, ρ_A, ρ_B)
+	#Λ = M \ B
 
-    ρ[1,:] .-= ρ_A
-    ρ[2:N-1,:] .= -0.5 * (Λ[1:N-2,:] + Λ[2:N-1,:])
-    ρ[N,:] .-= ρ_B
+    #ρ[1,:] .-= ρ_A
+    #ρ[2:N-1,:] .= (-0.5 * (Λ[1:N-2,:] + Λ[2:N-1,:]))
+    #ρ[N,:] .-= ρ_B
+#
+    #ρ_bar .= Λ
 
-    ρ_bar .= Λ
-
+    ρ_proj, ρ_bar_proj = proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M)
+    ρ .= ρ - ρ_proj
+    ρ_bar .= ρ_bar - ρ_bar_proj
+    return (ρ, ρ_bar)
 end

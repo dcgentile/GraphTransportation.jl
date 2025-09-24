@@ -22,6 +22,13 @@ i, j = rand(1:N), rand(1:N)
 M = form_avg_system(T)
 A = form_ceh_system(Q,T)
 
+"""
+    time_prox_Astar()
+
+Description of the function.
+
+#TODO
+"""
 function time_prox_Astar()
     # time prox_Astar
     a = ErbarBundle(Q, μ, ν, T)
@@ -36,6 +43,13 @@ function time_prox_Astar()
 
 end
 
+"""
+    time_prox_IJpm_star()
+
+Description of the function.
+
+#TODO
+"""
 function time_prox_IJpm_star()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
@@ -49,6 +63,13 @@ function time_prox_IJpm_star()
 
 end
 
+"""
+    time_prox_IJavg_star()
+
+Description of the function.
+
+#TODO
+"""
 function time_prox_IJavg_star()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
@@ -61,6 +82,13 @@ function time_prox_IJavg_star()
     @time c = prox_IJavg_star(a.vector.ρ, a.vector.ρ_avg, μ, ν, M);
 end
 
+"""
+    time_prox_Fstar()
+
+Description of the function.
+
+#TODO
+"""
 function time_prox_Fstar()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
@@ -73,6 +101,13 @@ function time_prox_Fstar()
     @time c = prox_Fstar(0.5,a,b);
 end
 
+"""
+    time_proj_CE()
+
+Description of the function.
+
+#TODO
+"""
 function time_proj_CE()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
@@ -85,6 +120,13 @@ function time_proj_CE()
     @time proj_CE(a.vector.ρ, a.vector.m, μ, ν, Q, A);
 end
 
+"""
+    time_proj_K()
+
+Description of the function.
+
+#TODO
+"""
 function time_proj_K()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
@@ -97,6 +139,13 @@ function time_proj_K()
     @time c = project_K(a.vector.ρ_minus, a.vector.ρ_plus, a.vector.θ);
 end
 
+"""
+    time_proj_IJeq()
+
+Description of the function.
+
+#TODO
+"""
 function time_proj_IJeq()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
@@ -109,6 +158,13 @@ function time_proj_IJeq()
     @time c = project_IJeq(a.vector.ρ_avg, a.vector.q);
 end
 
+"""
+    time_prox_G()
+
+Description of the function.
+
+#TODO
+"""
 function time_prox_G()
     a = ErbarBundle(Q, μ, ν, T)
     b = ErbarBundle(Q, μ, ν, T)
@@ -121,6 +177,13 @@ function time_prox_G()
     @time c = prox_G(0.5,a,b);
 end
 
+"""
+    time_pipeline()
+
+Description of the function.
+
+#TODO
+"""
 function time_pipeline()
     time_prox_Astar()
     time_prox_IJpm_star()

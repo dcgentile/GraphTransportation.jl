@@ -2,6 +2,13 @@ include("Inclusion.jl")
 include("../galerkin/ProximalSignIndicator.jl")
 using CUDA
 
+"""
+    test_prox_IJpm_star()
+
+Description of the function.
+
+#TODO
+"""
 function test_prox_IJpm_star()
     """
     this test computes the proximal mapping of IJpm_star at (ρ, ρ_minus, ρ_plus)
@@ -30,22 +37,25 @@ function test_prox_IJpm_star()
         @assert ρ_minus_hat == (ρ_minus .- ρ_minus_proj)
     catch e
         println(e)
+        println("failed ρ_minus ")
         ec += 1
     end
     try
         @assert ρ_plus_hat == (ρ_plus .- ρ_plus_proj)
     catch e
         println(e)
+        println("failed ρ_plus ")
         ec += 1
     end
     try
-	    @assert is_in_J_PM(ρ .- ρ_hat, ρ_minus .- ρ_minus_hat, ρ_plus .- ρ_plus_hat)
+	   @assert is_in_JPM(ρ .- ρ_hat, ρ_minus .- ρ_minus_hat, ρ_plus .- ρ_plus_hat)
     catch e
         println(e)
+        println("failed inclusion")
         ec += 1
     end
 
-    # if you here, you passed the none mutating function tests
+    # if you here, you passed the non-mutating function tests
 
     proximal_IJpm_star!(ρ, ρ_minus, ρ_plus, Q)
 
@@ -53,24 +63,34 @@ function test_prox_IJpm_star()
         @assert ρ_hat == ρ
     catch e
         println(e)
+        println("failed ρ mutable")
         ec += 1
     end
     try
         @assert ρ_minus_hat == ρ_minus
     catch e
         println(e)
+        println("failed ρ_minus mutable")
         ec += 1
     end
     try
         @assert ρ_plus_hat == ρ_plus
     catch e
         println(e)
+        println("failed ρ_plus mutable")
         ec += 1
     end
 
     return ec
 end
 
+"""
+    test_gpu()
+
+Description of the function.
+
+#TODO
+"""
 function test_gpu()
     """
     this test computes the proximal mapping of IJpm_star at (ρ, ρ_minus, ρ_plus)

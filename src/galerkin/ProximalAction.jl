@@ -20,8 +20,10 @@ function prox_Astar!(θ::AbstractArray, m::AbstractArray)
     #θ, m = proj_B.(θ, m)
     for i in eachindex(θ, m)
         #θ[i], m[i] = proj_B(θ[i], m[i])
-        θ[i], m[i] = project_by_bisection(θ[i], m[i])
+        #θ[i], m[i] = project_by_bisection(θ[i], m[i])
+        θ[i], m[i] = projection_by_newton(θ[i], m[i])
     end
+    return (θ, m)
 end
 
 function prox_Astar(θ, m)
@@ -40,7 +42,14 @@ function prox_Astar(θ, m)
 end
 
 
-function project_by_bisection(a,b; tol=1e-8, maxiters=2^16)
+"""
+    project_by_bisection(a,b; tol=1e-8, maxiters=2^16)
+
+Description of the function.
+
+#TODO
+"""
+function project_by_bisection(a,b; tol=1e-5, maxiters=2^16)
     if a + 0.25 * b^2 ≤ 0
         return (a,b)
     end
@@ -61,4 +70,56 @@ function project_by_bisection(a,b; tol=1e-8, maxiters=2^16)
     end
 
     error("Failed to converge in $(maxiters) steps!")
+end
+
+"""
+    projection_by_newton(x, y; tol=1e-8, maxiters=100)
+
+Projects the point (x,y) onto the parabola {(p,q) : p + 0.25 * q^2 ≤ 0} using Newton's method.
+
+For points already inside the feasible region, returns the original point.
+For points outside, projects onto the boundary p + 0.25 * q^2 = 0.
+
+Arguments:
+- x, y: coordinates of the point to project
+- tol: convergence tolerance (default 1e-8)  
+- maxiters: maximum number of Newton iterations (default 100)
+
+Returns:
+- (p, q): projected point on the parabola
+"""
+function projection_by_newton(x, y; tol=1e-5, maxiters=100)
+    if x + 0.25 * y^2 ≤ 0
+        return (x, y)
+    end
+    
+    # Project onto boundary: minimize |||(p,q) - (x,y)|||^2 subject to p + 0.25*q^2 = 0
+    # Using Lagrange multipliers: L = (p-x)^2 + (q-y)^2 + λ(p + 0.25*q^2)
+    # ∇L = 0 gives: p = x - λ, q = y - 0.5*λ*q, p + 0.25*q^2 = 0
+    # Substituting: (x - λ) + 0.25*(y - 0.5*λ*q)^2 = 0
+    # This reduces to finding q, then p = -0.25*q^2, λ = x + 0.25*q^2
+    
+    # Newton's method to solve: g(q) = q - y + 0.5*(x + 0.25*q^2)*q = 0
+    q = y  # initial guess
+    
+    for _ in 1:maxiters
+        g = q - y + 0.5 * (x + 0.25 * q^2) * q
+        if abs(g) < tol
+            p = -0.25 * q^2
+            return (p, q)
+        end
+        
+        # g'(q) = 1 + 0.5*x + 0.375*q^2
+        g_prime = 1 + 0.5 * x + 0.375 * q^2
+        
+        if abs(g_prime) < 1e-14
+            error("Newton's method: derivative too small")
+        end
+        
+        q = q - g / g_prime
+    end
+
+    return project_by_bisection(x, y)
+
+    #error("Newton's method failed to converge in $(maxiters) iterations")
 end

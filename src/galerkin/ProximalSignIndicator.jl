@@ -1,3 +1,35 @@
+function proj_Jpm(q, ρ_minus, ρ_plus, Q)
+    #N, V = size(q)
+    #Qprime = reshape(Q, 1, size(Q) ...)
+    #α = (1 .+ sum(Q, dims=2)).^-1
+    #β = 0.5 * dropdims(sum((ρ_minus .+ permutedims(ρ_plus, (1,3,2))) .* Qprime, dims=3), dims=3)
+    #q_pr = (q .+ β) .* α'
+#
+
+    N, V = size(q)
+    q_proj = zeros((N, V))
+
+    for i=1:N, x=1:V
+        a = 1 / (1 + sum(Q[x,:]))
+        b = q[i,x]
+        c = 0.5*(sum((ρ_minus[i,x,:] + ρ_plus[i, :, x]) .* Q[x,:]))
+        q_proj[i,x] = a * (b + c)
+    end
+
+    ρ_minus_proj = zeros((N, V, V))
+    ρ_plus_proj = zeros((N, V, V))
+
+    for i=1:N, x=1:V, y=1:V
+        ρ_minus_proj[i, x, y] = q_proj[i, x]
+        ρ_plus_proj[i, x, y] = q_proj[i, y]
+    end
+
+    return (q_proj, ρ_minus_proj, ρ_plus_proj)
+
+end
+
+
+
 function proximal_IJpm_star!(q, ρ_minus, ρ_plus, Q)
     """
     compute in place the IJpm, as described in section 4.5 of Erbar et al 2020
@@ -11,15 +43,23 @@ function proximal_IJpm_star!(q, ρ_minus, ρ_plus, Q)
     ρ_minus ∈ V_{e × h}^0 (i.e. it is a tensor of size 1/h x n × n, where 1/h is the step size and n the number of nodes)
     ρ_plus ∈ V_{e × h}^0 (i.e. it is a tensor of size 1/h x n × n, where 1/h is the step size and n the number of nodes)
     """
-    N, V = size(q)
-    Qprime = reshape(Q, 1, size(Q) ...)
-    α = (1 .+ sum(Q, dims=2)).^-1
-    β = 0.5 * dropdims(sum((ρ_minus .+ permutedims(ρ_plus, (1,3,2))) .* Qprime, dims=3), dims=3)
-    q_pr = (q .+ β) .* α'
 
-    ρ_minus .-= reshape(q_pr, N, V, 1)
-    ρ_plus .-= reshape(q_pr, N, 1, V)
-    q .-= q_pr
+    q_proj, ρ_minus_proj, ρ_plus_proj = proj_Jpm(q, ρ_minus, ρ_plus, Q)
+
+    @assert is_in_JPM(q_proj, ρ_minus_proj, ρ_plus_proj)
+
+    ρ_minus .-= ρ_minus_proj
+    ρ_plus .-= ρ_plus_proj
+    q .-= q_proj
+
+    return (q, ρ_minus, ρ_plus)
+
+    #ρ_minus .-= reshape(q_pr, N, V, 1)
+    #ρ_plus .-= reshape(q_pr, N, 1, V)
+    #q .-= q_pr
+
+
+
 
 end
 

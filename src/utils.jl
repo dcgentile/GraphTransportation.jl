@@ -25,7 +25,7 @@ function geomean(x,y)
     end
 end
 
-function logmean(s, t; tol=1e-10)
+function logmean(s, t; tol=1e-5)
     """
     compute the logarithmic mean of real numbers s, t
     if either is negative, their logmean is -∞
@@ -41,8 +41,22 @@ function logmean(s, t; tol=1e-10)
 end
 
 # partial derivatives of logmean
-logmean_partial_s(s, t; tol=1e-10) = abs(s - t) < tol ? 0.5 : (-s + t + s*log(s) - s*log(t))/(s*(log(s) - log(t))^2)
-logmean_partial_t(s, t; tol=1e-10) = abs(s - t) < tol ? 0.5 : (s - t - t*log(s) + t*log(t))/(t*(log(s) - log(t))^2)
+"""
+    logmean_partial_s(s, t; tol=1e-10)
+
+Description of the function.
+
+#TODO
+"""
+logmean_partial_s(s, t; tol=1e-5) = abs(s - t) < tol ? 0.5 : (-s + t + s*log(s) - s*log(t))/(s*(log(s) - log(t))^2)
+"""
+    logmean_partial_t(s, t; tol=1e-10)
+
+Description of the function.
+
+#TODO
+"""
+logmean_partial_t(s, t; tol=1e-5) = abs(s - t) < tol ? 0.5 : (s - t - t*log(s) + t*log(t))/(t*(log(s) - log(t))^2)
 
 
 ## GRAPH CALCULUS
@@ -56,11 +70,11 @@ function graph_gradient(Q, f)
     @assert size(Q,1) == size(f,1)
     ∇f = zeros(size(Q))
     N = size(Q,1)
-    for i = 1:N, j=1:N
+    for i = 1:N, j=i+1:N
         ∇f[i,j] = f[i] - f[j]
         ∇f[j,i] = -∇f[i,j]
     end
-    return ∇f .* (Q .!= 0)
+    return ∇f #.* (Q .!= 0)
 end
 
 function graph_divergence(Q, m)
@@ -70,10 +84,12 @@ function graph_divergence(Q, m)
     TODO: clean this up so that it doesn't work via indexing
     """
     V = size(Q, 1)
-    div = zeros(1,V)
-    for i in 1:V
-        div[1,i] = 0.5 * sum(Q[i,:] .* (m[:, i] .- m[i,:]))
-    end
+    #div = zeros(1,V)
+    div = [0.5 * sum(Q[i, :] .* (m[:,i] - m[i,:])) for i=1:V]
+
+    #for i in 1:V
+        #div[1,i] = 0.5 * sum(Q[i,:] .* (m[:, i] .- m[i,:]))
+    #end
     return div
 end
 
@@ -86,11 +102,25 @@ function laplacian_from_transition(Q)
 end
 
 
+"""
+    avg_operator(N)
+
+Description of the function.
+
+#TODO
+"""
 function avg_operator(N)
     return sparse(0.5 * Tridiagonal(zeros(N-1), ones(N), ones(N-1))[1:N-1,:])
 
 end
 
+"""
+    finite_difference_operator(N)
+
+Description of the function.
+
+#TODO
+"""
 function finite_difference_operator(N)
     d = -1. * ones(N)
     u = ones(N-1)
@@ -100,6 +130,13 @@ function finite_difference_operator(N)
 end
 
 
+"""
+    steady_state_from_adjacency(Q)
+
+Description of the function.
+
+#TODO
+"""
 function steady_state_from_adjacency(Q)
     V, _ = size(Q)
     S = sparse(Q)
@@ -111,6 +148,13 @@ function steady_state_from_adjacency(Q)
     return π
 end
 
+"""
+    metric_tensor(ρ, mean=logmean)
+
+Description of the function.
+
+#TODO
+"""
 function metric_tensor(ρ, mean=logmean)
     N = size(ρ, 1)
     g = zeros(N,N)

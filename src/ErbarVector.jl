@@ -24,25 +24,24 @@ struct ErbarCache
     avg_sys      # system defining the Averaging Enforcement problem
 
     function ErbarCache(Q, μ, ν, N; gpu=false)
-        # find steady state of Q
-        #λ, v = eigen(Q')
-        #_, idx = findmin(abs.(λ .- 1.0))
-        #vhat = v[:, idx]
-        #π = vhat / sum(vhat)
         V, _ = size(Q)
         S = sparse(Q)
         E = nnz(S)
-        #π = ones(V)
         π = zeros(V)
         for i in 1:V
             π[i] = nnz(S[i,:]) / E
         end
         try
             @assert μ' * π ≈ 1
+        catch error
+		    println("$(μ) is not a density wrt to $(π), we have μ ⋅ π = $(μ ⋅ π)")
+        end
+        try
             @assert ν' * π ≈ 1
         catch error
-            error("$(μ) or $(ν) is not a density wrt to $(π)")
+		    println("$(ν) is not a density wrt to $(π), we have ν ⋅ π = $(ν ⋅ π)")
         end
+	
 
 
 
@@ -81,6 +80,10 @@ mutable struct ErbarBundle
         #### INITIALIZE VECTOR COMPONENTS
         V, _ = size(Q)
         ρ = zeros(N + 1, V)
+        for i=1:N+1
+            t = (i - 1) / N
+            ρ[i,:] = (1 - t) * μ + t * ν
+        end
         m = zeros(N, V, V)
         θ = zeros(N, V, V)
         ρ_minus = zeros(N, V, V)
@@ -109,6 +112,13 @@ Base.copy(a::ErbarBundle) = ErbarBundle(copy(a.cache), copy(a.vector))
 
 # combine! computes a linear combination of ErbarVectors and stores the result in a
 # pre-allocated vector c
+"""
+    combine!(c::ErbarVector, a::ErbarVector, b::ErbarVector, α::Number, β::Number)
+
+Description of the function.
+
+#TODO
+"""
 function combine!(c::ErbarVector, a::ErbarVector, b::ErbarVector, α::Number, β::Number)
     c.ρ .= (α .* a.ρ) .+ (β .* b.ρ)
     c.m .= (α .* a.m) .+ (β .* b.m)
@@ -121,6 +131,13 @@ end
 
 # combine! combines the vectors of ErbarBundles a, b, sacled by α,β resp., and stores
 # the result in the vector component of c
+"""
+    combine!(c::ErbarBundle, a::ErbarBundle, b::ErbarBundle, α::Number, β::Number)
+
+Description of the function.
+
+#TODO
+"""
 function combine!(c::ErbarBundle, a::ErbarBundle, b::ErbarBundle, α::Number, β::Number)
     combine!(c.vector, a.vector, b.vector, α, β)
 end
@@ -128,6 +145,13 @@ end
 # assign! updates the values in one ErbarVector to the match the values of another
 # think of this like c = a, except instead of pointing to the same array, this is more like a
 # deep copy
+"""
+    assign!(c::ErbarVector, a::ErbarVector)
+
+Description of the function.
+
+#TODO
+"""
 function assign!(c::ErbarVector, a::ErbarVector)
     c.ρ .= a.ρ
     c.m .= a.m
@@ -140,11 +164,25 @@ end
 
 
 # assign! assign!s the vectors of two bundles
+"""
+    assign!(c::ErbarBundle, a::ErbarBundle)
+
+Description of the function.
+
+#TODO
+"""
 function assign!(c::ErbarBundle, a::ErbarBundle)
     assign!(c.vector, a.vector)
 end
 
 # compute the inner product of two vectors in H
+"""
+    hdot(u::ErbarBundle, v::ErbarBundle)
+
+Description of the function.
+
+#TODO
+"""
 function hdot(u::ErbarBundle, v::ErbarBundle)
     N = u.cache.N
     Q = u.cache.Q
@@ -170,6 +208,13 @@ end
 # compute the action of the discrete curve encoded in a EB u
 # cf. eqn (18) in Erbar et al 2020
 # TODO: clean this up so that it doesn't work via scalar indexing
+"""
+    action(u::ErbarBundle)
+
+Description of the function.
+
+#TODO
+"""
 function action(u::ErbarBundle)
     m = u.vector.m
     θ = u.vector.θ
@@ -184,83 +229,3 @@ function action(u::ErbarBundle)
     return action
 end
 
-## you can add vectors together with the expression
-## c = a + b
-## this produces an entirely new vector
-#import Base: +
-#function +(u::ErbarVector, v::ErbarVector)
-    ## if the defining features of the cache differ, it's not legitimate to add u and v
-    #ErbarVector(
-        #u.ρ + v.ρ,
-        #u.m + v.m,
-        #u.θ + v.θ,
-        #u.ρ_minus + v.ρ_minus,
-        #u.ρ_plus + v.ρ_plus,
-        #u.ρ_avg + v.ρ_avg,
-        #u.q + v.q,
-    #)
-#end
-#
-## you can add bundle together with the expression
-## c = a + b
-## this produces an entirely new bundle
-#function +(u::ErbarBundle, v::ErbarBundle)
-	#ErbarBundle(u.cache, u.vector + v.vector)
-#end
-#
-## add!(c, a, b)
-#function add!(c::ErbarVector, a::ErbarVector, b::ErbarVector)
-    #c.ρ = a.ρ .+ b.ρ
-    #c.m = a.m .+ b.m
-    #c.θ = a.θ .+ b.θ
-    #c.ρ_minus = a.ρ_minus .+ b.ρ_minus
-    #c.ρ_plus = a.ρ_plus .+ b.ρ_plus
-    #c.ρ_avg = a.ρ_avg .+ b.ρ_avg
-    #c.q = a.q .+ b.q
-#end
-#
-#function add!(c::ErbarBundle, a::ErbarBundle, b::ErbarBundle)
-    #add!(c.vector, a.vector, b.vector)
-#end
-#
-#
-#import Base: *
-#function *(α::Number, v::ErbarVector)
-    #ErbarVector(
-        #α * v.ρ,
-        #α * v.m,
-        #α * v.θ,
-        #α * v.ρ_minus,
-        #α * v.ρ_plus,
-        #α * v.ρ_avg,
-        #α * v.q,
-    #)
-#end
-#
-#function scale!(α::Number, v::ErbarVector)
-    #v.ρ = α .* v.ρ
-    #v.m = α .* v.m
-    #v.θ=  α .* v.θ
-    #v.ρ_minus = α .* v.ρ_minus
-    #v.ρ_plus = α .* v.ρ_plus
-    #v.ρ_avg = α .* v.ρ_avg
-    #v.q = α .* v.q
-#end
-#
-#function scale!(α::Number, B::ErbarBundle)
-    #scale!(α, B.vector)
-#end
-#
-#function *(α::Number, B::ErbarBundle)
-	#ErbarBundle(B.cache, α * B.vector)
-#end
-#
-#import Base: -
-#function -(u::ErbarVector, v::ErbarVector)
-    #return u + (-1) * v
-#end
-#
-#function -(u::ErbarBundle, v::ErbarBundle)
-    #ErbarBundle(u.cache, u.vector - v.vector)
-#end
-#

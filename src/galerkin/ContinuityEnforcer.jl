@@ -98,6 +98,7 @@ function proj_CE!(ρ, m, μ, ν, Q, A=nothing)
     @inbounds for i in 1:N
         m[i,:,:] .+= graph_gradient(Q,φ[i,:])
     end
+    return (ρ, m)
 end
 
 function in_CEplus(ρ, m, μ, ν, Q; verbose=false)

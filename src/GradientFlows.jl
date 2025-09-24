@@ -1,3 +1,10 @@
+"""
+    variance(Q, ν, M, λ, N)
+
+Description of the function.
+
+#TODO
+"""
 function variance(Q, ν, M, λ, N)
     #M is a P x N matrix, where each row corresponds to a measure
     v = 0
@@ -8,11 +15,25 @@ function variance(Q, ν, M, λ, N)
     return v
 end
 
+"""
+    evolve(ρ, δF, h)
+
+Description of the function.
+
+#TODO
+"""
 function evolve(ρ, δF, h)
     ρ_next = ρ - h * graph_divergence(δF)
     return ρ_next
 end
 
+"""
+    accelerated_descent(Q, M, λ, N; maxiters=100, h=1e-1, tol=1e-10)
+
+Description of the function.
+
+#TODO
+"""
 function accelerated_descent(Q, M, λ, N; maxiters=100, h=1e-1, tol=1e-10)
     V,  = size(Q)
     u = steady_state_from_adjacency(Q)
@@ -58,6 +79,13 @@ function accelerated_descent(Q, M, λ, N; maxiters=100, h=1e-1, tol=1e-10)
     return (surface_point(x_next, u), f1)
 end
 
+"""
+    descent(Q, M, λ, N; maxiters=100, h=1e-2, tol=1e-10)
+
+Description of the function.
+
+#TODO
+"""
 function descent(Q, M, λ, N; maxiters=100, h=1e-2, tol=1e-10)
     V,  = size(Q)
     u = steady_state_from_adjacency(Q)
@@ -89,6 +117,13 @@ function descent(Q, M, λ, N; maxiters=100, h=1e-2, tol=1e-10)
     return (surface_point(x1, u), f1)
 end
 
+"""
+    finite_difference(x::AbstractVector, j::Integer, h::Float64, u::AbstractVector, f0::Float64, F::Function)
+
+Description of the function.
+
+#TODO
+"""
 function finite_difference(x::AbstractVector, j::Integer, h::Float64, u::AbstractVector, f0::Float64, F::Function)
     N = size(x, 1)
     v = h * e(j,N)
@@ -108,14 +143,49 @@ function finite_difference(x::AbstractVector, j::Integer, h::Float64, u::Abstrac
 end
 
 
+"""
+    variance_functional(Q, M, λ, N)
+
+Description of the function.
+
+#TODO
+"""
 function variance_functional(Q, M, λ, N)
 	return f(ν) = variance(Q, ν, M, λ, N)
 end
 
+"""
+    coordinate_chart(p)
+
+Description of the function.
+
+#TODO
+"""
 coordinate_chart(p) = p[1:end-1]
+"""
+    surface_point(x, u)
+
+Description of the function.
+
+#TODO
+"""
 surface_point(x, u) = vcat(x, [1 - sum(x .* u[1:end-1])] / u[end])
+"""
+    e(i,n)
+
+Description of the function.
+
+#TODO
+"""
 e(i,n) = I[1:n, i]
 
+"""
+    simplex_points(Q)
+
+Description of the function.
+
+#TODO
+"""
 function simplex_points(Q)
 	u = steady_state_from_adjacency(Q)
     id = I(size(u,1))

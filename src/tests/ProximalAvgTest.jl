@@ -1,7 +1,14 @@
 include("Inclusion.jl")
 include("../galerkin/ProximalAvgIndicator.jl")
-using CUDA
+using LinearAlgebra
 
+"""
+    test_prox_IJavg_star()
+
+Description of the function.
+
+#TODO
+"""
 function test_prox_IJavg_star()
     """
     this test computes the proximal mapping of IJAvg at (ρ, ρ_bar). The true basis for the true solution Λ
@@ -58,9 +65,13 @@ function test_prox_IJavg_star()
     try
         @assert ρ_pr_computed ≈ ρ
     catch e
-        println(e)
+        for i=1:size(ρ,2)
+            println(i)
+            println(hcat(ρ_pr_computed[:,i], ρ[:,i]))
+        end
         ec += 1
     end
+
     try
         @assert ρ_bar ≈ Λ
     catch e
@@ -68,10 +79,19 @@ function test_prox_IJavg_star()
         println(e)
         ec += 1
     end
+
+
     return ec
 
 end
 
+"""
+    test_gpu()
+
+Description of the function.
+
+#TODO
+"""
 function test_gpu()
     #constants
     N = 3

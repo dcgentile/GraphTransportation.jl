@@ -3,23 +3,40 @@ using Optim
 using CairoMakie
 using NetworkLayout
 using GraphMakie, Graphs
-include("EarthMover.jl")
+using GraphTransportation
+using SparseArrays
 include("utils.jl")
+include("tests/Inclusion.jl")
 
 
 
-function gromov_convergence(N, n)
+"""
+    gromov_convergence(N, n)
+
+Description of the function.
+
+#TODO
+"""
+function gromov_convergence(N, n, verbose=false, tol=1e-6)
     Q = (1/2) * Tridiagonal(ones(N-1), zeros(N), ones(N-1))
     Q[1,2] = 1
     Q[N,N-1] = 1
     μ = zeros(N)
     ν = zeros(N)
-    μ[1] = N + 1
-    ν[N] = N + 1
-    γ,d = BBD(Q, μ, ν, n, verbose=true)
+    sstate = steady_state_from_adjacency(Q)
+    μ[1] = 1 / sstate[1]
+    ν[N] = 1 / sstate[N]
+    γ,d = BBD(Q, μ, ν, N=n, verbose=verbose, tol=tol)
     return (γ, d)
 end
 
+"""
+    plot_midpoint(N, n)
+
+Description of the function.
+
+#TODO
+"""
 function plot_midpoint(N, n)
     c, d = gromov_convergence(N, n)
     ρ = c.vector.ρ
@@ -31,31 +48,52 @@ function plot_midpoint(N, n)
 end
 
 ## Two Points
+"""
+    diracs_on_two_points(;N=128, ε=0., verbose=false)
+
+Description of the function.
+
+#TODO
+"""
 function diracs_on_two_points(;N=128, ε=0., verbose=false)
     Q = [0. 1.; 1. 0.]
     μ = [2.; 0]
     ν = [0.; 2]
     a = [-1; 1;]
     b = [1; -1;]
-    γ, d = BBD(Q, μ + ε * a, ν + ε * b, N, verbose=verbose)
+    γ, d = BBD(Q, μ + ε * a, ν + ε * b, N=N, verbose=verbose)
     return γ, d
 end
 
 
 ## Triangle
 
-function diracs_on_triangle(;N = 128, ε = 0., verbose=false)
+"""
+    diracs_on_triangle(;N = 128, ε = 0., verbose=false)
+
+Description of the function.
+
+#TODO
+"""
+function diracs_on_triangle(;N = 128, ε = 0., tol=1e-10, verbose=false)
     Q = [0. 0.5 0.5; 0.5 0. 0.5; 0.5 0.5 0.]
     μ = [3.; 0; 0.]
     ν = [0.; 3; 0.]
     a = [-1; 1/2; 1/2;]
     b = [1/2; -1; 1/2;]
-    γ, d = BBD(Q, μ + ε * a, ν + ε * b, N, verbose=verbose)
+    γ, d = BBD(Q, μ + ε * a, ν + ε * b, N=N, tol=tol, verbose=verbose)
     return (γ, d)
 end
 
 ## Square
-function diracs_on_square(;N=128, ε=0., verbose=false)
+"""
+    diracs_on_square(;N=128, ε=0., verbose=false)
+
+Description of the function.
+
+#TODO
+"""
+function diracs_on_square(;N=128, ε=0., verbose=false, tol=1e-6, σ=0.5, τ=0.5)
     Q = [0. 0.5 0. 0.5;
          0.5 0. 0.5 0.;
          0. 0.5 0. 0.5;
@@ -64,12 +102,40 @@ function diracs_on_square(;N=128, ε=0., verbose=false)
     ν = [0.; 4; 0.; 0.]
     a = [-1; 1/3; 1/3; 1/3;]
     b = [1/3; -1; 1/3; 1/3;]
-    γ, d = BBD(Q, μ + ε * a, ν + ε * b, N, verbose=verbose)
+    γ, d = BBD(Q, μ + ε * a, ν + ε * b, N=N, verbose=verbose, tol=tol, σ=σ, τ=τ)
+    return (γ, d)
+end
+
+## T Graph
+"""
+    diracs_on_T(;N=128, ε=0., verbose=false)
+
+Description of the function.
+
+#TODO
+"""
+function diracs_on_T(;N=128, ε=0., verbose=false, tol=1e-6, σ=0.5, τ=0.5)
+    Q = [0. 1. 0. 0.;
+         1/3 0. 1/3 1/3;
+         0. 1. 0. 0.;
+         0. 1. 0. 0.]
+    μ = [3.; 0; 0.; 3.]
+    ν = [0.; 0; 3.; 3.]
+    a = [-1; 1/3; 1/3; 1/3;]
+    b = [1/3; -1; 1/3; 1/3;]
+    γ, d = BBD(Q, μ + ε * a, ν + ε * b, N=N, verbose=verbose, tol=tol, σ=σ, τ=τ)
     return (γ, d)
 end
 ## 9x9 Grid
 
-function diracs_on_grid(; N=128, ε=0., verbose=false)
+"""
+    diracs_on_grid(; N=128, ε=0., verbose=false)
+
+Description of the function.
+
+#TODO
+"""
+function diracs_on_grid(; N=128, ε=0., tol=1e-6, verbose=false)
     Q = Array(Tridiagonal(ones(7), zeros(8), ones(7)))
     Q[1, 8] = 1
     Q[8, 1] = 1
@@ -85,15 +151,90 @@ function diracs_on_grid(; N=128, ε=0., verbose=false)
     π = steady_state_from_adjacency(Q)
     μ = zeros(9)
     ν = zeros(9)
-    μ[3] = 1/π[3]
-    ν[7] = 1/π[7]
+    μ[2] = 1/π[2]
+    ν[6] = 1/π[6]
 
-    γ, d = BBD(Q, μ, ν, N, verbose=verbose)
+    γ, d = BBD(Q, μ, ν, N=N, verbose=verbose, tol=tol)
     return (γ, d)
 
 end
 
-function barycenter_on_grid(; N=128, ε=0., verbose=false)
+function diracs_on_cube(; N=128, ε=0., tol=1e-6, verbose=false)
+
+    edge_list = [
+        (1, 2), (2, 3), (3, 4), (4, 1),
+        (1, 5), (2, 6), (3, 7), (4, 8),
+        (5, 6), (6, 7), (7, 8), (8, 5)
+    ]
+
+    Q = zeros(8,8)
+
+    for e in edge_list
+        i, j = e
+        Q[i,j] = 1
+        Q[j,i] = 1
+    end
+
+    for (idx, row) in enumerate(eachrow(Q))
+        z = sum(row)
+        Q[idx, :] /= z
+    end
+
+    π = steady_state_from_adjacency(Q)
+    μ = zeros(8)
+    ν = zeros(8)
+    μ[1] = 1/π[1]
+    ν[7] = 1/π[7]
+
+    γ, d = BBD(Q, μ, ν, N=N, verbose=verbose, tol=tol)
+    return (γ, d)
+end
+
+function diracs_on_hypercube(; N=128, ε=0., tol=1e-6, verbose=false)
+
+    edge_list = [
+        (1, 2), (2, 3), (3, 4), (4, 1),
+        (1, 5), (2, 6), (3, 7), (4, 8),
+        (5, 6), (6, 7), (7, 8), (8, 5),
+
+        (1,9), (2, 10), (3, 11), (4, 12),
+        (5, 13), (6, 14), (7, 15), (8, 16),
+
+        (9, 16), (16, 11), (11, 12), (12, 9),
+        (9, 13), (16, 14), (11, 15), (12, 16),
+        (13, 14), (14, 15), (15, 16), (16, 13)
+    ]
+
+    Q = zeros(16,16)
+
+    for e in edge_list
+        i, j = e
+        Q[i,j] = 1
+        Q[j,i] = 1
+    end
+
+    for (idx, row) in enumerate(eachrow(Q))
+        z = sum(row)
+        Q[idx, :] /= z
+    end
+
+    π = steady_state_from_adjacency(Q)
+    μ = zeros(16)
+    ν = zeros(16)
+    μ[1] = 1/π[1]
+    ν[15] = 1/π[15]
+
+    γ, d = BBD(Q, μ, ν, N=N, verbose=verbose, tol=tol)
+    return (γ, d)
+end
+"""
+    barycenter_on_grid(; N=128, ε=0., verbose=false)
+
+Description of the function.
+
+#TODO
+"""
+function barycenter_on_grid_EGD(; N=128, ε=0., verbose=false)
     Q = Array(Tridiagonal(ones(7), zeros(8), ones(7)))
     Q[1, 8] = 1
     Q[8, 1] = 1
@@ -122,6 +263,13 @@ function barycenter_on_grid(; N=128, ε=0., verbose=false)
     return optimize(F, x0, LBFGS(), Optim.Options(x_reltol=1e-6, iterations=128))
 end
 
+"""
+    export_grid_vars()
+
+Description of the function.
+
+#TODO
+"""
 function export_grid_vars()
 
     Q = Array(Tridiagonal(ones(7), zeros(8), ones(7)))
@@ -149,6 +297,13 @@ function export_grid_vars()
 end
 
 
+"""
+    visualize_grid_barycenter(Q, measures; layout_alg=Spring(), node_size=15, colormap=:viridis, edge_width=1.0, edge_color=:gray80, filename=nothing, fixed_positions=nothing, colorbar=true)
+
+Description of the function.
+
+#TODO
+"""
 function visualize_grid_barycenter(Q, measures;
                                  layout_alg=Spring(),
                                  node_size=15,
@@ -200,6 +355,13 @@ function visualize_grid_barycenter(Q, measures;
 	
 end
 
+"""
+    visualize_weighted_graph(Q, v; layout_alg=Spring(), node_size=15, colormap=:viridis, edge_width=1.0, edge_color=:gray80, filename=nothing, fixed_positions=nothing, colorbar=true, figure_size=(800, 600))
+
+Description of the function.
+
+#TODO
+"""
 function visualize_weighted_graph(Q, v;
                                  layout_alg=Spring(),
                                  node_size=15,
@@ -248,4 +410,10 @@ function visualize_weighted_graph(Q, v;
     end
 
     return fig, positions
+end
+
+
+function inclusion_test(N)
+    c, d = diracs_on_square(N)
+    Script_K_pre_indicator(c)
 end
