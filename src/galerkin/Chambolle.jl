@@ -142,7 +142,7 @@ function prox_Fstar!(targ, bundle, verbose=false)
     u.q .= v.q
 end
 
-function prox_G!(targ, bundle, verbose=false, safe=true)
+function prox_G!(targ, bundle, verbose=false, safe=false)
     """
     compute the proximal mapping of G
     this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,

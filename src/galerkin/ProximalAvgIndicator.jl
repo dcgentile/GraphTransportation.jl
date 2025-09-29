@@ -60,7 +60,7 @@ function form_b(ρ, ρ_bar, ρ_A, ρ_B)
     return B
 end
 
-function proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M)
+function proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M; safe=false)
 
     N, V = size(ρ_bar)
 
@@ -74,11 +74,13 @@ function proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M)
 
     ρ_bar_proj = ρ_bar - Λ
 
-    try
-        A = avg_operator(size(ρ, 1))
-        @assert isapprox(A*ρ_proj, ρ_bar_proj)
-    catch error
-        println("Failed projection to J_avg")
+    if safe
+        try
+            A = avg_operator(size(ρ, 1))
+            @assert isapprox(A*ρ_proj, ρ_bar_proj)
+        catch error
+            println("Failed projection to J_avg")
+        end
     end
 
     return (ρ_proj, ρ_bar_proj)
@@ -86,7 +88,7 @@ function proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M)
 
 end
 
-function prox_IJavg_star(ρ, ρ_bar, ρ_A, ρ_B, M)
+function prox_IJavg_star(ρ, ρ_bar, ρ_A, ρ_B, M; safe=false)
     """
     compute the proximal mapping of IJavg_star via Moreau's identity
 
@@ -109,7 +111,9 @@ function prox_IJavg_star(ρ, ρ_bar, ρ_A, ρ_B, M)
     #return (ρ - ρ_pr, ρ_bar - ρ_bar_pr)
 
     ρ_proj, ρ_bar_proj = proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M)
-    @assert is_in_JAvg(ρ_proj, ρ_bar_proj)
+    if safe
+        @assert is_in_JAvg(ρ_proj, ρ_bar_proj)
+    end
     return (ρ - ρ_proj, ρ_bar - ρ_bar_proj)
 
 end
