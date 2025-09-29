@@ -106,6 +106,12 @@ function projection_by_newton(x, y; tol=1e-5, maxiters=100)
         g = q - y + 0.5 * (x + 0.25 * q^2) * q
         if abs(g) < tol
             p = -0.25 * q^2
+            try
+
+                @assert (x - p) * (-q/2) + (y - q) < tol
+            catch
+                println((x - p) * (-q/2) + (y - q))
+            end
             return (p, q)
         end
         

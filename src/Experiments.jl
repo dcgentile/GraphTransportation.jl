@@ -1,14 +1,6 @@
-using LinearAlgebra
-using Optim
-using CairoMakie
-using NetworkLayout
-using GraphMakie, Graphs
-using GraphTransportation
 using SparseArrays
 include("utils.jl")
 include("tests/Inclusion.jl")
-
-
 
 """
     gromov_convergence(N, n)

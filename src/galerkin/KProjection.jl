@@ -1,4 +1,4 @@
-tolerance = 1e-6
+tolerance = 1e-5
 
 """
 This file contains functionality for solving the projection to K problem, as described in Erbar et al 2020,
@@ -180,12 +180,37 @@ function find_bracket(a, b, c, maxiters = 64)
 
 end
 
-function project_by_newton(x,y,z)
+function project_by_newton(x,y,z; safety=false)
     w(q) = [sqrt(q); 1/sqrt(q); 1]
-    q_star = rootfinder(x,y,z)
+    q_star = rootfinder(x,y,z, tol=tolerance)
     w_star = w(q_star)
     τ = ([x;y;z] ⋅ w_star) / (w_star ⋅ w_star)
-    return τ * w_star
+
+    # safety check: q is the projection iff p-q if orthogonal to TqM,
+    # TqM is spanned by the partial derivatives of the parameterization
+    # @assert v - p ⟂ ∂p1r(p)
+    # @assert v - p ⟂ ∂p2r(p)
+    p = τ * w_star
+
+    if safety
+    
+        try
+            @assert x - p[1] + 0.5 * (z - p[3]) * sqrt(p[2] / p[1]) < 1e-6
+        catch
+            println("\r$(x - p[1] + 0.5 * (z - p[3]) * sqrt(p[2] / p[1]))")
+            println("\rpoint: $([x;y;z]); incorrect projection: $(p)")
+        end
+        try
+            @assert y - p[2] + 0.5 * (z - p[3]) * sqrt(p[1] / p[2]) < 1e-6
+        catch
+            println("\r$(y - p[2] + 0.5 * (z - p[3]) * sqrt(p[1] / p[2]))")
+            println("\rpoint: $([x;y;z]); incorrect projection: $(p)")
+        end
+
+    end
+
+    return p
+
 end
 
 function rootfinder(x, y, z; tol=tolerance, maxiters=100)
