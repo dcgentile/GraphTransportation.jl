@@ -23,7 +23,10 @@ struct ErbarCache
     ceh_sys      # system defining the Continuity Enforcement problem
     avg_sys      # system defining the Averaging Enforcement problem
 
-    function ErbarCache(Q, μ, ν, N; gpu=false)
+    function ErbarCache(
+        Q, μ, ν, N;
+        #gpu=false
+    )
         V, _ = size(Q)
         S = sparse(Q)
         E = nnz(S)
@@ -50,16 +53,17 @@ struct ErbarCache
         #avg_sys = factorize(form_avg_system(N))
         avg_sys = form_avg_system(N)
 
-        gpu ? new(
-            CuArray(Q),
-            CuArray(μ),
-            CuArray(ν),
-            CuArray(π),
-            N,
-            CuArray(avg_mat),
-            CuArray(ceh_sys),
-            CuArray(avg_sys)) : new(S, μ, ν, π, N, ceh_sys, avg_sys)
-
+        #gpu ? new(
+            #CuArray(Q),
+            #CuArray(μ),
+            #CuArray(ν),
+            #CuArray(π),
+            #N,
+            #CuArray(avg_mat),
+            #CuArray(ceh_sys),
+            #CuArray(avg_sys)) :
+        new(S, μ, ν, π, N, ceh_sys, avg_sys)
+#
     end
 end
 
@@ -74,8 +78,11 @@ mutable struct ErbarBundle
 	    new(cache, vector)
     end
 
-    function ErbarBundle(Q::AbstractMatrix, μ::AbstractVector, ν::AbstractVector, N::Int; gpu=false)
-        cache = ErbarCache(Q, μ, ν, N; gpu=gpu)
+    function ErbarBundle(
+        Q::AbstractMatrix, μ::AbstractVector, ν::AbstractVector, N::Int;
+        #gpu=false
+    )
+        cache = ErbarCache(Q, μ, ν, N)#; gpu=gpu)
 
         #### INITIALIZE VECTOR COMPONENTS
         V, _ = size(Q)
@@ -91,14 +98,15 @@ mutable struct ErbarBundle
         ρ_avg = zeros(N,V)
         q = zeros(N,V)
 
-        vector = gpu ? ErbarVector(
-            CuArray(ρ),
-            CuArray(m),
-            CuArray(θ),
-            CuArray(ρ_minus),
-            CuArray(ρ_plus),
-            CuArray(ρ_avg),
-            CuArray(q)) : ErbarVector(ρ, m ,θ, ρ_minus, ρ_plus, ρ_avg, q)
+        #vector = gpu ? ErbarVector(
+            #CuArray(ρ),
+            #CuArray(m),
+            #CuArray(θ),
+            #CuArray(ρ_minus),
+            #CuArray(ρ_plus),
+            #CuArray(ρ_avg),
+            #CuArray(q)) : ErbarVector(ρ, m ,θ, ρ_minus, ρ_plus, ρ_avg, q)
+        vector = ErbarVector(ρ, m ,θ, ρ_minus, ρ_plus, ρ_avg, q)
         new(cache, vector)
 
     end

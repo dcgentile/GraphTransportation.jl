@@ -93,7 +93,6 @@ function chambolle_pock(
     τ=0.5,
     λ=1.0,
     tol=1e-10,
-    gpu=false,
     verbose=false,
     show_progress=false
 )
@@ -107,14 +106,14 @@ function chambolle_pock(
     N, the number of steps in the geodesic
     """
     # we will only ever use 8 vectors
-    a = ErbarBundle(Q, μ, ν, N, gpu=gpu)
-    b = ErbarBundle(Q, μ, ν, N, gpu=gpu)
-    a_bar = ErbarBundle(Q, μ, ν, N, gpu=gpu)
-    a_next = ErbarBundle(Q, μ, ν, N, gpu=gpu)
-    b_next = ErbarBundle(Q, μ, ν, N, gpu=gpu)
-    a_bar_next = ErbarBundle(Q, μ, ν, N, gpu=gpu)
-    c = ErbarBundle(Q, μ, ν, N, gpu=gpu)
-    d = ErbarBundle(Q, μ, ν, N, gpu=gpu)
+    a = ErbarBundle(Q, μ, ν, N)
+    b = ErbarBundle(Q, μ, ν, N)
+    a_bar = ErbarBundle(Q, μ, ν, N)
+    a_next = ErbarBundle(Q, μ, ν, N)
+    b_next = ErbarBundle(Q, μ, ν, N)
+    a_bar_next = ErbarBundle(Q, μ, ν, N)
+    c = ErbarBundle(Q, μ, ν, N)
+    d = ErbarBundle(Q, μ, ν, N)
     return chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d, maxiters=maxiters, verbose=verbose, tol=tol)
 end
 
@@ -143,7 +142,7 @@ function prox_Fstar!(targ, bundle, verbose=false)
     u.q .= v.q
 end
 
-function prox_G!(targ, bundle, verbose=false, safe=false)
+function prox_G!(targ, bundle, verbose=false, safe=true)
     """
     compute the proximal mapping of G
     this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,

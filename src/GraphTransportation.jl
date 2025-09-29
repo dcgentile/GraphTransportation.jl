@@ -5,7 +5,7 @@ using SuiteSparse
 using SparseArrays
 using LinearAlgebra
 using BlockBandedMatrices
-using CUDA
+#using CUDA
 using ProgressMeter
 using Base: signequal
 

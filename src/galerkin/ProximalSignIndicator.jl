@@ -3,8 +3,9 @@ function proj_Jpm(q, ρ_minus, ρ_plus, Q)
     #Qprime = reshape(Q, 1, size(Q) ...)
     #α = (1 .+ sum(Q, dims=2)).^-1
     #β = 0.5 * dropdims(sum((ρ_minus .+ permutedims(ρ_plus, (1,3,2))) .* Qprime, dims=3), dims=3)
-    #q_pr = (q .+ β) .* α'
-#
+    #q_proj = (q .+ β) .* α'
+    #ρ_minus_proj = reshape(q_proj, N, V, 1)
+    #ρ_plus_proj = reshape(q_proj, N, 1, V)
 
     N, V = size(q)
     q_proj = zeros((N, V))
