@@ -88,7 +88,7 @@ Arguments:
 Returns:
 - (p, q): projected point on the parabola
 """
-function projection_by_newton(x, y; tol=1e-5, maxiters=100)
+function projection_by_newton(x, y; tol=1e-5, maxiters=100, safe=false)
     if x + 0.25 * y^2 ≤ 0
         return (x, y)
     end
@@ -106,11 +106,13 @@ function projection_by_newton(x, y; tol=1e-5, maxiters=100)
         g = q - y + 0.5 * (x + 0.25 * q^2) * q
         if abs(g) < tol
             p = -0.25 * q^2
-            try
 
-                @assert (x - p) * (-q/2) + (y - q) < tol
-            catch
-                println((x - p) * (-q/2) + (y - q))
+            if safe
+                try
+                    @assert (x - p) * (-q/2) + (y - q) < tol
+                catch
+                    println((x - p) * (-q/2) + (y - q))
+                end
             end
             return (p, q)
         end

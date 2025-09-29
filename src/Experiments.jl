@@ -77,6 +77,25 @@ function diracs_on_triangle(;N = 128, ε = 0., tol=1e-10, verbose=false)
     return (γ, d)
 end
 
+
+function triangle_with_tail(; N=128, tol=1e-10, verbose=false)
+    Q = [0. 1/2 1/2 0.;
+         1/3 0  1/3 1/3;
+         1/2 1/2 0 0;
+         0. 1. 0. 0.]
+    
+    π = steady_state_from_adjacency(Q)
+    μ = zeros(4)
+    ν = zeros(4)
+    μ[1] = 1/π[1]
+    ν[3] = 1/π[3]
+
+    γ, d = BBD(Q, μ, ν, N=N, tol=tol, verbose=verbose)
+    return (γ, d)
+    
+end
+
+
 ## Square
 """
     diracs_on_square(;N=128, ε=0., verbose=false)
@@ -192,8 +211,8 @@ function diracs_on_hypercube(; N=128, ε=0., tol=1e-6, verbose=false)
         (1,9), (2, 10), (3, 11), (4, 12),
         (5, 13), (6, 14), (7, 15), (8, 16),
 
-        (9, 16), (16, 11), (11, 12), (12, 9),
-        (9, 13), (16, 14), (11, 15), (12, 16),
+        (9, 10), (10, 11), (11, 12), (12, 9),
+        (9, 13), (10, 14), (11, 15), (12, 16),
         (13, 14), (14, 15), (15, 16), (16, 13)
     ]
 

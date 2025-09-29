@@ -31,7 +31,7 @@ end
 
 
 
-function proximal_IJpm_star!(q, ρ_minus, ρ_plus, Q)
+function proximal_IJpm_star!(q, ρ_minus, ρ_plus, Q; safe=false)
     """
     compute in place the IJpm, as described in section 4.5 of Erbar et al 2020
     because IJ_pm^star if the fenchel conjugate of an indicator function, it can
@@ -47,7 +47,9 @@ function proximal_IJpm_star!(q, ρ_minus, ρ_plus, Q)
 
     q_proj, ρ_minus_proj, ρ_plus_proj = proj_Jpm(q, ρ_minus, ρ_plus, Q)
 
-    @assert is_in_JPM(q_proj, ρ_minus_proj, ρ_plus_proj)
+    if safe
+        @assert is_in_JPM(q_proj, ρ_minus_proj, ρ_plus_proj)
+    end
 
     ρ_minus .-= ρ_minus_proj
     ρ_plus .-= ρ_plus_proj
