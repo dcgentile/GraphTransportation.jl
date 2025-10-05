@@ -24,6 +24,33 @@ struct ErbarCache
     avg_sys      # system defining the Averaging Enforcement problem
 
     function ErbarCache(
+        Q::AbstractMatrix,
+        π::AbstractVector,
+        μ::AbstractVector,
+        ν::AbstractVector,
+        N::Int
+    )
+        try
+            @assert μ' * π ≈ 1
+        catch error
+		    println("$(μ) is not a density wrt to $(π), we have μ ⋅ π = $(μ ⋅ π)")
+        end
+        try
+            @assert ν' * π ≈ 1
+        catch error
+		    println("$(ν) is not a density wrt to $(π), we have ν ⋅ π = $(ν ⋅ π)")
+        end
+
+        # form the linear systems we'll be solving in each step
+        ceh_sys = form_ceh_system(Q, N)
+        #avg_sys = factorize(form_avg_system(N))
+        avg_sys = form_avg_system(N)
+
+        new(Q, μ, ν, π, N, ceh_sys, avg_sys)
+
+    end
+
+    function ErbarCache(
         Q, μ, ν, N;
         #gpu=false
     )
@@ -83,6 +110,43 @@ mutable struct ErbarBundle
         #gpu=false
     )
         cache = ErbarCache(Q, μ, ν, N)#; gpu=gpu)
+
+        #### INITIALIZE VECTOR COMPONENTS
+        V, _ = size(Q)
+        ρ = zeros(N + 1, V)
+        for i=1:N+1
+            t = (i - 1) / N
+            ρ[i,:] = (1 - t) * μ + t * ν
+        end
+        m = zeros(N, V, V)
+        θ = zeros(N, V, V)
+        ρ_minus = zeros(N, V, V)
+        ρ_plus = zeros(N, V, V)
+        ρ_avg = zeros(N,V)
+        q = zeros(N,V)
+
+        #vector = gpu ? ErbarVector(
+            #CuArray(ρ),
+            #CuArray(m),
+            #CuArray(θ),
+            #CuArray(ρ_minus),
+            #CuArray(ρ_plus),
+            #CuArray(ρ_avg),
+            #CuArray(q)) : ErbarVector(ρ, m ,θ, ρ_minus, ρ_plus, ρ_avg, q)
+        vector = ErbarVector(ρ, m ,θ, ρ_minus, ρ_plus, ρ_avg, q)
+        new(cache, vector)
+
+    end
+
+    function ErbarBundle(
+        Q::AbstractMatrix,
+        steady_state::AbstractVector,
+        μ::AbstractVector,
+        ν::AbstractVector,
+        N::Int;
+        #gpu=false
+    )
+        cache = ErbarCache(Q, steady_state, μ, ν, N)#; gpu=gpu)
 
         #### INITIALIZE VECTOR COMPONENTS
         V, _ = size(Q)

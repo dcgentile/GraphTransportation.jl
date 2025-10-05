@@ -1,5 +1,27 @@
 # various utility functions that don't belong to any particular subroutine
 
+function markov_chain_from_edge_list(E)
+    V = maximum(maximum(E)) 
+    Q = zeros(V,V)
+    
+    for e in E
+        i, j = e
+        Q[i,j] = 1
+        Q[j,i] = 1
+    end
+
+    for (idx, row) in enumerate(eachrow(Q))
+        z = sum(row)
+        Q[idx, :] /= z
+    end
+
+    π = steady_state_from_adjacency(Q)
+
+    return (Q, π)
+	
+end
+
+
 # check that a vector μ is a probability density w.r.t the steady state π
 function is_distribution(μ, π)
     """
@@ -74,7 +96,7 @@ function graph_gradient(Q, f)
         ∇f[i,j] = f[i] - f[j]
         ∇f[j,i] = -∇f[i,j]
     end
-    return ∇f #.* (Q .!= 0)
+    return ∇f .* (Q .!= 0)
 end
 
 function graph_divergence(Q, m)
