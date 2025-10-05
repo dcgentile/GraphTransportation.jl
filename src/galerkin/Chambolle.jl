@@ -37,9 +37,18 @@ function chambolle_pock_routine(
     )
     show_progress ? p = ProgressUnknown(spinner=true) : 0
     normdiff = Inf
+    N = a.cache.N
 
     for i in 1:maxiters
-        show_progress ? next!(p; showvalues=[("Difference in norm between iterations", normdiff), ("Current iteration", i)]) : nothing
+        show_progress ? next!(p;
+                              showvalues=[
+                                  ("Difference in norm between iterations", normdiff),
+                                  ("Current iteration", i),
+                                  ("Number of steps", N),
+                                  ("Convergence tolerance", tol),
+                                  ("σ", σ),
+                                  ("τ", τ)
+                              ]) : nothing
         combine!(c, b, a_bar, 1.0, σ)
         prox_Fstar!(b_next, c, verbose)
         combine!(c, a, b_next, 1.0, -τ)
@@ -114,10 +123,48 @@ function chambolle_pock(
     a_bar_next = ErbarBundle(Q, μ, ν, N)
     c = ErbarBundle(Q, μ, ν, N)
     d = ErbarBundle(Q, μ, ν, N)
-    return chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d, maxiters=maxiters, verbose=verbose, tol=tol)
+    return chambolle_pock_routine(
+        a, b, a_bar, a_next, b_next, a_bar_next, c, d,
+        maxiters=maxiters, verbose=verbose, tol=tol, σ=σ, τ=τ, λ=λ)
 end
 
 
+function chambolle_pock(
+    Q::AbstractMatrix,
+    steady_state::AbstractVector,
+    μ::AbstractVector,
+    ν::AbstractVector,
+    N::Int;
+    maxiters=2^16,
+    σ=0.5,
+    τ=0.5,
+    λ=1.0,
+    tol=1e-10,
+    verbose=false,
+    show_progress=false
+)
+    """
+    this is a memory efficient version of Chambolle Pock that does computations in place whenever possible
+    iterations cease if ∫||ρ_{k} - ρ_{k + 1}||_π dt < tol
+
+    arguments
+    Q, a Markov kernel defining the graph
+    μ, ν, probability densities w.r.t to the steady state π of Q
+    N, the number of steps in the geodesic
+    """
+    # we will only ever use 8 vectors
+    a = ErbarBundle(Q, steady_state, μ, ν, N)
+    b = ErbarBundle(Q, steady_state, μ, ν, N)
+    a_bar = ErbarBundle(Q, steady_state, μ, ν, N)
+    a_next = ErbarBundle(Q, steady_state, μ, ν, N)
+    b_next = ErbarBundle(Q, steady_state, μ, ν, N)
+    a_bar_next = ErbarBundle(Q, steady_state, μ, ν, N)
+    c = ErbarBundle(Q, steady_state, μ, ν, N)
+    d = ErbarBundle(Q, steady_state, μ, ν, N)
+    return chambolle_pock_routine(
+        a, b, a_bar, a_next, b_next, a_bar_next, c, d,
+        maxiters=maxiters, verbose=verbose, tol=tol, σ=σ, τ=τ, λ=λ)
+end
 
 function prox_Fstar!(targ, bundle, verbose=false)
     """

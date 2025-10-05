@@ -20,6 +20,22 @@ function BBD(Q::AbstractMatrix,
     return (a, sqrt(action(a)))
 end
 
+function BBD(Q::AbstractMatrix,
+             steady_state::AbstractVector,
+             μ::AbstractVector,
+             ν::AbstractVector;
+             N=64,
+             σ=0.5,
+             τ=0.5,
+             maxiters=2^16,
+             tol=1e-10,
+             verbose=false,
+             progress=false,
+             )
+    a, b = chambolle_pock(Q, steady_state, μ, ν, N, maxiters=maxiters, σ=σ, τ=τ, tol=tol, verbose=verbose, show_progress=progress)
+    return (a, sqrt(action(a)))
+end
+
 """
     BBD(Q, μ, ν, initial_guess)
 
