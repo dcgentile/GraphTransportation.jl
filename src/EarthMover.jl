@@ -59,7 +59,7 @@ function BBD(
 )
     new_cache = ErbarCache(Q, μ, ν, N)
     new_bundle = ErbarBundle(new_cache, initial_guess)
-    geodesic = chambolle_pock(new_bundle, maxiters=maxiters, verbose=verbose, tol=tol, σ=σ, τ=τ, λ=λ, show_progress=progress)
+    geodesic, _ = chambolle_pock(new_bundle, maxiters=maxiters, verbose=verbose, tol=tol, σ=σ, τ=τ, λ=λ, show_progress=progress)
     return (geodesic, sqrt(action(geodesic)))
 end
 
