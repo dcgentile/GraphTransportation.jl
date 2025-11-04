@@ -247,36 +247,6 @@ function assign!(c::ErbarBundle, a::ErbarBundle)
     assign!(c.vector, a.vector)
 end
 
-# compute the inner product of two vectors in H
-"""
-    hdot(u::ErbarBundle, v::ErbarBundle)
-
-Description of the function.
-
-#TODO
-"""
-function hdot(u::ErbarBundle, v::ErbarBundle)
-    N = u.cache.N
-    Q = u.cache.Q
-    π = u.cache.π
-    h = 1 / N
-    Qprime = reshape(Q, 1, size(Q) ...)
-    πprime = reshape(π, 1, :, 1)
-    ρ_sum = sum(u.vector.ρ .* v.vector.ρ * π)
-    ρ_avg_sum = sum(u.vector.ρ .* v.vector.ρ * π)
-    q_sum = sum(u.vector.q .* v.vector.q * π)
-    m_sum = 0.5 * sum(u.vector.m .* v.vector.m .* Qprime .* πprime)
-    θ_sum = 0.5 * sum(u.vector.θ .* v.vector.θ .* Qprime .* πprime)
-    ρ_min_sum = 0.5 * sum(u.vector.ρ_minus .* v.vector.ρ_minus .* Qprime .* πprime)
-    ρ_plus_sum = 0.5 * sum(u.vector.ρ_plus .* v.vector.ρ_plus .* Qprime .* πprime)
-    return h * (ρ_sum + ρ_avg_sum + q_sum + m_sum + θ_sum + ρ_min_sum + ρ_plus_sum)
-end
-
-# compute the norm of two vectors in H
-function norm(u::ErbarBundle)
-    return sqrt(hdot(u,u))
-end
-
 # compute the action of the discrete curve encoded in a EB u
 # cf. eqn (18) in Erbar et al 2020
 # TODO: clean this up so that it doesn't work via scalar indexing
