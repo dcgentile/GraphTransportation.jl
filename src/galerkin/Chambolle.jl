@@ -129,6 +129,9 @@ function chambolle_pock(
 end
 
 
+"""
+#TODO Describe function
+"""
 function chambolle_pock(
     Q::AbstractMatrix,
     steady_state::AbstractVector,
@@ -143,15 +146,6 @@ function chambolle_pock(
     verbose=false,
     show_progress=false
 )
-    """
-    this is a memory efficient version of Chambolle Pock that does computations in place whenever possible
-    iterations cease if ∫||ρ_{k} - ρ_{k + 1}||_π dt < tol
-
-    arguments
-    Q, a Markov kernel defining the graph
-    μ, ν, probability densities w.r.t to the steady state π of Q
-    N, the number of steps in the geodesic
-    """
     # we will only ever use 8 vectors
     a = ErbarBundle(Q, steady_state, μ, ν, N)
     b = ErbarBundle(Q, steady_state, μ, ν, N)
@@ -166,11 +160,14 @@ function chambolle_pock(
         maxiters=maxiters, verbose=verbose, tol=tol, σ=σ, τ=τ, λ=λ)
 end
 
+"""
+    prox_Fstar!(targ, bundle, verbose=false)
+
+compute the proximal mapping of F star in place
+this amounts to computing the proximal mappings of the conjuage Action, IJPM, and IJAvg
+"""
+
 function prox_Fstar!(targ, bundle, verbose=false)
-    """
-    compute the proximal mapping of F star in place
-    this amounts to computing the proximal mappings of the conjuage Action, IJPM, and IJAvg
-    """
     cache = bundle.cache
     v = bundle.vector
     u = targ.vector
@@ -189,12 +186,15 @@ function prox_Fstar!(targ, bundle, verbose=false)
     u.q .= v.q
 end
 
+"""
+    prox_G!(targ, bundle, verbose=false, safe=false)
+
+compute the proximal mapping of G
+this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,
+projection to the set Script K, and projection to the set Jeq
+"""
+
 function prox_G!(targ, bundle, verbose=false, safe=false)
-    """
-    compute the proximal mapping of G
-    this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,
-    projection to the set Script K, and projection to the set Jeq
-    """
     cache = bundle.cache
     v = bundle.vector
     u = targ.vector
@@ -216,83 +216,4 @@ function prox_G!(targ, bundle, verbose=false, safe=false)
     u.ρ_plus .= v.ρ_plus
     u.ρ_avg .= v.ρ_avg
     u.q .= v.q
-end
-
-######## Implementation that avoids in-place computation ############3
-
-function chambolle_pock_routine(
-    Q::Matrix{AbstractFloat},
-    μ::Vector{AbstractFloat},
-    ν::Vector{AbstractFloat},
-    N::Int64;
-    maxiters=1000,
-    σ=0.5,
-    τ=0.5,
-    λ=1.0,
-    tol=1e-3
-)
-    """
-    the Chambolle Pock routine. vectors are reallocated on every iteration.
-    iterations cease if ∫||ρ_{k} - ρ_{k + 1}||_π dt < tol
-
-    arguments
-    Q, a Markov kernel defining the graph
-    μ, ν, probability densities w.r.t to the steady state π of Q
-    N, the number of steps in the geodesic
-    """
-    a = ErbarBundle(Q, μ, ν, N)
-    b = ErbarBundle(Q, μ, ν, N)
-    a_bar= ErbarBundle(Q, μ, ν, N)
-
-    for _ in 1:maxiters
-        b_next = prox_Fstar(σ, b, a_bar)
-        a_next = prox_G(τ, a, b_next)
-        d = a_next - a
-        a_bar_next = a_next + λ * d
-        normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
-        if normdiff < tol
-            return a_next
-        end
-        a = a_next
-        b = b_next
-        a_bar = a_bar_next
-    end
-
-    return a
-
-end
-
-
-function prox_Fstar(σ::AbstractFloat, b::ErbarBundle, a_bar::ErbarBundle)
-    """
-    compute the proximal mapping of F star
-    this amounts to computing the proximal mappings of the conjuage Action, IJPM, and IJAvg
-    """
-    cache = b.cache
-    u = b + σ * a_bar
-    v = u.vector
-    θ, m = prox_Astar(v.θ, v.m)
-    q, ρ_minus, ρ_plus = proximal_IJpm_star(v.q, v.ρ_minus, v.ρ_plus, cache.Q)
-    ρ, ρ_avg = prox_IJavg_star(v.ρ, v.ρ_avg, cache.μ, cache.ν, cache.avg_sys)
-    vprime = ErbarVector(ρ, m, θ, ρ_minus, ρ_plus, ρ_avg, q)
-    return ErbarBundle(b.cache, vprime)
-
-end
-
-function prox_G(τ::AbstractFloat, a::ErbarBundle, b::ErbarBundle)
-    """
-    compute the proximal mapping of G
-    this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,
-    projection to the set Script K, and projection to the set Jeq
-    """
-    cache = a.cache
-    u = a - (τ * b)
-    v = u.vector
-
-    ρ, m = proj_CE(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
-    ρ_minus, ρ_plus, θ = project_K(v.ρ_minus, v.ρ_plus, v.θ)
-    ρ_avg, q = project_IJeq(v.ρ_avg, v.q)
-
-    vprime = ErbarVector(ρ, m, θ, ρ_minus, ρ_plus, ρ_avg, q)
-    return ErbarBundle(a.cache, vprime)
 end
