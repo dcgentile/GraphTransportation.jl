@@ -36,7 +36,10 @@ include("EarthMover.jl")
 # include functionality for graident flows
 include("GradientFlows.jl")
 
+# include functionality for barycenter synthesis
+include("Barycenters.jl")
+
 # expose functionality for computing geodesics
-export BBD
+export BBD, barycenter
 
 end
