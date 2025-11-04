@@ -17,7 +17,7 @@ function step_direction(ν, M, weights, Q; tol=1e-10, n_steps=100)
     p = size(M, 2)
     for i=1:p
         gamma, _ = BBD(Q, ν, M[:, i], N = n_steps, tol=tol)
-        tangent_vector = tangent_vector + weights[i] * (gamma.vector.m[0,:,:])
+        tangent_vector = tangent_vector + weights[i] * (gamma.vector.m[1,:,:])
     end
     return tangent_vector
 end
