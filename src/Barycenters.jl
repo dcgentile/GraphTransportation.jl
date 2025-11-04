@@ -49,7 +49,11 @@ function barycenter(M, weights, Q;
     for _=1:maxiters
         δJ = step_direction(ν_old, M, weights, Q, sstate=sstate, tol=geodesic_tol, n_steps=geodesic_steps)
         ν_new .= ν_old .+ h * graph_divergence(Q, metric_tensor(ν_old) .* δJ)
-        norm(ν_new - ν_old) < tol ? break : continue
+        if sqrt(sum((ν_new - ν_old).^2)) < tol
+            break
+        else 
+            ν_old = ν_new
+        end
     end
     return ν_new
 end
