@@ -5,6 +5,8 @@ using SuiteSparse
 using SparseArrays
 using LinearAlgebra
 using BlockBandedMatrices
+using Convex, SCS
+using ForwardDiff, Roots
 #using CUDA
 using ProgressMeter
 using Base: signequal
@@ -40,6 +42,6 @@ include("GradientFlows.jl")
 include("Barycenters.jl")
 
 # expose functionality for computing geodesics
-export BBD, barycenter
+export BBD, barycenter, analysis
 
 end

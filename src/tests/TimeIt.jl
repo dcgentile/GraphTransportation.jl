@@ -1,196 +1,75 @@
 using BenchmarkTools
 using LinearAlgebra
-include("../ErbarVector.jl")
-include("../galerkin/Chambolle.jl")
+using SparseArrays
+using BlockBandedMatrices
+include("../utils.jl")
+include("../galerkin/ContinuityEnforcer.jl")
+include("../galerkin/ProximalEqualityIndicator.jl")
+include("../galerkin/ProximalAvgIndicator.jl")
+include("../galerkin/ProximalSignIndicator.jl")
+include("../galerkin/ProximalAction.jl")
+include("../galerkin/KProjection.jl")
 
-"""
-this file benchmarks each component of the Chambolle Pock routine, both the in-place versions and the reallocating versions
-"""
-
-# constants, allocate some vectors
-# N nodes
-N = 50
-# T steps in geodesic
 T = 100
-#set Markov Kernel and measures
+N = 100
+σ = 4
 Q = (1/N) * (ones(N,N) - I(N)) # Q is a complete graph on N vertices
+A = form_ceh_system(Q, T)
+M = form_avg_system(T)
 μ = ν = zeros(N)
 i, j = rand(1:N), rand(1:N)
 μ[i] = N
 ν[j] = N
 
-M = form_avg_system(T)
-A = form_ceh_system(Q,T)
-
-"""
-    time_prox_Astar()
-
-Description of the function.
-
-#TODO
-"""
-function time_prox_Astar()
-    # time prox_Astar
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_Astar")
-    @time c = prox_Astar(a.vector.θ, b.vector.m);
-    # time prox_Astar!
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_Astar!")
-    @time prox_Astar!(a.vector.θ, b.vector.m)
-
+function continuity_setup(T, N, σ)
+    ρ = σ * randn(T + 1, N)
+    m = σ * randn(T, N, N)
+    return (ρ, m)
 end
 
-"""
-    time_prox_IJpm_star()
-
-Description of the function.
-
-#TODO
-"""
-function time_prox_IJpm_star()
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_IJpm_star!")
-    @time proximal_IJpm_star!(a.vector.q, a.vector.ρ_minus, a.vector.ρ_plus, Q)
-    # time prox_IJpm_star
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_IJpm_star")
-    @time c = proximal_IJpm_star(a.vector.q, a.vector.ρ_minus, a.vector.ρ_plus, Q);
-
+function pei_setup(T, N, σ)
+    q = σ * randn(T, N)
+    ρ_avg = σ * randn(T, N)
+    return (q, ρ_avg)
 end
 
-"""
-    time_prox_IJavg_star()
-
-Description of the function.
-
-#TODO
-"""
-function time_prox_IJavg_star()
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_IJpm_star!")
-    @time prox_IJavg_star!(a.vector.ρ, a.vector.ρ_avg, μ, ν, M);
-    # time prox_IJpm_star
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_IJpm_star")
-    @time c = prox_IJavg_star(a.vector.ρ, a.vector.ρ_avg, μ, ν, M);
+function pai_setup(T, N, σ)
+    ρ = σ * randn(T + 1, N)
+    ρ_avg = σ * randn(T, N)
+    return (ρ, ρ_avg)
 end
 
-"""
-    time_prox_Fstar()
-
-Description of the function.
-
-#TODO
-"""
-function time_prox_Fstar()
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_Fstar!")
-    @time prox_Fstar!(a,b)
-    # time prox_IJpm_star
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_Fstar")
-    @time c = prox_Fstar(0.5,a,b);
+function psi_setup(T, N, σ)
+    q = σ * randn(T, N)
+    ρ_plus = σ * randn(T, N, N)
+    ρ_minus = σ * randn(T, N, N)
+    return (q, ρ_plus, ρ_minus)
 end
 
-"""
-    time_proj_CE()
-
-Description of the function.
-
-#TODO
-"""
-function time_proj_CE()
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking proj_CE!")
-    @time proj_CE!(a.vector.ρ, a.vector.m, μ, ν, Q, A)
-    # time prox_IJpm_star
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking proj_CE")
-    @time proj_CE(a.vector.ρ, a.vector.m, μ, ν, Q, A);
+function action_setup(T, N, σ)
+    θ = σ * randn(T, N, N)
+    m = σ * randn(T, N, N)
+	return (θ, m)
 end
 
-"""
-    time_proj_K()
-
-Description of the function.
-
-#TODO
-"""
-function time_proj_K()
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking proj_K!")
-    @time project_K!(a.vector.ρ_minus, a.vector.ρ_plus, a.vector.θ)
-    # time prox_IJpm_star
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking proj_K")
-    @time c = project_K(a.vector.ρ_minus, a.vector.ρ_plus, a.vector.θ);
+function kproj_setup(T, N, σ)
+    θ = σ * randn(T, N, N)
+    ρ_plus = σ * randn(T, N, N)
+    ρ_minus = σ * randn(T, N, N)
+    return (θ, ρ_plus, ρ_minus)
 end
 
-"""
-    time_proj_IJeq()
 
-Description of the function.
-
-#TODO
-"""
-function time_proj_IJeq()
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_IJeq!")
-    @time project_IJeq!(a.vector.ρ_avg, a.vector.q)
-    # time prox_IJpm_star
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_IJpm_star")
-    @time c = project_IJeq(a.vector.ρ_avg, a.vector.q);
-end
-
-"""
-    time_prox_G()
-
-Description of the function.
-
-#TODO
-"""
-function time_prox_G()
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_G!")
-    @time prox_G!(a,b)
-    # time prox_IJpm_star
-    a = ErbarBundle(Q, μ, ν, T)
-    b = ErbarBundle(Q, μ, ν, T)
-    println("Benchmarking prox_G")
-    @time c = prox_G(0.5,a,b);
-end
-
-"""
-    time_pipeline()
-
-Description of the function.
-
-#TODO
-"""
-function time_pipeline()
-    time_prox_Astar()
-    time_prox_IJpm_star()
-    time_prox_IJavg_star()
-    time_prox_Fstar()
-    time_proj_CE()
-    time_proj_K()
-    time_proj_IJeq()
-    time_prox_G()
-end
+#println("Benchmarking prox_Astar!")
+#display(@benchmark prox_Astar!(θ, m) setup=((θ, m) = action_setup($T, $N, $σ)))
+#println("\nBenchmarking prox_IJpm_star!")
+#display(@benchmark proximal_IJpm_star!(q, ρ_plus, ρ_minus, $Q) setup=((q, ρ_plus, ρ_minus) = psi_setup($T, $N, $σ)))
+#println("\nBenchmarking prox_IJavg_star!")
+#display(@benchmark prox_IJavg_star!(ρ, ρ_avg, $μ, $ν, $M) setup=((ρ, ρ_avg) = pai_setup($T, $N, $σ)))
+#println("\nBenchmarking proj_CE!")
+#display(@benchmark proj_CE!(ρ, m, $μ, $ν, $Q, $A) setup=((ρ, m) = continuity_setup($T, $N, $σ)))
+println("\nBenchmarking proj_K!")
+display(@benchmark project_K!(ρ_minus, ρ_plus, θ) setup=((ρ_minus, ρ_plus, θ) = kproj_setup($T, $N, $σ)))
+#println("\nBenchmarking prox_IJeq!")
+#display(@benchmark project_IJeq!(ρ_avg, q) setup=((ρ_avg, q) = pei_setup($T, $N, $σ)))
+#

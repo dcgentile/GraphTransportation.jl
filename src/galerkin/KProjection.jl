@@ -1,4 +1,4 @@
-tolerance = 1e-5
+using ForwardDiff, Roots
 
 """
 This file contains functionality for solving the projection to K problem, as described in Erbar et al 2020,
@@ -43,7 +43,7 @@ function project_K!(ρ_m, ρ_p, θ)
     return (ρ_m, ρ_p, θ)
 end
 
-function proj_K(x, y, z)
+function proj_K(x, y, z, tolerance=1e-6)
     """
     for real numbers x,y,z, we project to the convex set K
     """
@@ -85,272 +85,65 @@ function super_differential_inclusion(s, t)
     return s * t ≥ 0.25 && s > 0 && t > 0
 end
 
-"""
-    project_by_bisection(a,b,c; tol=tolerance, maxiters=500)
-
-Description of the function.
-
-#TODO
-"""
-function project_by_bisection(a,b,c; tol=tolerance, maxiters=500)
-    l, u = find_bracket(a,b,c)
-    x0 = 0
-    for _ in 1:maxiters
-        x0 = (l + u) / 2
-        f = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
-        if abs(f) < tol
-            α = ((a * √x0) + (b / √x0) + c) / (x0 + 1/x0 + 1)
-            return α * [√x0; 1/√x0; 1]
-        else
-            f > 0 ? l=x0 : u=x0
-        end
-    end
-    troubleshooter(a,b,c,maxiters)
-    error("Failed to find root!")
-end
-
-
-"""
-    troubleshooter(a,b,c,maxiters,tol=tolerance)
-
-Description of the function.
-
-#TODO
-"""
-function troubleshooter(a,b,c,maxiters,tol=tolerance)
-    l, u = find_bracket(a,b,c)
-    for i in 1:maxiters
-        x0 = (l + u) / 2
-        f = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
-        if abs(f) < tol
-            α = ((a * √x0) + (b / √x0) + c) / (x0 + 1/x0 + 1)
-            return α * [√x0; 1/√x0; 1]
-        else
-            f > 0 ? l=x0 : u=x0
-        end
-        if i == maxiters
-            println(f)
-        end
-    end
-    println([a, b, c])
-    l, u = find_bracket(a,b,c)
-    println([l,u])
-    println(
-         (-0.5 * c * l) + ((0.5 * a - b) * √l) + ((a - 0.5 * b) / √l) + (0.5 * c / l)
-    )
-    println(
-         (-0.5 * c * u) + ((0.5 * a - b) * √u) + ((a - 0.5 * b) / √u) + (0.5 * c / u)
-    )
-    println(x0)
-end
-
-"""
-    find_bracket(a, b, c, maxiters = 64)
-
-Description of the function.
-
-#TODO
-"""
-function find_bracket(a, b, c, maxiters = 64)
-    s, t = 0, 0
-    for n=1:maxiters
-        x0 = 1/2^n
-        #x1 = 2^n
-        f0 = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
-        #println(f0)
-        if f0 > 0
-            s = x0
-            break
-        end
-        #f1 = (-0.5 * c * x1) + ((0.5 * a - b) * √x1) + ((a - 0.5 * b) / √x1) + (0.5 * c / x1)
-        #if !signequal(f0, f1)
-            #return (x0, x1)
-        #end
-    end
-    for n = 1:maxiters
-        x0 = s * 2^n
-        f0 = (-0.5 * c * x0) + ((0.5 * a - b) * √x0) + ((a - 0.5 * b) / √x0) + (0.5 * c / x0)
-        if f0 < 0
-            t = x0
-            return (s,t)
-        end
-    end
-    println([a, b, c])
-    error("Could not find bracket")
-
-end
-
-function project_by_newton(x,y,z; safety=false)
+function project_by_newton(x,y,z; tolerance=1e-6, safety=false)
     w(q) = [sqrt(q); 1/sqrt(q); 1]
-    q_star = rootfinder(x,y,z, tol=tolerance)
+    q_star = find_q([x;y;z])
     w_star = w(q_star)
     τ = ([x;y;z] ⋅ w_star) / (w_star ⋅ w_star)
-
-    # safety check: q is the projection iff p-q if orthogonal to TqM,
-    # TqM is spanned by the partial derivatives of the parameterization
-    # @assert v - p ⟂ ∂p1r(p)
-    # @assert v - p ⟂ ∂p2r(p)
     p = τ * w_star
-
-    if safety
-    
-        try
-            @assert x - p[1] + 0.5 * (z - p[3]) * sqrt(p[2] / p[1]) < 1e-6
-        catch
-            println("\r$(x - p[1] + 0.5 * (z - p[3]) * sqrt(p[2] / p[1]))")
-            println("\rpoint: $([x;y;z]); incorrect projection: $(p)")
-        end
-        try
-            @assert y - p[2] + 0.5 * (z - p[3]) * sqrt(p[1] / p[2]) < 1e-6
-        catch
-            println("\r$(y - p[2] + 0.5 * (z - p[3]) * sqrt(p[1] / p[2]))")
-            println("\rpoint: $([x;y;z]); incorrect projection: $(p)")
-        end
-
-    end
-
     return p
 
 end
 
-function rootfinder(x, y, z; tol=tolerance, maxiters=100)
-    w(q) = [sqrt(q); 1/sqrt(q); 1]
-    n(q) = [-1/(2*sqrt(q)); -sqrt(q)/2; 1]
-    p = [x; y; z]
-    
-    # f(q) = p ⋅ (w(q) × n(q)) - we want to find the root of this function
-    function f(q)
-        wq = w(q)
-        nq = n(q)
-        cross_product = [
-            wq[2]*nq[3] - wq[3]*nq[2],
-            wq[3]*nq[1] - wq[1]*nq[3], 
-            wq[1]*nq[2] - wq[2]*nq[1]
-        ]
-        return p ⋅ cross_product
+function find_q(p)
+    # Objective function  
+    f = q -> begin
+        w = [√q, 1/√q, 1]
+        n = [-1/(2√q), -√q/2, 1]
+        dot(p, w × n)
     end
     
-    # Compute derivative f'(q) using finite differences
-    function f_prime(q)
-        h = max(1e-8, 1e-6 * abs(q))  # adaptive step size
-        return (f(q + h) - f(q - h)) / (2 * h)
-    end
+    # Newton with transformation q = exp(t)
+    g = t -> f(exp(t))
+    dg = t -> ForwardDiff.derivative(g, t)
     
-    # Generate more comprehensive initial guesses
-    base_guesses = [1.0, 0.1, 10.0, 0.01, 100.0, 0.001, 1000.0]
-    ratio_guess = x > 0 && y > 0 ? x/y : 1.0
-    geometric_guesses = [sqrt(ratio_guess), 1/sqrt(ratio_guess)]
-    logarithmic_guesses = [exp(-2), exp(-1), exp(1), exp(2)]
-    random_guesses = [0.1 * rand() + 0.01 for _ in 1:5]  # small random perturbations
+    # Try different initial guesses
+    initial_guesses = [0.0, 1.0, -1.0, 2.0, -2.0, 0.5, -0.5, 3.0, -3.0]
     
-    all_guesses = vcat(base_guesses, [ratio_guess], geometric_guesses, logarithmic_guesses, random_guesses)
-    
-    # Try each initial guess with adaptive Newton's method
-    for (attempt, q_init) in enumerate(all_guesses)
-        if q_init <= 0
-            continue  # skip invalid initial guesses
-        end
-        
-        q = q_init
-        prev_fq = Inf
-        stagnation_count = 0
-        
+    for (i, t₀) in enumerate(initial_guesses)
         try
-            for iter in 1:maxiters
-                fq = f(q)
-                if abs(fq) < tol
-                    return q  # found the root q_star
-                end
-                
-                # Check for stagnation
-                if abs(fq - prev_fq) < 1e-12
-                    stagnation_count += 1
-                    if stagnation_count > 5
-                        break  # try next initial guess
-                    end
-                else
-                    stagnation_count = 0
-                end
-                prev_fq = fq
-                
-                fpq = f_prime(q)
-                if abs(fpq) < 1e-14
-                    # Try gradient descent step when derivative is too small
-                    q_new = q - 0.01 * sign(fq) * abs(q)
-                else
-                    # Standard Newton step with damping
-                    step = fq / fpq
-                    damping = min(1.0, abs(q) / max(abs(step), 1e-10))  # adaptive damping
-                    q_new = q - damping * step
-                end
-                
-                # Ensure q stays positive with better bounds
-                if q_new <= 0
-                    q_new = q * 0.5
-                elseif q_new > 1e6  # prevent overflow
-                    q_new = 1e6
-                end
-                
-                # Check for oscillation and add perturbation
-                if iter > 10 && abs(q_new - q) < 1e-12
-                    q_new += 0.01 * rand() * q  # small random perturbation
-                end
-                
-                q = q_new
+            t_sol = find_zero((g, dg), t₀, Roots.Newton(), atol=1e-10, maxiters=50)
+            q = exp(t_sol)
+            
+            # Verify solution quality
+            if abs(f(q)) < 1e-9
+                #i > 1 && @info "Converged with initial guess #$i (t₀=$t₀)"
+                return q
             end
-        catch e
-            # If any error occurs during this attempt, try next initial guess
+        catch
+            continue  # Try next initial guess
+        end
+    end
+    
+    # If preset guesses fail, try random initial guesses
+    i = 0
+    for _ in 1:10000
+        i = i+1
+        t₀ = randn() * 3  # Random normal, scaled
+        try
+            t_sol = find_zero((g, dg), t₀, Roots.Newton(), atol=1e-10, maxiters=50)
+            q = exp(t_sol)
+            
+            if abs(f(q)) < 1e-9
+                #@info "Converged with random initial guess (t₀=$t₀)"
+                return q
+            end
+        catch
             continue
         end
     end
-    
-    # Final fallback: try bisection method on a reasonable interval
-    try
-        return bisection_fallback(f, 1e-6, 1e6, tol, maxiters)
-    catch
-        error("All rootfinding methods failed to converge for inputs ($x, $y, $z)")
-    end
-end
 
-# Fallback bisection method for when Newton's method fails completely
-function bisection_fallback(f, a, b, tol, maxiters)
-    fa, fb = f(a), f(b)
+    println(i)
     
-    # Ensure we have a sign change
-    if fa * fb > 0
-        # Try to find a sign change by expanding the interval
-        for i in 1:10
-            a_new, b_new = a / 10^i, b * 10^i
-            try
-                fa_new, fb_new = f(a_new), f(b_new)
-                if fa_new * fb_new < 0
-                    a, b, fa, fb = a_new, b_new, fa_new, fb_new
-                    break
-                end
-            catch
-                continue
-            end
-        end
-        
-        if fa * fb > 0
-            error("Cannot find sign change for bisection")
-        end
-    end
-    
-    for _ in 1:maxiters
-        c = (a + b) / 2
-        fc = f(c)
-        
-        if abs(fc) < tol || abs(b - a) < tol
-            return c
-        end
-        
-        if fa * fc < 0
-            b, fb = c, fc
-        else
-            a, fa = c, fc
-        end
-    end
-    
-    error("Bisection method failed to converge")
+    error("Failed to find root after all attempts")
 end
