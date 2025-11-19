@@ -58,9 +58,9 @@ function chambolle_pock_routine(
         if normdiff < tol
             return (a_next, b_next)
         end
-        #λ = 1 / √(1 + 2 * τ)
-        #τ *= λ
-        #σ /= λ
+        λ = 1 / √(1 + 2 * τ)
+        τ *= λ
+        σ /= λ
 
         combine!(a_bar_next, a_next, d, 1.0, λ)
         assign!(a, a_next)
