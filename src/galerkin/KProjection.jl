@@ -1,5 +1,3 @@
-using ForwardDiff, Roots
-
 """
 This file contains functionality for solving the projection to K problem, as described in Erbar et al 2020,
 section 4.4. In one sense it is perhaps the most involved of all the subroutines, but it does have

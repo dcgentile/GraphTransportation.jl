@@ -1,3 +1,4 @@
+using Base: midpoint
 using SparseArrays
 using LinearAlgebra
 using JLD2
@@ -263,7 +264,7 @@ function cube_synthesis(;N=32, verbose=false, tol=1e-9, σ=0.5, τ=0.5, maxiters
 
     M = hcat(μ, ν)
     
-    bar = barycenter(M, [0.5; 0.5], Q, geodesic_steps=N, geodesic_tol=tol, maxiters=maxiters)
+    return barycenter(M, [0.5; 0.5], Q, geodesic_steps=N, geodesic_tol=tol, maxiters=maxiters)
     
 end
 
@@ -359,4 +360,29 @@ function triangle_objective_scaling()
     μ[1] = 1/sstate[1]
     ν[3] = 1/sstate[3]
     objective_scaling(Q, μ, ν, 3, 8, "triangle_scaling_results.jld2")
+end
+
+
+function midpoint_distance()
+    Q, sstate = cube_markov_chain()
+    V = size(Q,1)
+    μ = zeros(V)
+    ν = zeros(V)
+    μ[1] = 1/sstate[1]
+    ν[7] = 1/sstate[7]
+
+    dists_μ = []
+    dists_ν = []
+
+    for k in 3:8
+        c, d = BBD(Q, μ, ν, N=2^k)
+        midpoint = c.vector.ρ[end ÷ 2 + 1, :]
+        c_μ, d_μ = BBD(Q, midpoint, μ, N=2^k)
+        c_ν, d_ν = BBD(Q, midpoint, ν, N=2^k)
+        append!(dists_μ, d_μ)
+        append!(dists_ν, d_ν)
+    end
+
+    return (dists_μ, dists_ν)
+
 end
