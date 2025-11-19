@@ -31,7 +31,7 @@ end
 function project_K!(ρ_m, ρ_p, θ)
     """
     for  each index I, we compute in place the projection onto K of the point
-    p = projection((ρ_minus[I], ρ_plus[I], θ[I]))
+    p = projection((ρ_minus[I], ρ_plus[I], θ[I])
     I.e, for each index,
     ρ_m[idx], ρ_p[idx], θ[idx] = proj_K(ρ_m[idx], ρ_p[idx], θ[idx])
     """
