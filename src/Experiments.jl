@@ -1,9 +1,12 @@
-using Base: midpoint
+using GraphMakie, Graphs, NetworkLayout, CairoMakie
+using Shapefile, LibGEOS
+using LinearAlgebra, SparseArrays, Statistics
+using ProgressMeter 
 using SparseArrays
 using LinearAlgebra
 using JLD2
 using Convex, SCS
-include("tests/Inclusion.jl")
+using GraphTransportation
 include("CommonGraphs.jl")
 
 """
@@ -252,7 +255,7 @@ function cube_analysis(n;N=32, verbose=false, tol=1e-9, σ=0.5, τ=0.5)
     
 end
 
-function cube_synthesis(;N=32, verbose=false, tol=1e-9, σ=0.5, τ=0.5, maxiters=100)
+function cube_synthesis(;N=100, tol=1e-10, maxiters=1000)
     Q, sstate = cube_markov_chain()
     V = size(Q,1)
 
@@ -262,33 +265,17 @@ function cube_synthesis(;N=32, verbose=false, tol=1e-9, σ=0.5, τ=0.5, maxiters
     μ[1] = 1/sstate[1]
     ν[7] = 1/sstate[7]
 
-    M = hcat(μ, ν)
-    
-    return barycenter(M, [0.5; 0.5], Q, geodesic_steps=N, geodesic_tol=tol, maxiters=maxiters)
-    
-end
-
-
-function cube_trouble(;N=32, tol=1e-9, verbose=false)
-    Q, sstate = cube_markov_chain()
-    V = size(Q,1)
-
-    μ = zeros(V)
-    ν = zeros(V)
-
-    μ[1] = 1/sstate[1]
-    ν[7] = 1/sstate[7]
+    initialization = (1/6) * ones(8)
+    initialization[1] = 3.5
+    initialization[7] = 3.5
 
     M = hcat(μ, ν)
-    γ, d = BBD(Q, μ, ν, N=N, verbose=verbose, tol=tol)
-
-    targ = γ.vector.ρ[end ÷ 2 + 1,:]
-
-    γ1, _ = BBD(Q, targ, μ, N=N, tol=tol)
-    γ2, _ = BBD(Q, targ, ν, N=N, tol=tol)
-
-    return γ, γ1, γ2
-
+    
+    return barycenter(M, [0.5; 0.5], Q,
+                      initialization=initialization,
+                      geodesic_steps=N,
+                      geodesic_tol=tol,
+                      maxiters=maxiters)
     
 end
 
@@ -385,4 +372,90 @@ function midpoint_distance()
 
     return (dists_μ, dists_ν)
 
+end
+
+function cube_midpoint_vectors()
+    Q, sstate = cube_markov_chain()
+    V = size(Q,1)
+    μ = zeros(V)
+    ν = zeros(V)
+    μ[1] = 1/sstate[1]
+    ν[7] = 1/sstate[7]
+
+    norms = []
+    
+    for k in 3:11
+        c, d = BBD(Q, μ, ν, N=2^k)
+        mp = c.vector.ρ[end ÷ 2 + 1, :]
+        cb, _ = BBD(Q, mp, μ, N=2^k)
+        cf, _ = BBD(Q, mp, ν, N=2^k)
+        tv = 0.5 * (cb.vector.m[1,:,:] + cf.vector.m[1,:,:])
+        stat = norm(tv)
+        append!(norms, stat)
+    end
+    
+    @save "cube_tv_norms.jld2" norms
+    
+end
+
+
+function wametx_barycenter()
+
+    function kernel_from_adjacency(adj)
+        N, _ = size(adj)
+        A = sparse(adj)
+        nedges = nnz(A)
+        degree_vector = A * ones(N)
+        sstate = degree_vector / nedges
+        Q = zeros(size(A))
+        for i = 1:N, j = 1:N
+            if A[i,j] !=0 
+                Q[i,j] = 1/ (sstate[i]*nedges)
+            end
+        end
+        return Q, sstate
+    end
+
+    shapes = Shapefile.Handle("./data/states.shp").shapes
+    n = length(shapes)
+    
+    # Get adjacency matrix
+    adj = [touches(shapes[i], shapes[j]) || intersects(shapes[i], shapes[j]) 
+           for i in 1:n, j in 1:n]
+    
+    # Get centroids from shape points directly
+    cx = Float64[]
+    cy = Float64[]
+    for shape in shapes
+        points = shape.points
+        push!(cx, mean(p.x for p in points))
+        push!(cy, mean(p.y for p in points))
+    end
+    
+    Qusa, sstate = kernel_from_adjacency(adj - I(49)) 
+    # subtract off diagonal because we don't want loops on a single node
+    
+    
+    μ1 = zeros(49)
+    μ2 = zeros(49)
+    μ3 = zeros(49)
+    μ1[38] = 1/sstate[38]
+    μ2[12] = 1/sstate[12]
+    μ3[15] = 1/sstate[15]
+    M = stack((μ1, μ2, μ3));
+    
+    N = 10
+    tol = 1e-9
+    coords = ones(3) / 3
+
+    bary, ndiffs, variances = barycenter(M, coords, Qusa,
+                                         maxiters=1000, geodesic_tol=tol, geodesic_steps=N)
+    @save "wametx_synth_outs.jld2" bary ndiffs variances N tol
+
+    recovered_coords = analysis(bary, M, Qusa, N=100, tol=tol)
+
+    @save "wametx_analysis_outs.jld2" recovered_coords N tol
+    
+    return (bary, ndiffs, variances, recovered_coords)
+    
 end

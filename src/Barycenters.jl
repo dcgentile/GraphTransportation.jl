@@ -46,17 +46,24 @@ geodesic_steps: integer, determines how many steps are used for computing the ge
 """
 function barycenter(M, weights, Q;
                     sstate=nothing,
+                    initialization=nothing,
                     h=0.1, maxiters=100, tol=1e-8, geodesic_tol=1e-10, geodesic_steps=100)
-    ν = ones(size(Q,1)) # inital condition of flow
-    ν_next = ones(size(Q,1)) # inital condition of flow
+
+    ν = isnothing(initialization) ? ones(size(Q,1)) : initialization # inital condition of flow
+    ν_next = copy(ν)
+
     norm_diffs = []
     variances = []
+
     for k =1:maxiters
+
         δJ, variance = step_direction(ν, M, weights, Q, sstate=sstate, tol=geodesic_tol, n_steps=geodesic_steps)
         append!(variances, variance)
         ν_next = ν .- h * graph_divergence(Q, metric_tensor(ν) .* δJ)
+
         norm_diff = norm(ν_next - ν)
         append!(norm_diffs, norm_diff)
+
         if norm_diff < tol
             println("finished in $(k) iterations")
             break
@@ -65,6 +72,7 @@ function barycenter(M, weights, Q;
             println("measure: $(ν_next)")
             ν = ν_next
         end
+
     end
     return (ν_next, norm_diffs, variances)
 end

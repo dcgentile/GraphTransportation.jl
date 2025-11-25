@@ -1,3 +1,5 @@
+using Base.Threads
+
 """
 this file contains the Chambolle pock routine for minimizing the objective function described in eqn (26)
 of Erbar et al 2020.
@@ -12,7 +14,7 @@ ScriptK = { ρ_minus, ρ_plus, θ: ρ_minus[t,i,j], ρ_plus[t,i,j], θ[t,i,j] �
 """
 
 """
-    chambolle_pock_routine(a::ErbarBundle, b::ErbarBundle, a_bar::ErbarBundle, a_next::ErbarBundle, b_next::ErbarBundle, a_bar_next::ErbarBundle, c::ErbarBundle, d::ErbarBundle; σ=0.5, τ=0.5, λ=1.0, maxiters=2^16, tol=1e-10, verbose=false, show_progress=true)
+    chambolle_pock_routine(a::ErbarBundle, b::ErbarBundle, a_bar::ErbarBundle, a_next::ErbarBundle, b_next::ErbarBundle, a_bar_next::ErbarBundle, c::ErbarBundle, d::ErbarBundle; σ=0.5, τ=0.5, λ=1.0, maxiters=2^16, tol=1e-10, show_progress=true)
 
 Description of the function.
 
@@ -32,7 +34,6 @@ function chambolle_pock_routine(
     λ=1.0,
     maxiters=2^16,
     tol=1e-10,
-    verbose=false,
     show_progress=true,
     )
     show_progress ? p = ProgressUnknown(spinner=true) : 0
@@ -50,9 +51,9 @@ function chambolle_pock_routine(
                                   ("τ", τ)
                               ]) : nothing
         combine!(c, b, a_bar, 1.0, σ)
-        prox_Fstar!(b_next, c, verbose)
+        prox_Fstar!(b_next, c)
         combine!(c, a, b_next, 1.0, -τ)
-        prox_G!(a_next, c, verbose)
+        prox_G!(a_next, c)
         combine!(d, a_next, a, 1.0, -1.0)
         normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
         if normdiff < tol
@@ -74,13 +75,13 @@ end
 
 # a more memory efficient version of ChamPock
 """
-    chambolle_pock(a::ErbarBundle;maxiters=2^16, verbose=false, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
+    chambolle_pock(a::ErbarBundle;maxiters=2^16, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
 
 Description of the function.
 
 #TODO
 """
-function chambolle_pock(a::ErbarBundle;maxiters=2^16, verbose=false, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
+function chambolle_pock(a::ErbarBundle;maxiters=2^16, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
     b = copy(a)
     a_bar = copy(a)
     a_next = copy(a)
@@ -88,7 +89,7 @@ function chambolle_pock(a::ErbarBundle;maxiters=2^16, verbose=false, tol=1e-10, 
     a_bar_next = copy(a)
     c = copy(a)
     d = copy(a)
-    return chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d, σ=σ, τ=τ, λ=λ, maxiters=maxiters, verbose=verbose, tol=tol, show_progress=show_progress)
+    return chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d, σ=σ, τ=τ, λ=λ, maxiters=maxiters, tol=tol, show_progress=show_progress)
 end
 
 
@@ -102,7 +103,6 @@ function chambolle_pock(
     τ=0.5,
     λ=1.0,
     tol=1e-10,
-    verbose=false,
     show_progress=false
 )
     """
@@ -125,7 +125,7 @@ function chambolle_pock(
     d = ErbarBundle(Q, μ, ν, N)
     return chambolle_pock_routine(
         a, b, a_bar, a_next, b_next, a_bar_next, c, d,
-        maxiters=maxiters, verbose=verbose, tol=tol, σ=σ, τ=τ, λ=λ)
+        maxiters=maxiters, tol=tol, σ=σ, τ=τ, λ=λ)
 end
 
 
@@ -143,7 +143,6 @@ function chambolle_pock(
     τ=0.5,
     λ=1.0,
     tol=1e-10,
-    verbose=false,
     show_progress=false
 )
     # we will only ever use 8 vectors
@@ -157,26 +156,29 @@ function chambolle_pock(
     d = ErbarBundle(Q, steady_state, μ, ν, N)
     return chambolle_pock_routine(
         a, b, a_bar, a_next, b_next, a_bar_next, c, d,
-        maxiters=maxiters, verbose=verbose, tol=tol, σ=σ, τ=τ, λ=λ)
+        maxiters=maxiters, tol=tol, σ=σ, τ=τ, λ=λ)
 end
 
 """
-    prox_Fstar!(targ, bundle, verbose=false)
+    prox_Fstar!(targ, bundle)
 
 compute the proximal mapping of F star in place
 this amounts to computing the proximal mappings of the conjuage Action, IJPM, and IJAvg
 """
 
-function prox_Fstar!(targ, bundle, verbose=false)
+function prox_Fstar!(targ, bundle)
     cache = bundle.cache
     v = bundle.vector
     u = targ.vector
-    verbose ? println("Computing Proximal Action") : nothing
-    v.θ, v.m = prox_Astar!(v.θ, v.m)
-    verbose ? println("Computing Proximal Mapping of IJ_pm^*") : nothing
-    v.q, v.ρ_minus, v.ρ_plus = proximal_IJpm_star!(v.q, v.ρ_minus, v.ρ_plus, cache.Q)
-    verbose ? println("Computing Proximal Mapping of IJ_avg^*") : nothing
-    v.ρ, v.ρ_avg = prox_IJavg_star!(v.ρ, v.ρ_avg, cache.μ, cache.ν, cache.avg_sys)
+    @threads for task_id in 1:3
+        if task_id == 1
+            v.θ, v.m = prox_Astar!(v.θ, v.m)
+        elseif task_id == 2
+            v.q, v.ρ_minus, v.ρ_plus = proximal_IJpm_star!(v.q, v.ρ_minus, v.ρ_plus, cache.Q)
+        elseif task_id == 3
+            v.ρ, v.ρ_avg = prox_IJavg_star!(v.ρ, v.ρ_avg, cache.μ, cache.ν, cache.avg_sys)
+        end
+    end
     u.ρ .= v.ρ
     u.θ .= v.θ
     u.m .= v.m
@@ -187,27 +189,28 @@ function prox_Fstar!(targ, bundle, verbose=false)
 end
 
 """
-    prox_G!(targ, bundle, verbose=false, safe=false)
+    prox_G!(targ, bundle)
 
 compute the proximal mapping of G
 this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,
 projection to the set Script K, and projection to the set Jeq
 """
 
-function prox_G!(targ, bundle, verbose=false, safe=false)
+function prox_G!(targ, bundle)
     cache = bundle.cache
     v = bundle.vector
     u = targ.vector
-    v.ρ, v.m = proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
-    verbose ? println("Computing Projection to CE+") : nothing
-    if safe @assert is_in_CE_weakly(v.ρ, v.m, cache.Q, cache.π) end
-    #v.ρ, v.m = proj_CENN(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys, verbose=verbose)
-    verbose ? println("Computing Projection to K") : nothing
-    v.ρ_minus, v.ρ_plus, v.θ = project_K!(v.ρ_minus, v.ρ_plus, v.θ)
-    if safe @assert is_in_ScriptK(v.ρ_minus, v.ρ_plus, v.θ) end
-    verbose ? println("Computing Projection to IJ_eq") : nothing
-    v.ρ_avg, v.q = project_IJeq!(v.ρ_avg, v.q)
-    if safe @assert is_in_JEq(v.ρ_avg, v.q) end
+    for task_id in 1:3
+        if task_id == 1
+            v.ρ, v.m = proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
+        elseif task_id == 2
+            v.ρ_minus, v.ρ_plus, v.θ = project_K!(v.ρ_minus, v.ρ_plus, v.θ)
+        elseif task_id == 3
+            v.ρ_avg, v.q = project_IJeq!(v.ρ_avg, v.q)
+        end
+
+    end
+
 
     u.ρ .= v.ρ
     u.θ .= v.θ
