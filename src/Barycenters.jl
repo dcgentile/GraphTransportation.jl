@@ -108,6 +108,6 @@ function analysis(ν, M, Q; N=32, tol=1e-10)
     problem.constraints = vcat(problem.constraints, [x >= 0])
     problem.constraints = vcat(problem.constraints, [sum(x) == 1])
     
-    solve!(problem, SCS.Optimizer)
+    Convex.solve!(problem, SCS.Optimizer)
     x.value  # optimal solution
 end
