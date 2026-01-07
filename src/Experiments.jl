@@ -4,8 +4,7 @@ using LinearAlgebra, SparseArrays, Statistics
 using ProgressMeter 
 using SparseArrays
 using LinearAlgebra
-using JLD2
-using Convex, SCS
+using JLD2, DelimitedFiles
 using GraphTransportation
 include("CommonGraphs.jl")
 
@@ -235,7 +234,7 @@ function barycenter_on_grid_EGD(; N=128, ε=0., verbose=false)
     return optimize(F, x0, LBFGS(), Optim.Options(x_reltol=1e-6, iterations=128))
 end
 
-function cube_analysis(n;N=32, verbose=false, tol=1e-9, σ=0.5, τ=0.5)
+function cube_analysis(n;N=32,tol=1e-9, σ=0.5, τ=0.5)
     Q, sstate = cube_markov_chain()
     V = size(Q,1)
 
@@ -244,16 +243,21 @@ function cube_analysis(n;N=32, verbose=false, tol=1e-9, σ=0.5, τ=0.5)
 
     μ[1] = 1/sstate[1]
     ν[7] = 1/sstate[7]
+    M = hcat(μ, ν)
 
-    γ, d = BBD(Q, μ, ν, N=N, verbose=verbose, tol=tol, σ=σ, τ=τ)
-    targ = γ.vector.ρ[end ÷ n + 1,:]
-     
-    #M = hcat(μ, ν)
-    M = Diagonal(sstate.^-1)
+    coords = Dict()
+    γ, d = BBD(Q, μ, ν, N=N, tol=tol, σ=σ, τ=τ)
 
-    analysis(targ, M, Q)
-    
+    for i=2:n
+        targ = γ.vector.ρ[end ÷ i + 1,:]
+        coords[i] = analysis(targ, M, Q, N=N, tol=tol) 
+    end
+
+    return coords
+        
+
 end
+
 
 function cube_synthesis(;N=100, tol=1e-10, maxiters=1000)
     Q, sstate = cube_markov_chain()
@@ -399,8 +403,79 @@ function cube_midpoint_vectors()
 end
 
 
-function wametx_barycenter()
+function wametx_barycenter(;N_steps=16, tol=1e-8)
+    Qusa, sstate = load_usa_mc()
+    
+    μ1 = zeros(49)
+    μ2 = zeros(49)
+    μ3 = zeros(49)
+    μ1[38] = 1/sstate[38]
+    μ2[12] = 1/sstate[12]
+    μ3[15] = 1/sstate[15]
+    M = stack((μ1, μ2, μ3));
+    
+    coords = ones(3) / 3
 
+    if isfile("wamext_synth_outs.jld2")
+        bary = load("wametx_synth_outs.jld2")["bary"]
+    else
+        bary, ndiffs, variances = barycenter(M, coords, Qusa,
+                                             maxiters=1000, geodesic_tol=tol, geodesic_steps=N_steps)
+        @save "wametx_synth_outs.jld2" bary ndiffs variances N_steps tol
+
+    end
+
+    recovered_coords = analysis(bary, M, Qusa, N=100, tol=tol)
+
+    @save "wametx_analysis_outs.jld2" recovered_coords tol
+    
+    return (bary, ndiffs, variances, recovered_coords)
+    
+end
+
+function sampta_barycenter(;N_steps=16, tol=1e-8)
+    Qusa, sstate = load_usa_mc()
+    M = sstate.^-1 .* readdlm("sampta_references.txt")
+    coords = [0.5; 0.3; 0.2]
+
+    if isfile("sampta_synth_outs.jld2")
+        bary = load("sampta_synth_outs.jld2")["bary"]
+    else
+        bary, ndiffs, variances = barycenter(M, coords, Qusa,
+                                             maxiters=1000, geodesic_tol=tol, geodesic_steps=N_steps)
+        @save "sampta_synth_outs.jld2" bary ndiffs variances N_steps tol
+    end
+
+
+    recovered_coords = analysis(bary, M, Qusa, N=100, tol=tol)
+
+    @save "sampta_analysis_outs.jld2" recovered_coords tol
+    
+    return (bary, ndiffs, variances, recovered_coords)
+end
+                                         
+function sampta_barycenter2(;N_steps=16, tol=1e-9)
+    Qusa, sstate = load_usa_mc()
+    M = sstate.^-1 .* readdlm("sampta2_references.txt")
+    coords = [0.3; 0.2; 0.1; 0.1; 0.2; 0.1]
+
+    if isfile("sampta2_synth_outs.jld2")
+        bary = load("sampta2_synth_outs.jld2")["bary"]
+    else
+        bary, ndiffs, variances = barycenter(M, coords, Qusa,
+                                             maxiters=1000, geodesic_tol=tol, geodesic_steps=N_steps)
+        @save "sampta2_synth_outs.jld2" bary ndiffs variances N_steps tol
+    end
+
+
+    recovered_coords = analysis(bary, M, Qusa, N=100, tol=tol)
+
+    @save "sampta2_analysis_outs.jld2" recovered_coords tol
+    
+    return (bary, ndiffs, variances, recovered_coords)
+end
+
+function load_usa_mc()
     function kernel_from_adjacency(adj)
         N, _ = size(adj)
         A = sparse(adj)
@@ -433,29 +508,177 @@ function wametx_barycenter()
     end
     
     Qusa, sstate = kernel_from_adjacency(adj - I(49)) 
-    # subtract off diagonal because we don't want loops on a single node
-    
-    
-    μ1 = zeros(49)
-    μ2 = zeros(49)
-    μ3 = zeros(49)
-    μ1[38] = 1/sstate[38]
-    μ2[12] = 1/sstate[12]
-    μ3[15] = 1/sstate[15]
-    M = stack((μ1, μ2, μ3));
-    
-    N = 10
-    tol = 1e-9
-    coords = ones(3) / 3
+    return Qusa, sstate
+end
 
-    bary, ndiffs, variances = barycenter(M, coords, Qusa,
-                                         maxiters=1000, geodesic_tol=tol, geodesic_steps=N)
-    @save "wametx_synth_outs.jld2" bary ndiffs variances N tol
+function linear_barycenter_experiment(;n_steps=100, tol=1e-10)
+    Qusa, sstate = load_usa_mc()
+    M = sstate.^-1 .* readdlm("sampta_references.txt")
+    coords = [0.5; 0.3; 0.2]
 
+    if isfile("sampta_synth_outs.jld2")
+        bary = load("sampta_synth_outs.jld2")["bary"]
+    else
+        bary, ndiffs, variances = barycenter(M, coords, Qusa,
+                                             maxiters=1000, geodesic_tol=tol, geodesic_steps=n_steps)
+        @save "sampta_synth_outs.jld2" bary ndiffs variances n_steps tol
+    end
+
+    ν = ones(size(Qusa,1))
+    tangent_vector = zeros(size(Qusa))
+    p = size(M, 2)
+    variance = 0
+    for i=1:p
+        gamma, dist =  BBD(Qusa, ν, M[:, i], N = n_steps, tol=tol)
+        tangent_vector = tangent_vector + coords[i] * (gamma.vector.m[1,:,:])
+        variance = variance + 0.5 * coords[i] * dist^2
+    end
+
+    linearized_barycenter = ν .- graph_divergence(Qusa, metric_tensor(ν) .* tangent_vector)
+    
     recovered_coords = analysis(bary, M, Qusa, N=100, tol=tol)
+    linearized_recovered_coords = analysis(linearized_barycenter, M, Qusa, N=100, tol=tol)
 
-    @save "wametx_analysis_outs.jld2" recovered_coords N tol
+    @save "linearized_sampta_analysis_outs.jld2" recovered_coords tol
     
-    return (bary, ndiffs, variances, recovered_coords)
-    
+    return (bary, recovered_coords, linearized_barycenter, linearized_recovered_coords)
+	
+end
+
+
+function hyperparameter_error_experiment(;
+                                         grid_size=3,
+                                         n_measures=3,
+                                         synth_steps=[4,8,16],
+                                         synth_tols=[1e-8,1e-9,1e-10],
+                                         analysis_steps=100,
+                                         analysis_tol=1e-10,
+                                         fresh_run=false)
+    Q, sstate = grid_markov_chain(grid_size)
+    n_nodes = grid_size^2
+
+    function sample_simplex(p)
+        x = -log.(rand(p))
+        x / sum(x)
+    end
+
+    function get_details()
+        detail_filename = "err_exp_geos/details.jld2"
+        if !isfile(detail_filename) || fresh_run
+            weights = sample_simplex(n_measures)
+            M = zeros(n_nodes, n_measures)
+            for i=1:n_measures
+                M[:,i] = sample_simplex(n_nodes)
+            end
+            M = sstate.^-1 .* M
+            @save detail_filename weights M
+        else
+            weights = load(detail_filename)["weights"]
+            M = load(detail_filename)["M"]
+        end
+	    return (weights, M)
+    end
+
+    weights, M = get_details()
+
+    function get_bary(n, steps, tol)
+        filename = "err_exp_geos/$(n)_$(steps)_$(tol).jld2"
+        if !isfile(filename) || fresh_run
+            bary, ndiffs, variances = barycenter(M, weights, Q,
+                                                 maxiters=1000, geodesic_tol=tol, geodesic_steps=steps)
+            @save filename bary
+        else
+            bary = load(filename)["bary"]
+        end
+        return bary
+    end
+
+    function get_error(measure)
+        rcs = analysis(measure, M, Q, N=analysis_steps, tol=analysis_tol)
+        return norm(rcs - weights) / norm(weights)
+    end
+
+    error_matrix = zeros(size(synth_steps,1), size(synth_tols,1))
+    Threads.@threads for idx in LinearIndices(error_matrix)
+        i, j = Tuple(CartesianIndices(error_matrix)[idx])
+        error_matrix[i,j] = get_error(get_bary(n_nodes, synth_steps[i], synth_tols[j]))
+    end
+
+    return error_matrix
+end
+
+function two_point_barycenter_gd_experiment(;n_samples=1000, N=100, tol=1e-10)
+    function generate_sample(;n_measures=2,
+                             synth_steps=16, synth_tol=1e-10,
+                             analysis_steps=100, analysis_tol=1e-10,
+                             maxiters=1000, bary_tol=1e-10)
+        
+        Q = [0 1; 1 0]
+        sstate = [1/2; 1/2]
+        
+        function random_measure()
+            t = rand()
+            s = 1-t
+            return [t;s]
+        end
+        
+        μ0 = sstate.^-1 .* random_measure()
+        μ1 = sstate.^-1 .* random_measure()
+        M = hcat(μ0, μ1)
+        coord_index = rand(1:synth_steps-1)
+        coords = [1 - coord_index / synth_steps; coord_index/synth_steps]
+        
+        g, _ = BBD(Q, μ0, μ1, N=synth_steps, tol=synth_tol)
+        
+        μt = g.vector.ρ[coord_index + 1,:]
+        rcs = analysis(μt, M, Q, N=analysis_steps, tol=analysis_tol)
+        re = norm(coords - rcs) / norm(coords)
+        
+        μt_hat, _, _ = barycenter(M, coords, Q,
+                                  geodesic_tol=synth_tol, geodesic_steps=synth_steps,
+                                  maxiters=maxiters, tol=bary_tol)
+        rcs_hat = analysis(μt_hat, M, Q, N=analysis_steps, tol=analysis_tol)
+        re_hat = norm(coords - rcs_hat) / norm(coords)
+        
+        #return (M, coords, μt, μt_hat, rcs, rcs_hat, re, re_hat)
+        return ([re; re_hat], μt, μt_hat)
+    end
+
+    errors = zeros(n_samples, 2)
+    geodesic_outputs = zeros(n_samples,2)
+    barycentric_outputs = zeros(n_samples,2)
+    Threads.@threads for i in 1:n_samples
+        outs = generate_sample(synth_steps=N, synth_tol=tol)
+        errors[i,:] = outs[1]
+        geodesic_outputs[i,:] = outs[2]
+        barycentric_outputs[i,:] = outs[3]
+    end
+
+    @save "2pt_outs.jld2" errors geodesic_outputs barycentric_outputs
+
+    return errors, geodesic_outputs, barycentric_outputs
+	
+end
+
+
+function barycenter_on_triangle(;
+                             synth_steps=128, synth_tol=1e-8,
+                             maxiters=1000, bary_tol=1e-10, h=1.0)
+    Q, sstate = triangle_markov_chain()
+    V = size(Q,1)
+    μ1 = zeros(V)
+    μ2 = zeros(V)
+    μ3 = zeros(V)
+    μ1[1] = 1/sstate[1]
+    μ2[2] = 1/sstate[2]
+    μ3[3] = 1/sstate[3]
+    M = hcat(μ1, μ2, μ3)
+
+    weights = [1/3; 1/6; 1/2;]
+    bar, _, _ = barycenter(M, weights, Q,
+                              geodesic_tol=synth_tol, geodesic_steps=synth_steps,
+                              maxiters=maxiters, tol=bary_tol, h=h)
+
+    return bar
+
 end

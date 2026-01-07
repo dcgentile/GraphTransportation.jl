@@ -103,3 +103,12 @@ function hypercube_markov_chain()
     return (Q, sstate)
 	
 end
+
+function grid_markov_chain(n)
+    E = Tuple{Int,Int}[]
+    for i in 1:n^2
+        i % n != 0 && (push!(E, (i, i+1)); push!(E, (i+1, i)))
+        i <= n*(n-1) && (push!(E, (i, i+n)); push!(E, (i+n, i)))
+    end
+    return markov_chain_from_edge_list(E)
+end

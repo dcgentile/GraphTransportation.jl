@@ -21,21 +21,6 @@ function markov_chain_from_edge_list(E)
 	
 end
 
-function kernel_from_adjacency(adj)
-    N, _ = size(adj)
-    A = sparse(adj)
-    nedges = nnz(A)
-    degree_vector = A * ones(N)
-    sstate = degree_vector / nedges
-    Q = zeros(size(A))
-    for i = 1:N, j = 1:N
-        if A[i,j] !=0 
-            Q[i,j] = 1/ (sstate[i]*nedges)
-        end
-    end
-    return Q, sstate
-end
-
 
 # check that a vector μ is a probability density w.r.t the steady state π
 function is_distribution(μ, π)
