@@ -54,17 +54,17 @@ function barycenter(M, weights, Q;
     println("Initializing gradient descent with $(ν)")
     ν_next = copy(ν)
 
-    norm_diffs = []
-    variances = []
+    norm_diffs = zeros(maxiters)
+    variances = zeros(maxiters)
 
     for k =1:maxiters
 
         δJ, variance = step_direction(ν, M, weights, Q, sstate=sstate, tol=geodesic_tol, n_steps=geodesic_steps)
-        append!(variances, variance)
+        variances[k] = variance
         ν_next = ν .- h * graph_divergence(Q, metric_tensor(ν) .* δJ)
 
         norm_diff = norm(ν_next - ν)
-        append!(norm_diffs, norm_diff)
+        norm_diffs[k] = norm_diff
 
         if norm_diff < tol
             println("finished in $(k) iterations")
@@ -87,7 +87,7 @@ Description of the function.
 
 #TODO
 """
-function analysis(ν, M, Q; N=32, tol=1e-10)
+function analysis(ν, M, Q; N=100, tol=1e-10)
     p = size(M, 2)
 
     # compute the tangent vectors of the geodesics from the target measure to each reference
