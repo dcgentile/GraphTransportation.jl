@@ -20,7 +20,7 @@ function experiment(;
     ρ1 = random_measure()
     M = cat(ρ0, ρ1, dims=2)
     N = 100
-    geovec, _ = BBD(Q, ρ0, ρ1, N=N)
+    geovec = discrete_transport(Q, ρ0, ρ1, N=N)
     coords = [[1 - i/N; i/N] for i=1:N-1]
     barys = [barycenter(M, coord, Q, maxiters=maxiters, tol=tol, h=h, geodesic_tol=geo_tol, geodesic_steps=geo_steps)[1] for coord in coords]
     norm_diffs = [norm(geovec.vector.ρ[i + 1,:] - barys[i]) / norm(geovec.vector.ρ[i+ 1,:]) for i=1:N-1]
@@ -45,7 +45,7 @@ function experiment_randomized(;
         ρ0 = random_measure()
         ρ1 = random_measure()
         M = cat(ρ0, ρ1, dims=2)
-        geovec, _ = BBD(Q, ρ0, ρ1, N=N)
+        geovec = discrete_transport(Q, ρ0, ρ1, N=N)
         t = rand(1:N)
         coords = [1 - t/N; t/N]
         bary, _, _ = barycenter(M, coords, Q, maxiters=maxiters, tol=tol, h=h, geodesic_tol=geo_tol, geodesic_steps=geo_steps)

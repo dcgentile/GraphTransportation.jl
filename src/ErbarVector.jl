@@ -52,15 +52,25 @@ struct ErbarCache
 
     function ErbarCache(
         Q, μ, ν, N;
-        #gpu=false
     )
-        V, _ = size(Q)
-        S = sparse(Q)
-        E = nnz(S)
-        π = zeros(V)
-        for i in 1:V
-            π[i] = nnz(S[i,:]) / E
+        #V, _ = size(Q)
+        #S = sparse(Q)
+        #E = nnz(S)
+        #π = zeros(V)
+        #for i in 1:V
+            #π[i] = nnz(S[i,:]) / E
+        #end
+
+        function stationary(Q)
+            n = size(Q, 1)
+            A = [Q' - I; ones(1, n)]
+            b = [zeros(n); 1.0]
+            v = A \ b
+            return v / sum(v)
         end
+
+        π = stationary(Q)
+        
         try
             @assert μ' * π ≈ 1
         catch error
@@ -71,26 +81,12 @@ struct ErbarCache
         catch error
 		    println("$(ν) is not a density wrt to $(π), we have ν ⋅ π = $(ν ⋅ π)")
         end
-	
-
-
 
         # form the linear systems we'll be solving in each step
         ceh_sys = form_ceh_system(Q, N)
-        #avg_sys = factorize(form_avg_system(N))
         avg_sys = form_avg_system(N)
 
-        #gpu ? new(
-            #CuArray(Q),
-            #CuArray(μ),
-            #CuArray(ν),
-            #CuArray(π),
-            #N,
-            #CuArray(avg_mat),
-            #CuArray(ceh_sys),
-            #CuArray(avg_sys)) :
-        new(S, μ, ν, π, N, ceh_sys, avg_sys)
-#
+        new(sparse(Q), μ, ν, π, N, ceh_sys, avg_sys)
     end
 end
 
@@ -107,9 +103,8 @@ mutable struct ErbarBundle
 
     function ErbarBundle(
         Q::AbstractMatrix, μ::AbstractVector, ν::AbstractVector, N::Int;
-        #gpu=false
     )
-        cache = ErbarCache(Q, μ, ν, N)#; gpu=gpu)
+        cache = ErbarCache(Q, μ, ν, N)
 
         #### INITIALIZE VECTOR COMPONENTS
         V, _ = size(Q)
@@ -125,14 +120,6 @@ mutable struct ErbarBundle
         ρ_avg = zeros(N,V)
         q = zeros(N,V)
 
-        #vector = gpu ? ErbarVector(
-            #CuArray(ρ),
-            #CuArray(m),
-            #CuArray(θ),
-            #CuArray(ρ_minus),
-            #CuArray(ρ_plus),
-            #CuArray(ρ_avg),
-            #CuArray(q)) : ErbarVector(ρ, m ,θ, ρ_minus, ρ_plus, ρ_avg, q)
         vector = ErbarVector(ρ, m ,θ, ρ_minus, ρ_plus, ρ_avg, q)
         new(cache, vector)
 
@@ -144,9 +131,8 @@ mutable struct ErbarBundle
         μ::AbstractVector,
         ν::AbstractVector,
         N::Int;
-        #gpu=false
     )
-        cache = ErbarCache(Q, steady_state, μ, ν, N)#; gpu=gpu)
+        cache = ErbarCache(Q, steady_state, μ, ν, N)
 
         #### INITIALIZE VECTOR COMPONENTS
         V, _ = size(Q)
@@ -161,15 +147,6 @@ mutable struct ErbarBundle
         ρ_plus = zeros(N, V, V)
         ρ_avg = zeros(N,V)
         q = zeros(N,V)
-
-        #vector = gpu ? ErbarVector(
-            #CuArray(ρ),
-            #CuArray(m),
-            #CuArray(θ),
-            #CuArray(ρ_minus),
-            #CuArray(ρ_plus),
-            #CuArray(ρ_avg),
-            #CuArray(q)) : ErbarVector(ρ, m ,θ, ρ_minus, ρ_plus, ρ_avg, q)
         vector = ErbarVector(ρ, m ,θ, ρ_minus, ρ_plus, ρ_avg, q)
         new(cache, vector)
 
@@ -249,7 +226,6 @@ end
 
 # compute the action of the discrete curve encoded in a EB u
 # cf. eqn (18) in Erbar et al 2020
-# TODO: clean this up so that it doesn't work via scalar indexing
 """
     action(u::ErbarBundle)
 
