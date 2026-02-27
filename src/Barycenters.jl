@@ -63,7 +63,7 @@ function barycenter(M, weights, Q;
         δJ, variance = step_direction(ν, M, weights, Q,
                                       tol=geodesic_tol, n_steps=geodesic_steps)
         variances[k] = variance
-        ν_next = ν .- h * graph_divergence(Q, metric_tensor(ν) .* δJ)
+        ν_next = ν .- (1 + 0.1 * randn())*h * graph_divergence(Q, metric_tensor(ν) .* δJ)
 
         norm_diff = norm((ν_next - ν) .* root_steady_state)
         norm_diffs[k] = norm_diff
