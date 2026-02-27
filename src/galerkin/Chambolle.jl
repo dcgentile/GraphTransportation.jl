@@ -57,7 +57,7 @@ function chambolle_pock_routine(
         combine!(d, a_next, a, 1.0, -1.0)
         normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
         if normdiff < tol
-            return (a_next, b_next)
+            return a_next
         end
         λ = 1 / √(1 + 2 * τ)
         τ *= λ
@@ -69,13 +69,13 @@ function chambolle_pock_routine(
         assign!(a_bar, a_bar_next)
     end
     @warn "Chambolle Pock did not converge in $(maxiters) steps. Last recorded norm difference: $(normdiff)"
-    return (a, b)
+    return a
 end
 
 
 # a more memory efficient version of ChamPock
 """
-    chambolle_pock(a::ErbarBundle;maxiters=2^16, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
+    chambolle_pock(a::ErbarBundle;maxiters=2^16, verbose=false, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
 
 Description of the function.
 

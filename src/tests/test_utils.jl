@@ -1,5 +1,5 @@
 using Test
-include("../utils.jl")
+include("../GraphCalculus.jl")
 ###########################################
 # test graph_gradient
 ###########################################

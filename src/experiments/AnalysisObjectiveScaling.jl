@@ -20,7 +20,7 @@ function cube_analysis(n;N=32,tol=1e-9, σ=0.5, τ=0.5)
     M = hcat(μ, ν)
 
     coords = Dict()
-    γ, d = BBD(Q, μ, ν, N=N, tol=tol, σ=σ, τ=τ)
+    γ = discrete_transport(Q, μ, ν, N=N, tol=tol, σ=σ, τ=τ)
 
     for i=2:n
         targ = γ.vector.ρ[end ÷ i + 1,:]
@@ -72,9 +72,9 @@ function objective_scaling(Q, μ, ν, l, u, filename)
 
     for k in l:u
         N = 2^k
-        target = BBD(Q, μ, ν, N=N)[1].vector.ρ[end ÷ 2 + 1,:]
+        target = discrete_transport(Q, μ, ν, N=N).vector.ρ[end ÷ 2 + 1,:]
 
-        tangent_vectors = [BBD(Q, target, M[:,i], N=N, tol=1e-10)[1].vector.m[1,:,:] for i=1:p]
+        tangent_vectors = [discrete_transport(Q, target, M[:,i], N=N, tol=1e-10).vector.m[1,:,:] for i=1:p]
         append!(gradient_norms, norm(0.5*(tangent_vectors[1] + 0.5*tangent_vectors[2])))
         g = metric_tensor(target)
         

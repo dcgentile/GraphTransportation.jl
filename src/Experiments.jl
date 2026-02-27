@@ -48,12 +48,12 @@ function midpoint_distance()
     dists_ν = []
 
     for k in 3:8
-        c, d = BBD(Q, μ, ν, N=2^k)
+        c = discrete_transport(Q, μ, ν, N=2^k)
         midpoint = c.vector.ρ[end ÷ 2 + 1, :]
-        c_μ, d_μ = BBD(Q, midpoint, μ, N=2^k)
-        c_ν, d_ν = BBD(Q, midpoint, ν, N=2^k)
-        append!(dists_μ, d_μ)
-        append!(dists_ν, d_ν)
+        c_μ = discrete_transport(Q, midpoint, μ, N=2^k)
+        c_ν = discrete_transport(Q, midpoint, ν, N=2^k)
+        append!(dists_μ, sqrt(action(c_μ)))
+        append!(dists_ν, sqrt(action(c_ν)))
     end
 
     return (dists_μ, dists_ν)
@@ -71,10 +71,10 @@ function cube_midpoint_vectors()
     norms = []
     
     for k in 3:11
-        c, d = BBD(Q, μ, ν, N=2^k)
+        c = discrete_transport(Q, μ, ν, N=2^k)
         mp = c.vector.ρ[end ÷ 2 + 1, :]
-        cb, _ = BBD(Q, mp, μ, N=2^k)
-        cf, _ = BBD(Q, mp, ν, N=2^k)
+        cb = discrete_transport(Q, mp, μ, N=2^k)
+        cf = discrete_transport(Q, mp, ν, N=2^k)
         tv = 0.5 * (cb.vector.m[1,:,:] + cf.vector.m[1,:,:])
         stat = norm(tv)
         append!(norms, stat)
@@ -104,9 +104,9 @@ function linear_barycenter_experiment(;n_steps=100, tol=1e-10)
     p = size(M, 2)
     variance = 0
     for i=1:p
-        gamma, dist =  BBD(Qusa, ν, M[:, i], N = n_steps, tol=tol)
+        gamma =  discrete_transport(Qusa, ν, M[:, i], N = n_steps, tol=tol)
         tangent_vector = tangent_vector + coords[i] * (gamma.vector.m[1,:,:])
-        variance = variance + 0.5 * coords[i] * dist^2
+        variance = variance + 0.5 * coords[i] * action(gamma)
     end
 
     linearized_barycenter = ν .- graph_divergence(Qusa, metric_tensor(ν) .* tangent_vector)
@@ -203,7 +203,7 @@ function two_point_barycenter_gd_experiment(;n_samples=1000, N=100, tol=1e-10)
         coord_index = rand(1:synth_steps-1)
         coords = [1 - coord_index / synth_steps; coord_index/synth_steps]
         
-        g, _ = BBD(Q, μ0, μ1, N=synth_steps, tol=synth_tol)
+        g = discrete_transport(Q, μ0, μ1, N=synth_steps, tol=synth_tol)
         
         μt = g.vector.ρ[coord_index + 1,:]
         rcs = analysis(μt, M, Q, N=analysis_steps, tol=analysis_tol)

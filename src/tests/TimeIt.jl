@@ -2,7 +2,8 @@ using BenchmarkTools
 using LinearAlgebra
 using SparseArrays
 using BlockBandedMatrices
-include("../utils.jl")
+include("../MarkovChains.jl")
+include("../GraphCalculus.jl")
 include("../galerkin/ContinuityEnforcer.jl")
 include("../galerkin/ProximalEqualityIndicator.jl")
 include("../galerkin/ProximalAvgIndicator.jl")

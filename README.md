@@ -28,7 +28,13 @@ b = [0.; 2];
 N = 100;
 
 # call the Benamou Brenier Distance (BBD) function
-v, dist = BBD(Q, a, b, N)
+v = discrete_transport(Q, a, b, N=N)
+dist = sqrt(action(v))
+
+M = cat(a,b,dims=2)
+coordinates = [0.75;0.25]
+bary = barycenter(M, coordinates, Q)
+recovered_coordinates = analysis(bar, M, Q)
 ```
 
 The variable v contains the vector information associated to the geodesic and all of its slack variables, while dist is the approximate Benamou-Brenier distance between the measures (i.e., the action of the computed geodesic, which is stored in v).

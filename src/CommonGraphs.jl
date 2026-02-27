@@ -1,4 +1,4 @@
-include("utils.jl")
+include("MarkovChains.jl")
 
 function cube_markov_chain()
     edge_list = [
