@@ -125,7 +125,7 @@ function chambolle_pock(
     d = ErbarBundle(Q, μ, ν, N)
     return chambolle_pock_routine(
         a, b, a_bar, a_next, b_next, a_bar_next, c, d,
-        maxiters=maxiters, tol=tol, σ=σ, τ=τ, λ=λ)
+        maxiters=maxiters, tol=tol, σ=σ, τ=τ, λ=λ, show_progress=show_progress)
 end
 
 
@@ -156,7 +156,7 @@ function chambolle_pock(
     d = ErbarBundle(Q, steady_state, μ, ν, N)
     return chambolle_pock_routine(
         a, b, a_bar, a_next, b_next, a_bar_next, c, d,
-        maxiters=maxiters, tol=tol, σ=σ, τ=τ, λ=λ)
+        maxiters=maxiters, tol=tol, σ=σ, τ=τ, λ=λ, show_progress=show_progress)
 end
 
 """

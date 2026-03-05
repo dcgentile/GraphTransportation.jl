@@ -47,9 +47,8 @@ geodesic_steps: integer, determines how many steps are used for computing the ge
 function barycenter(M, weights, Q;
                     h=1., maxiters=100, tol=1e-8,
                     geodesic_tol=1e-10, geodesic_steps=100,
-                    return_stats=false)
-
-    ν = M[:,1]
+                    return_stats=false, initialization_index=1)
+    ν = M[:,initialization_index]
     println("Initializing gradient descent with $(ν)")
     ν_next = copy(ν)
 
@@ -73,7 +72,7 @@ function barycenter(M, weights, Q;
             break
         else 
             println("iteration $(k): normdiff=$(norm_diff)")
-            println("measure: $(ν_next)")
+            #println("measure: $(ν_next)")
             ν = ν_next
         end
 

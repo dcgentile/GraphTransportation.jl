@@ -23,18 +23,16 @@ function markov_chain_from_adjacency_matrix(A::Matrix)
     Q = A ./ d
 
     @assert Q' * π == π
+
     return (Q, π)
 end
 
 function markov_chain_from_weight_matrix(W::Matrix)
-    Q = similar(W)
-    V, = size(W)
-
-    d = W * ones(V)
-    Q = W ./ d
+    d = vec(sum(W, dims=2))
+    Q = W ./ reshape(d, : ,1)
     π = d / sum(d)
 
-    @assert Q' * π == π
+    @assert Q' * π ≈ π
 
     return (Q, π)
 end

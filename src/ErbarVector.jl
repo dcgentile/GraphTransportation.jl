@@ -33,12 +33,12 @@ struct ErbarCache
         try
             @assert μ' * π ≈ 1
         catch error
-		    println("$(μ) is not a density wrt to $(π), we have μ ⋅ π = $(μ ⋅ π)")
+		    @warn "μ is not a density wrt to π, μ ⋅ π = $(μ ⋅ π)"
         end
         try
             @assert ν' * π ≈ 1
         catch error
-		    println("$(ν) is not a density wrt to $(π), we have ν ⋅ π = $(ν ⋅ π)")
+		    @warn "ν is not a density wrt to π, ν ⋅ π = $(ν ⋅ π)"
         end
 
         # form the linear systems we'll be solving in each step
@@ -74,12 +74,12 @@ struct ErbarCache
         try
             @assert μ' * π ≈ 1
         catch error
-		    println("$(μ) is not a density wrt to $(π), we have μ ⋅ π = $(μ ⋅ π)")
+		    @warn "μ is not a density wrt to π, we have μ ⋅ π = $(μ ⋅ π)"
         end
         try
             @assert ν' * π ≈ 1
         catch error
-		    println("$(ν) is not a density wrt to $(π), we have ν ⋅ π = $(ν ⋅ π)")
+		    @warn "ν is not a density wrt to π, we have ν ⋅ π = $(ν ⋅ π)"
         end
 
         # form the linear systems we'll be solving in each step
