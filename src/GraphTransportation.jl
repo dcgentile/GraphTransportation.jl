@@ -39,6 +39,6 @@ include("EarthMover.jl")
 include("Barycenters.jl")
 
 # expose functionality for computing geodesics
-export discrete_transport, transport_cost, action, barycenter, analysis
+export discrete_transport, transport_cost, action, barycenter, iterated_barycenter, analysis
 
 end

@@ -12,16 +12,19 @@ tol: positive float, convergence threshold
 n_steps: integer, determines how many steps are used for computing the geodesics which yield the tangent vector
 
 """
-function step_direction(ν, M, weights, Q; tol=1e-10, n_steps=100)
+function step_direction(ν, M, weights, Q; tol=1e-10, n_steps=100, prev_geodesics=nothing)
     tangent_vector = zeros(size(Q))
     p = size(M, 2)
     variance = 0
-    for i=1:p
-        gamma = discrete_transport(Q, ν, M[:, i], N = n_steps, tol=tol) 
-        tangent_vector = tangent_vector + weights[i] * (gamma.vector.m[1,:,:])
-        variance = variance + 0.5 * weights[i] * action(gamma)^2
+    geodesics = Vector{Any}(undef, p)
+    for i = 1:p
+        init  = isnothing(prev_geodesics) ? nothing : prev_geodesics[i]
+        gamma = discrete_transport(Q, ν, M[:, i], N=n_steps, tol=tol, initialization=init)
+        tangent_vector += weights[i] * gamma.vector.m[1,:,:]
+        variance       += 0.5 * weights[i] * action(gamma)^2
+        geodesics[i]    = gamma
     end
-    return tangent_vector, variance
+    return tangent_vector, variance, geodesics
 end
 
 
@@ -46,8 +49,9 @@ geodesic_steps: integer, determines how many steps are used for computing the ge
 function barycenter(M, weights, Q;
                     h=1., maxiters=100, tol=1e-8,
                     geodesic_tol=1e-10, geodesic_steps=100,
-                    return_stats=false, initialization_index=1, verbose=true)
-    ν = M[:,initialization_index]
+                    return_stats=false, initialization_index=1,
+                    initialization=nothing, geodesic_warmstart=true, verbose=true)
+    ν = isnothing(initialization) ? M[:,initialization_index] : copy(initialization)
     ν_next = copy(ν)
 
     root_steady_state = sqrt.(stationary_from_transition(Q))
@@ -57,10 +61,14 @@ function barycenter(M, weights, Q;
 
     prog = verbose ? Progress(maxiters; desc="WGD ", showspeed=true, color=:cyan) : nothing
 
+    prev_geodesics = nothing
+
     for k = 1:maxiters
 
-        δJ, variance = step_direction(ν, M, weights, Q,
-                                      tol=geodesic_tol, n_steps=geodesic_steps)
+        δJ, variance, geodesics = step_direction(ν, M, weights, Q,
+                                      tol=geodesic_tol, n_steps=geodesic_steps,
+                                      prev_geodesics=geodesic_warmstart ? prev_geodesics : nothing)
+        prev_geodesics = geodesics
         variances[k] = variance
         ν_next = ν .- (1 + 0.1 * randn())*h * graph_divergence(Q, metric_tensor(ν) .* δJ)
 
@@ -83,6 +91,30 @@ function barycenter(M, weights, Q;
 
     end
     return return_stats ? (ν_next, norm_diffs, variances) : ν_next
+end
+
+
+"""
+    iterated_barycenter(M, weights, Q; steps=[2,4,8,16,32], kwargs...)
+
+Warm-started barycenter computation. Runs `barycenter` repeatedly with the
+geodesic step counts in `steps` (doubling schedule by default), using each
+stage's output as the initialization for the next. The rationale is that
+starting gradient descent near the minimum means the expensive high-accuracy
+geodesic stages converge in far fewer iterations.
+
+All additional kwargs are forwarded to `barycenter` at every stage.
+"""
+function iterated_barycenter(M, weights, Q;
+                             steps=[2, 4, 8, 16, 32],
+                             kwargs...)
+    ν = nothing
+    for s in steps
+        verbose = get(kwargs, :verbose, true)
+        verbose && println("  → geodesic_steps = $s")
+        ν = barycenter(M, weights, Q; geodesic_steps=s, initialization=ν, kwargs...)
+    end
+    return ν
 end
 
 
