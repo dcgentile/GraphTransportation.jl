@@ -26,9 +26,17 @@ function discrete_transport(
     maxiters=2^16,
     tol=1e-10,
     progress=false,
+    initialization=nothing,
 )
-
-    a = chambolle_pock(Q, μ, ν, N, maxiters=maxiters, σ=σ, τ=τ, tol=tol, show_progress=progress)
+    if isnothing(initialization)
+        a = chambolle_pock(Q, μ, ν, N, maxiters=maxiters, σ=σ, τ=τ, tol=tol, show_progress=progress)
+    else
+        # Rebind the previous result to the new boundary conditions (μ, ν),
+        # reusing the cached linear systems since they only depend on Q and N.
+        new_cache = ErbarCache(initialization.cache, μ, ν)
+        warm = ErbarBundle(new_cache, copy(initialization.vector))
+        a = chambolle_pock(warm, maxiters=maxiters, σ=σ, τ=τ, tol=tol, show_progress=progress)
+    end
     return a
 end
 

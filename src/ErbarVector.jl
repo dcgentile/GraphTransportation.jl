@@ -88,6 +88,13 @@ struct ErbarCache
 
         new(sparse(Q), μ, ν, π, N, ceh_sys, avg_sys)
     end
+
+    # Cheap constructor for warm-starting: reuse ceh_sys and avg_sys from an
+    # existing cache (they depend only on Q and N, not on μ or ν) and only
+    # update the boundary conditions.
+    function ErbarCache(existing::ErbarCache, μ_new::AbstractVector, ν_new::AbstractVector)
+        new(existing.Q, μ_new, ν_new, existing.π, existing.N, existing.ceh_sys, existing.avg_sys)
+    end
 end
 
 # An ErbarBundle is an ErbarCache together with an ErbarVector.
@@ -154,7 +161,7 @@ mutable struct ErbarBundle
 end
 
 
-Base.copy(a::ErbarCache) = ErbarCache(a.Q, a.μ, a.ν, a.N)
+Base.copy(a::ErbarCache) = ErbarCache(a, a.μ, a.ν)
 Base.copy(a::ErbarVector) = ErbarVector(copy(a.ρ), copy(a.m), copy(a.θ), copy(a.ρ_minus), copy(a.ρ_plus), copy(a.ρ_avg), copy(a.q))
 Base.copy(a::ErbarBundle) = ErbarBundle(copy(a.cache), copy(a.vector))
 
