@@ -10,7 +10,7 @@ function markov_chain_from_edge_list(E)
 
     Q, π = markov_chain_from_weight_matrix(A)
 
-    @assert Q' * π == π
+    @assert Q' * π ≈ π
     return (Q, π)
 end
 
@@ -22,7 +22,7 @@ function markov_chain_from_adjacency_matrix(A::Matrix)
     π = d / E
     Q = A ./ d
 
-    @assert Q' * π == π
+    @assert Q' * π ≈ π
 
     return (Q, π)
 end

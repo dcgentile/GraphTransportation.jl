@@ -21,7 +21,6 @@ function step_direction(ν, M, weights, Q; tol=1e-10, n_steps=100)
         tangent_vector = tangent_vector + weights[i] * (gamma.vector.m[1,:,:])
         variance = variance + 0.5 * weights[i] * action(gamma)^2
     end
-    println(variance)
     return tangent_vector, variance
 end
 
@@ -47,17 +46,18 @@ geodesic_steps: integer, determines how many steps are used for computing the ge
 function barycenter(M, weights, Q;
                     h=1., maxiters=100, tol=1e-8,
                     geodesic_tol=1e-10, geodesic_steps=100,
-                    return_stats=false, initialization_index=1)
+                    return_stats=false, initialization_index=1, verbose=true)
     ν = M[:,initialization_index]
-    println("Initializing gradient descent with $(ν)")
     ν_next = copy(ν)
 
     root_steady_state = sqrt.(stationary_from_transition(Q))
-    
+
     norm_diffs = zeros(maxiters)
     variances = zeros(maxiters)
 
-    for k =1:maxiters
+    prog = verbose ? Progress(maxiters; desc="WGD ", showspeed=true, color=:cyan) : nothing
+
+    for k = 1:maxiters
 
         δJ, variance = step_direction(ν, M, weights, Q,
                                       tol=geodesic_tol, n_steps=geodesic_steps)
@@ -67,12 +67,17 @@ function barycenter(M, weights, Q;
         norm_diff = norm((ν_next - ν) .* root_steady_state)
         norm_diffs[k] = norm_diff
 
+        if verbose
+            ProgressMeter.next!(prog; showvalues=[
+                ("‖Δν‖", @sprintf("%.4e", norm_diff)),
+                ("var",  @sprintf("%.4f", variance)),
+            ])
+        end
+
         if norm_diff < tol
-            println("finished in $(k) iterations")
+            verbose && ProgressMeter.finish!(prog; desc="WGD (converged) ")
             break
-        else 
-            println("iteration $(k): normdiff=$(norm_diff)")
-            #println("measure: $(ν_next)")
+        else
             ν = ν_next
         end
 
@@ -88,7 +93,7 @@ Description of the function.
 
 #TODO
 """
-function analysis(ν, M, Q; N=100, tol=1e-10)
+function analysis(ν, M, Q; N=100, tol=1e-10, compute_condition=false, return_system=false)
     p = size(M, 2)
 
     # compute the tangent vectors of the geodesics from the target measure to each reference
@@ -101,8 +106,11 @@ function analysis(ν, M, Q; N=100, tol=1e-10)
         A[i,j] = A[j,i] = sum(tangent_vectors[i] .* tangent_vectors[j] .* g)
     end
 
-    println(A)
-
+    if compute_condition
+        e = abs.(eigvals(A))
+        κ = maximum(e) / minimum(e)
+        println("Estimated condition number of analysis matrix: $(κ)")
+    end
     # solve the QP
     n = size(A, 1)
     x = Variable(n)
@@ -112,5 +120,9 @@ function analysis(ν, M, Q; N=100, tol=1e-10)
     problem.constraints = vcat(problem.constraints, [sum(x) == 1])
     
     Convex.solve!(problem, SCS.Optimizer)
+    if return_system
+        return (x.value, A)
+    end
+
     x.value  # optimal solution
 end

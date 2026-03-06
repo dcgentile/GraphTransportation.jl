@@ -2,6 +2,7 @@ module GraphTransportation
 
 # dependencies
 using SuiteSparse
+using Printf
 using SparseArrays
 using LinearAlgebra
 using BlockBandedMatrices
