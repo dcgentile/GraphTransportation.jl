@@ -94,25 +94,25 @@ function project_by_newton(x,y,z; tolerance=1e-6, safety=false)
 end
 
 function find_q(p)
-    # Objective function  
+    # Objective function
     f = q -> begin
         w = [√q, 1/√q, 1]
         n = [-1/(2√q), -√q/2, 1]
         dot(p, w × n)
     end
-    
+
     # Newton with transformation q = exp(t)
     g = t -> f(exp(t))
     dg = t -> ForwardDiff.derivative(g, t)
-    
+
     # Try different initial guesses
     initial_guesses = [0.0, 1.0, -1.0, 2.0, -2.0, 0.5, -0.5, 3.0, -3.0]
-    
+
     for (i, t₀) in enumerate(initial_guesses)
         try
             t_sol = find_zero((g, dg), t₀, Roots.Newton(), atol=1e-10, maxiters=50)
             q = exp(t_sol)
-            
+
             # Verify solution quality
             if abs(f(q)) < 1e-9
                 #i > 1 && @info "Converged with initial guess #$i (t₀=$t₀)"
@@ -122,7 +122,7 @@ function find_q(p)
             continue  # Try next initial guess
         end
     end
-    
+
     # If preset guesses fail, try random initial guesses
     i = 0
     for _ in 1:10000
@@ -131,7 +131,7 @@ function find_q(p)
         try
             t_sol = find_zero((g, dg), t₀, Roots.Newton(), atol=1e-10, maxiters=50)
             q = exp(t_sol)
-            
+
             if abs(f(q)) < 1e-9
                 #@info "Converged with random initial guess (t₀=$t₀)"
                 return q
@@ -142,6 +142,101 @@ function find_q(p)
     end
 
     println(i)
-    
+
     error("Failed to find root after all attempts")
+end
+
+# ── Fast alternative: analytic scalar Newton, zero allocations ────────────────
+
+"""
+    find_q_fast(x, y, z) -> q
+
+Find q > 0 such that w(q) = [√q, 1/√q, 1] points in the direction of the
+projection of (x, y, z) onto the boundary of K.
+
+The projection optimality condition dot(p − τw, dw/dt) = 0 (t = √q) expands,
+after multiplying through by 2t², to the quartic
+
+    f(t) = z(1 − t⁴) + t((x − 2y)t² + (2x − y)) = 0
+
+which is solved by a Newton-bisection hybrid with analytic derivative. A bracket
+[lo, hi] is established first (f(lo) > 0, f(hi) < 0), then Newton steps are
+accepted when they stay inside the bracket and bisection is used otherwise.
+No vector allocations, no closures, no external solver library.
+"""
+function find_q_fast(x, y, z)
+    f(t)  = z*(1 - t^4) + t*((x - 2*y)*t^2 + (2*x - y))
+    fp(t) = -4*z*t^3 + 3*(x - 2*y)*t^2 + (2*x - y)
+
+    # Establish lo with f(lo) > 0.
+    # f(0⁺) = z > 0 always (proj_K_fast only calls us when z > tolerance),
+    # so halving from sqrt(z) converges in a few steps regardless of (x,y).
+    lo = sqrt(z)
+    for _ in 1:60
+        f(lo) > 0 && break
+        lo /= 2
+    end
+
+    # Establish hi with f(hi) < 0.
+    hi = max(1.0, (x > 0 && y > 0) ? sqrt(x / y) : 1.0)
+    for _ in 1:60
+        f(hi) < 0 && break
+        hi *= 2
+    end
+
+    # If either bracket end is not established (e.g., NaN propagation when hi
+    # overflows), fall back to the robust ForwardDiff/Roots solver.
+    if !(f(lo) > 0) || !(f(hi) < 0)
+        return find_q([x, y, z])
+    end
+
+    # Newton-bisection: use Newton step when it stays inside the bracket,
+    # otherwise fall back to bisection. Guaranteed to converge.
+    t = clamp((x > 0 && y > 0) ? (x / y)^0.25 : 1.0, lo, hi)
+    for _ in 1:80
+        ft = f(t)
+        abs(ft) < 1e-10 && return t^2
+        ft > 0 ? (lo = t) : (hi = t)        # tighten bracket
+        dft = fp(t)
+        t_n = abs(dft) > 1e-14 ? t - ft/dft : (lo + hi)/2
+        t   = (lo < t_n < hi) ? t_n : (lo + hi)/2
+        hi - lo < 1e-12 && return t^2
+    end
+
+    abs(f(t)) < 1e-9 && return t^2
+    return find_q([x, y, z])   # final fallback for pathological inputs
+end
+
+"""
+    project_by_newton_fast(x, y, z) -> (a, b, c)
+
+Allocation-free projection of (x, y, z) onto the boundary of K.
+Returns a plain tuple of scalars rather than a Vector.
+"""
+function project_by_newton_fast(x, y, z)
+    q  = find_q_fast(x, y, z)
+    sq = sqrt(q)
+    w1, w2 = sq, 1/sq
+    τ  = (x*w1 + y*w2 + z) / (w1^2 + w2^2 + 1)
+    return (τ*w1, τ*w2, τ)
+end
+
+function proj_K_fast(x, y, z, tolerance=1e-6)
+    gm = sqrt(max(x, 0.0) * max(y, 0.0))
+    if 0 ≤ z && z < gm
+        return (x, y, z)
+    elseif z ≤ tolerance
+        return (max(x, 0.0), max(y, 0.0), 0.0)
+    elseif x ≤ 0 && y ≤ 0 && super_differential_inclusion(-x / z, -y / z)
+        return (0.0, 0.0, 0.0)
+    else
+        return project_by_newton_fast(x, y, z)
+    end
+end
+
+function project_K_fast!(ρ_m, ρ_p, θ)
+    @inbounds for idx in eachindex(θ)
+        ρ_m[idx], ρ_p[idx], θ[idx] = proj_K_fast(ρ_m[idx], ρ_p[idx], θ[idx])
+    end
+    return (ρ_m, ρ_p, θ)
 end

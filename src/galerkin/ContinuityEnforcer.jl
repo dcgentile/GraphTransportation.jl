@@ -57,10 +57,11 @@ function form_b(ρ_A, ρ_B, ρ, m, Q)
     m ∈ V_{e,h}^1 (i.e. a matrix of size (1/h) × n × n)
     """
     N = size(ρ, 1) - 1
+    V = size(Q, 1)
     h_inv = N
-    divm = similar(ρ[1:N,:])
+    divm = zeros(N, V)
     @inbounds for t in 1:N
-        divm[t,:] = graph_divergence(Q, m[t,:,:])
+        graph_divergence!(@view(divm[t,:]), Q, @view(m[t,:,:]))
     end
     ∂tρ = ρ[2:N+1,:] - ρ[1:N,:]
     ∂tρ[1,:] = ρ[2,:] - ρ_A
@@ -96,7 +97,7 @@ function proj_CE!(ρ, m, μ, ν, Q, A=nothing)
     ρ[N+1,:] .= ν
     # update m
     @inbounds for i in 1:N
-        m[i,:,:] .+= graph_gradient(Q,φ[i,:])
+        add_graph_gradient!(@view(m[i,:,:]), Q, @view(φ[i,:]))
     end
     return (ρ, m)
 end

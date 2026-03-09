@@ -43,11 +43,18 @@ end
 
 
 """
-    project_by_bisection(a,b; tol=1e-8, maxiters=2^16)
+    project_by_bisection(a, b; tol=1e-5, maxiters=2^16) -> (p, q)
 
-Description of the function.
+Project the point `(a, b)` onto the set `B = {(p, q) : p + 0.25·q² ≤ 0}` using
+bisection on the scalar optimality condition.
 
-#TODO
+Points already inside `B` are returned unchanged.  For exterior points the
+projection lies on the parabolic boundary `p = -0.25·q²`; the signed magnitude
+`|q|` is found by bracketing and bisecting the monotone residual function.
+
+This is kept as a reference implementation.  The production path uses
+`projection_by_newton`, which solves the same problem analytically via
+Cardano's formula and is allocation-free.
 """
 function project_by_bisection(a,b; tol=1e-5, maxiters=2^16)
     if a + 0.25 * b^2 ≤ 0
@@ -73,44 +80,44 @@ function project_by_bisection(a,b; tol=1e-5, maxiters=2^16)
 end
 
 """
-    projection_by_newton(x, y; tol=1e-8, maxiters=100)
+    projection_by_newton(x, y)
 
-Projects the point (x,y) onto the parabola {(p,q) : p + 0.25 * q^2 ≤ 0} using Newton's method.
+Projects the point (x,y) onto the set B = {(p,q) : p + 0.25*q^2 ≤ 0}.
 
-For points already inside the feasible region, returns the original point.
-For points outside, projects onto the boundary p + 0.25 * q^2 = 0.
+For points already inside B, returns the original point unchanged.
+For points outside, projects onto the boundary p + 0.25*q^2 = 0 by solving the
+stationarity condition, which reduces to the depressed cubic
 
-Arguments:
-- x, y: coordinates of the point to project
-- tol: convergence tolerance (default 1e-8)  
-- maxiters: maximum number of Newton iterations (default 100)
+    q³ + 4(2+x)q - 8y = 0.
+
+When the discriminant D = (4(2+x)/3)³ + (4y)² ≥ 0 there is one real root,
+solved directly via Cardano's formula. When D < 0 there are three real roots
+(trigonometric method); the one minimising the squared distance to (x,y) is chosen.
 
 Returns:
-- (p, q): projected point on the parabola
+- (p, q): projected point satisfying p = -0.25*q²
 """
-function projection_by_newton(x, y; tol=1e-5, maxiters=100, safe=false)
+function projection_by_newton(x, y)
     if x + 0.25 * y^2 ≤ 0
         return (x, y)
     end
-    q = y  # initial guess
-    
-    for _ in 1:maxiters
-        g = q - y + 0.5 * (x + 0.25 * q^2) * q
-        if abs(g) < tol
-            p = -0.25 * q^2
-            return (p, q)
-        end
-        
-        # g'(q) = 1 + 0.5*x + 0.375*q^2
-        g_prime = 1 + 0.5 * x + 0.375 * q^2
-        
-        if abs(g_prime) < 1e-14
-            error("Newton's method: derivative too small")
-        end
-        
-        q = q - g / g_prime
+
+    # Depressed cubic: q³ + a*q + b = 0
+    a = 4 * (2 + x)
+    b = -8 * y
+    D = (a / 3)^3 + (b / 2)^2
+
+    if D >= 0
+        sq = sqrt(D)
+        q  = cbrt(-b/2 + sq) + cbrt(-b/2 - sq)
+    else
+        # Three real roots via the trigonometric method; pick the closest projection
+        m     = 2 * sqrt(-a / 3)
+        φ     = acos(clamp(3*b / (a * m), -1.0, 1.0)) / 3
+        roots = (m * cos(φ), m * cos(φ - 2π/3), m * cos(φ + 2π/3))
+        q     = roots[argmin((-0.25*r^2 - x)^2 + (r - y)^2 for r in roots)]
     end
 
-    return project_by_bisection(x, y)
+    return (-0.25 * q^2, q)
 end
 

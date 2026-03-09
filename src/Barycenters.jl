@@ -54,7 +54,8 @@ function barycenter(M, weights, Q;
     ν = isnothing(initialization) ? M[:,initialization_index] : copy(initialization)
     ν_next = copy(ν)
 
-    root_steady_state = sqrt.(stationary_from_transition(Q))
+    steady_state = stationary_from_transition(Q)
+    root_steady_state = sqrt.(steady_state)
 
     norm_diffs = zeros(maxiters)
     variances = zeros(maxiters)
@@ -70,7 +71,18 @@ function barycenter(M, weights, Q;
                                       prev_geodesics=geodesic_warmstart ? prev_geodesics : nothing)
         prev_geodesics = geodesics
         variances[k] = variance
-        ν_next = ν .- (1 + 0.1 * randn())*h * graph_divergence(Q, metric_tensor(ν) .* δJ)
+
+        div_term = graph_divergence(Q, metric_tensor(ν) .* δJ)
+        ν_next = ν .- (1 + 0.1 * randn()) * h * div_term
+
+        n_halve = 0
+        while abs(dot(ν_next, steady_state) - 1) > 1e-8 || minimum(ν_next) < 0
+            n_halve += 1
+            n_halve > 3 && error("Step size reduction failed 3 times at iteration $k: " *
+                                 "ν_next is not a valid probability measure " *
+                                 "(⟨ν_next, u⟩ = $(dot(ν_next, steady_state)))")
+            ν_next = ν .- (h / 2^n_halve) * div_term
+        end
 
         norm_diff = norm((ν_next - ν) .* root_steady_state)
         norm_diffs[k] = norm_diff
@@ -119,11 +131,28 @@ end
 
 
 """
-    coordinates(ν, M, Q)
+    analysis(ν, M, Q; N=100, tol=1e-10, compute_condition=false,
+             return_system=false) -> weights
 
-Description of the function.
+Recover the barycentric coordinates of `ν` with respect to the reference
+measures in `M` (a `V × p` matrix whose columns are probability densities
+w.r.t. the stationary distribution of `Q`).
 
-#TODO
+The method proceeds in three steps:
+  1. For each reference measure `M[:,i]`, compute the geodesic from `ν` to
+     `M[:,i]` via `discrete_transport` and extract the initial tangent vector
+     `m[1,:,:]` (the logarithmic map at `ν`).
+  2. Assemble the `p × p` Gram matrix `A[i,j] = ⟨log_ν(M[:,i]),
+     log_ν(M[:,j])⟩_{g(ν)}` under the metric tensor `g(ν)`.
+  3. Solve the simplex-constrained quadratic programme `min_{w≥0, Σw=1} w'Aw`
+     using Convex.jl / SCS, which recovers the weights at the Wasserstein
+     barycenter.
+
+Optional keyword arguments:
+- `N`: number of time steps for each geodesic computation (default 100).
+- `tol`: convergence tolerance for each `discrete_transport` call.
+- `compute_condition`: if true, prints the condition number of `A`.
+- `return_system`: if true, returns `(weights, A)` instead of `weights` alone.
 """
 function analysis(ν, M, Q; N=100, tol=1e-10, compute_condition=false, return_system=false)
     p = size(M, 2)

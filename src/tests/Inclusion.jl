@@ -2,11 +2,15 @@
 #include("../ErbarVector.jl")
 
 """
-    is_in_ScriptK(ρ_min, ρ_pl, θ)
+    is_in_ScriptK(ρ_min, ρ_pl, θ, verbose=false) -> Bool
 
-Description of the function.
+Test whether the triple `(ρ_minus, ρ_plus, θ)` lies element-wise in the
+constraint set Script K = {(x, y, z) : 0 ≤ z ≤ geomean(x, y)}.
 
-#TODO
+Checks both `0 ≤ θ[idx]` and `θ[idx] ≤ geomean(ρ_minus[idx], ρ_plus[idx])`
+for every index, up to a numerical tolerance of 1e-14 on the upper bound.
+Returns `true` if all elements pass; prints diagnostic information and returns
+an exception object on the first failure.
 """
 function is_in_ScriptK(ρ_min, ρ_pl, θ, verbose=false)
     @assert size(ρ_min) == size(ρ_pl) && size(ρ_pl) == size(θ)
@@ -32,11 +36,12 @@ function is_in_ScriptK(ρ_min, ρ_pl, θ, verbose=false)
 end
 
 """
-    is_in_JPM(q, ρ_minus, ρ_plus)
+    is_in_JPM(q, ρ_minus, ρ_plus, verbose=false) -> Bool
 
-Description of the function.
-
-#TODO
+Test whether `(q, ρ_minus, ρ_plus)` lies in the constraint set J_PM, i.e.,
+that `ρ_minus[t,x,y] == q[t,x]` and `ρ_plus[t,x,y] == q[t,y]` for all
+indices `(t, x, y)`.  Returns `true` on success; prints diagnostic information
+and returns `false` on the first failing index.
 """
 function is_in_JPM(q, ρ_minus, ρ_plus, verbose=false)
     """
@@ -63,11 +68,11 @@ function is_in_JPM(q, ρ_minus, ρ_plus, verbose=false)
 end
 
 """
-    is_in_JEq(ρ, q)
+    is_in_JEq(ρ, q, verbose=false) -> Bool
 
-Description of the function.
-
-#TODO
+Test whether `(ρ_avg, q)` lies in the equality constraint set J_Eq, i.e.,
+that `ρ_avg ≈ q` element-wise (via `isapprox`).  Returns `true` on success;
+prints the range of absolute differences and returns `false` on failure.
 """
 function is_in_JEq(ρ, q, verbose=false)
     try
@@ -82,11 +87,12 @@ function is_in_JEq(ρ, q, verbose=false)
 end
 
 """
-    is_in_JAvg(ρ, ρ_bar)
+    is_in_JAvg(ρ, ρ_bar, verbose=false) -> Bool
 
-Description of the function.
-
-#TODO
+Test whether `(ρ, ρ_bar)` lies in the time-averaging constraint set J_Avg,
+i.e., that `ρ_bar ≈ avg_operator(size(ρ,1)) * ρ` element-wise.  Returns
+`true` on success; prints indices with discrepancy above 1e-20 and returns
+`false` on failure.
 """
 function is_in_JAvg(ρ, ρ_bar, verbose=false)
     A = avg_operator(size(ρ,1))
@@ -110,11 +116,15 @@ function is_in_JAvg(ρ, ρ_bar, verbose=false)
 end
 
 """
-    is_in_CE_weakly(ρ, m, Q, u)
+    is_in_CE_weakly(ρ, m, Q, u, verbose=false) -> Bool
 
-Description of the function.
+Weakly test satisfaction of the graph continuity equation `∂_t ρ + div m ≈ 0`.
 
-#TODO
+Rather than checking pointwise, computes the inner product of the residual
+`∂_t ρ + div m` against a random test function φ, weighted by `u` (the
+stationary distribution).  A residual magnitude below 1e-10 is considered
+passing.  This is a probabilistic check; it may miss structured cancellations
+but is cheaper than a full pointwise test.
 """
 function is_in_CE_weakly(ρ, m, Q, u, verbose=false)
     N, V = size(ρ)
@@ -140,11 +150,12 @@ function is_in_CE_weakly(ρ, m, Q, u, verbose=false)
 end
 
 """
-    CE_operator(ρ, m, Q)
+    CE_operator(ρ, m, Q) -> Matrix
 
-Description of the function.
-
-#TODO
+Compute the continuity equation residual `∂_t ρ + div m` as an `(N-1) × V`
+matrix, where `N+1 = size(ρ, 1)` is the number of time points and `V` is the
+number of nodes.  A zero matrix indicates that `(ρ, m)` satisfies the
+discretised continuity equation.
 """
 function CE_operator(ρ, m, Q)
     N, V = size(ρ)
@@ -158,11 +169,11 @@ function CE_operator(ρ, m, Q)
 end
 
 """
-    ∂t(ρ)
+    ∂t(ρ) -> Matrix
 
-Description of the function.
-
-#TODO
+Compute the discrete time derivative of the density curve `ρ` of size
+`(N, V)`.  Returns an `(N-1) × V` matrix of forward differences scaled by
+the step count: `(N-1) · (ρ[2:N,:] - ρ[1:N-1,:])`.
 """
 function ∂t(ρ)
     N, V = size(ρ)

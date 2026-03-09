@@ -45,25 +45,28 @@ function proximal_IJpm_star!(q, ρ_minus, ρ_plus, Q; safe=false)
     ρ_plus ∈ V_{e × h}^0 (i.e. it is a tensor of size 1/h x n × n, where 1/h is the step size and n the number of nodes)
     """
 
-    q_proj, ρ_minus_proj, ρ_plus_proj = proj_Jpm(q, ρ_minus, ρ_plus, Q)
+    N, V = size(q)
+    q_proj = zeros(N, V)
 
-    if safe
-        @assert is_in_JPM(q_proj, ρ_minus_proj, ρ_plus_proj)
+    for i in 1:N, x in 1:V
+        a = 1 / (1 + sum(Q[x,:]))
+        b = q[i,x]
+        c = 0.5 * sum((ρ_minus[i,x,:] + ρ_plus[i,:,x]) .* Q[x,:])
+        q_proj[i,x] = a * (b + c)
     end
 
-    ρ_minus .-= ρ_minus_proj
-    ρ_plus .-= ρ_plus_proj
-    q .-= q_proj
+    if safe
+        q_proj_full, ρ_minus_proj, ρ_plus_proj = proj_Jpm(q, ρ_minus, ρ_plus, Q)
+        @assert is_in_JPM(q_proj_full, ρ_minus_proj, ρ_plus_proj)
+    end
+
+    # ρ_minus_proj[i,x,y] == q_proj[i,x] and ρ_plus_proj[i,x,y] == q_proj[i,y],
+    # so the subtractions broadcast directly without materializing the (N,V,V) arrays.
+    ρ_minus .-= reshape(q_proj, N, V, 1)
+    ρ_plus  .-= reshape(q_proj, N, 1, V)
+    q       .-= q_proj
 
     return (q, ρ_minus, ρ_plus)
-
-    #ρ_minus .-= reshape(q_pr, N, V, 1)
-    #ρ_plus .-= reshape(q_pr, N, 1, V)
-    #q .-= q_pr
-
-
-
-
 end
 
 

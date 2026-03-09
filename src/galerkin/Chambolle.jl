@@ -14,11 +14,25 @@ ScriptK = { ρ_minus, ρ_plus, θ: ρ_minus[t,i,j], ρ_plus[t,i,j], θ[t,i,j] �
 """
 
 """
-    chambolle_pock_routine(a::ErbarBundle, b::ErbarBundle, a_bar::ErbarBundle, a_next::ErbarBundle, b_next::ErbarBundle, a_bar_next::ErbarBundle, c::ErbarBundle, d::ErbarBundle; σ=0.5, τ=0.5, λ=1.0, maxiters=2^16, tol=1e-10, show_progress=true)
+    chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d;
+                           σ=0.5, τ=0.5, λ=1.0, maxiters=2^16, tol=1e-10,
+                           show_progress=false)
 
-Description of the function.
+Core primal-dual iteration (Chambolle-Pock algorithm) for the graph optimal
+transport problem of Erbar et al. 2020, equation (26).
 
-#TODO
+All eight `ErbarBundle` arguments must be pre-allocated with the same graph and
+step count.  On entry, `a` holds the primal iterate and `b` the dual iterate;
+the remaining six bundles are working buffers.  On exit, the returned bundle
+contains the converged primal solution.
+
+The update at each iteration is:
+  1. `b_next = prox_{σF*}(b + σ · a_bar)`
+  2. `a_next = prox_{τG}(a - τ · b_next)`
+  3. Step-size update: `λ ← 1/√(1 + 2τ)`, `τ ← λτ`, `σ ← σ/λ`
+  4. `a_bar_next = a_next + λ·(a_next - a)`
+
+Convergence is declared when `Σ_t ||ρ_{k+1}[t] - ρ_k[t]||²_π < tol`.
 """
 function chambolle_pock_routine(
     a::ErbarBundle,
@@ -75,11 +89,12 @@ end
 
 # a more memory efficient version of ChamPock
 """
-    chambolle_pock(a::ErbarBundle;maxiters=2^16, verbose=false, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
+    chambolle_pock(a::ErbarBundle; maxiters=2^16, tol=1e-10, σ=0.5, τ=0.5,
+                   λ=1.0, show_progress=false)
 
-Description of the function.
-
-#TODO
+Memory-efficient entry point for the Chambolle-Pock solver.  Allocates seven
+working `ErbarBundle` copies of `a`, then delegates to `chambolle_pock_routine`.
+`a` is used as the initial primal iterate.  Returns the converged bundle.
 """
 function chambolle_pock(a::ErbarBundle;maxiters=2^16, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
     b = copy(a)
@@ -130,7 +145,12 @@ end
 
 
 """
-#TODO Describe function
+    chambolle_pock(Q, steady_state, μ, ν, N; maxiters=2^16, σ=0.5, τ=0.5,
+                   λ=1.0, tol=1e-10, show_progress=false)
+
+Convenience constructor variant that accepts a pre-computed `steady_state`
+vector (stationary distribution of `Q`), avoiding the internal stationary
+distribution solve.  Otherwise identical to `chambolle_pock(Q, μ, ν, N; …)`.
 """
 function chambolle_pock(
     Q::AbstractMatrix,
@@ -162,8 +182,15 @@ end
 """
     prox_Fstar!(targ, bundle)
 
-compute the proximal mapping of F star in place
-this amounts to computing the proximal mappings of the conjuage Action, IJPM, and IJAvg
+Compute the proximal mapping of F* in place, writing the result into `targ`.
+
+F* decomposes as a sum of three independent terms whose proximal mappings are:
+  - `prox_Astar!`          — proximal of the conjugate edge-wise action
+  - `proximal_IJpm_star!`  — proximal of the conjugate of the indicator of J_PM
+  - `prox_IJavg_star!`     — proximal of the conjugate of the indicator of J_Avg
+
+The three sub-problems operate on disjoint fields of the ErbarVector and are
+solved in parallel via `@threads`.
 """
 
 function prox_Fstar!(targ, bundle)
@@ -191,9 +218,16 @@ end
 """
     prox_G!(targ, bundle)
 
-compute the proximal mapping of G
-this amounts to computing the projection to the space of solutions to the Galerkin-discretized continuity equation,
-projection to the set Script K, and projection to the set Jeq
+Compute the proximal mapping of G in place, writing the result into `targ`.
+
+G is an indicator function, so its proximal mapping is a projection.  It
+decomposes as three independent projections:
+  - `proj_CE!`         — projection onto the Galerkin-discretised continuity
+                         equation constraint set
+  - `project_K!`       — element-wise projection onto Script K
+  - `project_IJeq!`    — projection onto J_Eq (equality of ρ_avg and q)
+
+The three projections operate on disjoint fields of the ErbarVector.
 """
 
 function prox_G!(targ, bundle)
@@ -204,7 +238,7 @@ function prox_G!(targ, bundle)
         if task_id == 1
             v.ρ, v.m = proj_CE!(v.ρ, v.m, cache.μ, cache.ν, cache.Q, cache.ceh_sys)
         elseif task_id == 2
-            v.ρ_minus, v.ρ_plus, v.θ = project_K!(v.ρ_minus, v.ρ_plus, v.θ)
+            project_K_fast!(v.ρ_minus, v.ρ_plus, v.θ)
         elseif task_id == 3
             v.ρ_avg, v.q = project_IJeq!(v.ρ_avg, v.q)
         end

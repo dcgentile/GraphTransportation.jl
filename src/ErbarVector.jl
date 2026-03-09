@@ -1,14 +1,27 @@
 # An ErbarVector is an element of the Hilbert space H, described in eqn (27)
 # of Erbar et al. 2020
-mutable struct ErbarVector
+#
+# Type parameters:
+#   M — the concrete 2-D array type used for node fields (ρ, ρ_avg, q)
+#   T — the concrete 3-D array type used for edge fields (m, θ, ρ_minus, ρ_plus)
+#
+# In normal usage both are plain dense arrays:
+#   M = Matrix{Float64}  (alias for Array{Float64,2})
+#   T = Array{Float64,3}
+#
+# Carrying the concrete types as parameters lets Julia specialise every function
+# that touches an ErbarVector (combine!, assign!, the projection loops, …) on the
+# exact memory layout, eliminating dynamic dispatch on field accesses in the
+# Chambolle-Pock hot loop.
+mutable struct ErbarVector{M<:AbstractMatrix{Float64}, T<:AbstractArray{Float64,3}}
     # vector components to operate on
-    ρ::AbstractArray
-    m::AbstractArray
-    θ::AbstractArray
-    ρ_minus::AbstractArray
-    ρ_plus::AbstractArray
-    ρ_avg::AbstractArray
-    q::AbstractArray
+    ρ::M
+    m::T
+    θ::T
+    ρ_minus::T
+    ρ_plus::T
+    ρ_avg::M
+    q::M
 end
 
 # An ErbarCache is an immutable struct that contains the "metadata" of a graph OT
@@ -100,12 +113,16 @@ end
 # An ErbarBundle is an ErbarCache together with an ErbarVector.
 # An EB can be initialized by specifying a Markov kernel Q, two densities w.r.t to
 # the kernel's steady state μ, ν, and a number of steps N
-mutable struct ErbarBundle
+#
+# The type parameters {M, T} mirror those of ErbarVector so that accessing
+# bundle.vector in hot-path functions returns a concretely-typed value and Julia
+# can fully specialise the downstream code without dynamic dispatch.
+mutable struct ErbarBundle{M<:AbstractMatrix{Float64}, T<:AbstractArray{Float64,3}}
     cache::ErbarCache
-    vector::ErbarVector
+    vector::ErbarVector{M,T}
 
-    function ErbarBundle(cache::ErbarCache, vector::ErbarVector)
-	    new(cache, vector)
+    function ErbarBundle(cache::ErbarCache, vector::ErbarVector{M,T}) where {M,T}
+        new{M,T}(cache, vector)
     end
 
     function ErbarBundle(
@@ -127,8 +144,8 @@ mutable struct ErbarBundle
         ρ_avg = zeros(N,V)
         q = zeros(N,V)
 
-        vector = ErbarVector(ρ, m ,θ, ρ_minus, ρ_plus, ρ_avg, q)
-        new(cache, vector)
+        vector = ErbarVector(ρ, m, θ, ρ_minus, ρ_plus, ρ_avg, q)
+        new{Matrix{Float64}, Array{Float64,3}}(cache, vector)
 
     end
 
@@ -154,8 +171,9 @@ mutable struct ErbarBundle
         ρ_plus = zeros(N, V, V)
         ρ_avg = zeros(N,V)
         q = zeros(N,V)
-        vector = ErbarVector(ρ, m ,θ, ρ_minus, ρ_plus, ρ_avg, q)
-        new(cache, vector)
+
+        vector = ErbarVector(ρ, m, θ, ρ_minus, ρ_plus, ρ_avg, q)
+        new{Matrix{Float64}, Array{Float64,3}}(cache, vector)
 
     end
 end
@@ -171,9 +189,9 @@ Base.copy(a::ErbarBundle) = ErbarBundle(copy(a.cache), copy(a.vector))
 """
     combine!(c::ErbarVector, a::ErbarVector, b::ErbarVector, α::Number, β::Number)
 
-Description of the function.
-
-#TODO
+Compute the linear combination `c = α·a + β·b` in-place across all seven
+component arrays of the ErbarVector (ρ, m, θ, ρ_minus, ρ_plus, ρ_avg, q).
+No intermediate arrays are allocated; all operations use broadcasting with `.=`.
 """
 function combine!(c::ErbarVector, a::ErbarVector, b::ErbarVector, α::Number, β::Number)
     c.ρ .= (α .* a.ρ) .+ (β .* b.ρ)
@@ -190,9 +208,9 @@ end
 """
     combine!(c::ErbarBundle, a::ErbarBundle, b::ErbarBundle, α::Number, β::Number)
 
-Description of the function.
-
-#TODO
+Bundle-level wrapper for `combine!` on ErbarVectors.  Computes `c.vector =
+α·a.vector + β·b.vector` in-place; the cache fields of the bundles are not
+modified.
 """
 function combine!(c::ErbarBundle, a::ErbarBundle, b::ErbarBundle, α::Number, β::Number)
     combine!(c.vector, a.vector, b.vector, α, β)
@@ -204,9 +222,9 @@ end
 """
     assign!(c::ErbarVector, a::ErbarVector)
 
-Description of the function.
-
-#TODO
+Copy all component arrays of `a` into `c` in-place (deep value copy, not
+pointer aliasing).  Equivalent to `c = copy(a)` but reuses `c`'s existing
+allocations.  Covers all seven fields: ρ, m, θ, ρ_minus, ρ_plus, ρ_avg, q.
 """
 function assign!(c::ErbarVector, a::ErbarVector)
     c.ρ .= a.ρ
@@ -223,9 +241,8 @@ end
 """
     assign!(c::ErbarBundle, a::ErbarBundle)
 
-Description of the function.
-
-#TODO
+Bundle-level wrapper for `assign!` on ErbarVectors.  Copies `a.vector` into
+`c.vector` in-place; the cache fields are not modified.
 """
 function assign!(c::ErbarBundle, a::ErbarBundle)
     assign!(c.vector, a.vector)
@@ -234,11 +251,18 @@ end
 # compute the action of the discrete curve encoded in a EB u
 # cf. eqn (18) in Erbar et al 2020
 """
-    action(u::ErbarBundle)
+    action(u::ErbarBundle) -> Float64
 
-Description of the function.
+Compute the discrete action functional of the curve encoded in `u`, as defined
+in equation (18) of Erbar et al. 2020:
 
-#TODO
+    A(ρ, m) = (h/2) · Σ_t Σ_{x,y} (m[t,x,y]² / θ[t,x,y]) · Q[x,y] · π[x]
+
+where `h = 1/N` is the time step.  The integrand uses the convention
+`m²/θ = 0` when `m = θ = 0`, and `+Inf` when `m ≠ 0` and `θ = 0`.
+
+The square root of the action is the discrete Wasserstein distance between the
+boundary measures `u.cache.μ` and `u.cache.ν`.
 """
 function action(u::ErbarBundle)
     m = u.vector.m
