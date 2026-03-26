@@ -2,3 +2,13 @@
 /.ipynb_checkpoints/
 /docs/build/
 /docs/Manifest.toml
+
+# experiment outputs
+*.jld2
+*.jld2.bak
+*.pdf
+*.png
+nbs/
+**/nbs/
+experiments/
+src/experiments/
