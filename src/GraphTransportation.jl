@@ -9,8 +9,8 @@ The package provides:
 - **Geodesics** (`discrete_transport`, `transport_cost`): compute optimal
   transport geodesics between probability measures on a graph via a
   Galerkin-discretised Chambolle-Pock primal-dual algorithm.
-- **Barycenters** (`barycenter`, `iterated_barycenter`): compute Wasserstein
-  Fréchet means via gradient descent on the graph Wasserstein space.
+- **Barycenters** (`barycenter`): compute Wasserstein Fréchet means via
+  gradient descent on the graph Wasserstein space.
 - **Coordinate recovery** (`analysis`): recover barycentric coordinates of a
   measure with respect to a reference family by solving a quadratic programme
   on the Gram matrix of logarithmic maps.
@@ -47,9 +47,6 @@ include("galerkin/KProjection.jl")
 # include the abstraction for the vector space defined in Erbar et al 2020
 include("ErbarVector.jl")
 
-# some tests to help us stay sane!
-include("tests/Inclusion.jl")
-
 # include the Chambolle-Pock routine
 include("galerkin/Chambolle.jl")
 
@@ -61,7 +58,7 @@ include("Barycenters.jl")
 include("Sinkhorn.jl")
 
 # core API
-export discrete_transport, transport_cost, action, barycenter, iterated_barycenter, analysis
+export discrete_transport, transport_cost, action, barycenter, analysis
 export sinkhorn_barycenter, simplex_regression
 
 # Markov chain constructors

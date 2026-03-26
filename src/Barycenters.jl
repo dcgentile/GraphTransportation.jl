@@ -163,30 +163,6 @@ end
 
 
 """
-    iterated_barycenter(M, weights, Q; steps=[2,4,8,16,32], kwargs...)
-
-Warm-started barycenter computation. Runs `barycenter` repeatedly with the
-geodesic step counts in `steps` (doubling schedule by default), using each
-stage's output as the initialization for the next. The rationale is that
-starting gradient descent near the minimum means the expensive high-accuracy
-geodesic stages converge in far fewer iterations.
-
-All additional kwargs are forwarded to `barycenter` at every stage.
-"""
-function iterated_barycenter(M, weights, Q;
-                             steps=[2, 4, 8, 16, 32],
-                             kwargs...)
-    ν = nothing
-    for s in steps
-        verbose = get(kwargs, :verbose, true)
-        verbose && println("  → geodesic_steps = $s")
-        ν = barycenter(M, weights, Q; geodesic_steps=s, initialization=ν, kwargs...)
-    end
-    return ν
-end
-
-
-"""
     analysis(ν, M, Q; N=100, tol=1e-10, compute_condition=false,
              return_system=false) -> weights
 
