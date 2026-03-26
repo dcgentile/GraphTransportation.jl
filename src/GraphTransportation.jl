@@ -34,6 +34,7 @@ using Base: signequal
 # include general helper functions
 include("GraphCalculus.jl")
 include("MarkovChains.jl")
+include("CommonGraphs.jl")
 
 # include components of Chambolle-Pock related functions
 include("galerkin/ProximalAvgIndicator.jl")
@@ -59,8 +60,29 @@ include("EarthMover.jl")
 include("Barycenters.jl")
 include("Sinkhorn.jl")
 
-# expose functionality for computing geodesics
+# core API
 export discrete_transport, transport_cost, action, barycenter, iterated_barycenter, analysis
 export sinkhorn_barycenter, simplex_regression
+
+# Markov chain constructors
+export markov_chain_from_edge_list, markov_chain_from_adjacency_matrix
+export markov_chain_from_weight_matrix, stationary_from_transition
+
+# predefined graphs
+export triangle_markov_chain, triangle_with_tail_markov_chain
+export square_markov_chain, T_markov_chain, double_T_markov_chain
+export triangular_prism_markov_chain, cube_markov_chain
+export hypercube_markov_chain, weighted_hypercube_markov_chain
+export grid_markov_chain, ma_house_markov_chain
+
+# graph calculus
+export graph_gradient, add_graph_gradient!, graph_divergence, graph_divergence!
+export laplacian_from_transition, metric_tensor, avg_operator, finite_difference_operator
+
+# admissible means
+export geomean, logmean, logmean_partial_s, logmean_partial_t
+
+# data structures
+export ErbarVector, ErbarCache, ErbarBundle, combine!, assign!
 
 end

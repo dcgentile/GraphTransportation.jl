@@ -1,5 +1,3 @@
-include("MarkovChains.jl")
-
 """
     cube_markov_chain() -> (Q, π)
 
