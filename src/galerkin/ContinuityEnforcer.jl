@@ -38,8 +38,6 @@ function form_ceh_system(Q, N)
 
     A[end, end] = 0
     return lu(sparse(A))
-    #return sparse(A)
-    #return A
 end
 
 """

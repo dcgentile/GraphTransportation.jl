@@ -14,8 +14,6 @@ function form_avg_system(N)
     diag[1] = 5
     diag[N] = 5
     M = Tridiagonal(off_diag, diag, off_diag)
-    #return 0.25 * M
-    #return sparse(0.25 * M)
     return lu(sparse(0.25 * M))
 end
 
@@ -90,17 +88,6 @@ Compute the proximal mapping of `IJ_avg*` via Moreau's identity:
 - `M`: factorised system from `form_avg_system`
 """
 function prox_IJavg_star(ρ, ρ_bar, ρ_A, ρ_B, M; safe=false)
-    #N, V = size(ρ)
-    #B = form_b(ρ, ρ_bar, ρ_A, ρ_B)
-	#Λ = M \ B
-#
-    #ρ_bar_pr = ρ_bar - Λ
-    #Λ_bar = vcat(zeros(V)', 0.5 * (Λ[2:N-1,:] + Λ[1:N-2,:]), zeros(V)')
-    #ρ_pr = ρ + Λ_bar
-    #ρ_pr[1,:] = ρ_A
-    #ρ_pr[N,:] = ρ_B
-    #return (ρ - ρ_pr, ρ_bar - ρ_bar_pr)
-
     ρ_proj, ρ_bar_proj = proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M)
     if safe
         @assert is_in_JAvg(ρ_proj, ρ_bar_proj)
@@ -115,16 +102,6 @@ end
 In-place variant of `prox_IJavg_star`.
 """
 function prox_IJavg_star!(ρ, ρ_bar, ρ_A, ρ_B, M)
-    #N, V = size(ρ)
-    #B = form_b(ρ, ρ_bar, ρ_A, ρ_B)
-	#Λ = M \ B
-
-    #ρ[1,:] .-= ρ_A
-    #ρ[2:N-1,:] .= (-0.5 * (Λ[1:N-2,:] + Λ[2:N-1,:]))
-    #ρ[N,:] .-= ρ_B
-#
-    #ρ_bar .= Λ
-
     ρ_proj, ρ_bar_proj = proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M)
     ρ .= ρ - ρ_proj
     ρ_bar .= ρ_bar - ρ_bar_proj

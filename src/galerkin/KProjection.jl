@@ -49,7 +49,6 @@ function proj_K(x, y, z, tolerance=1e-6)
         return (0,0,0)
     else
         return project_by_newton(x,y,z)
-        #return project_by_bisection(x,y,z)
     end
 end
 
@@ -108,7 +107,6 @@ function find_q(p)
 
             # Verify solution quality
             if abs(f(q)) < 1e-9
-                #i > 1 && @info "Converged with initial guess #$i (t₀=$t₀)"
                 return q
             end
         catch
@@ -126,7 +124,6 @@ function find_q(p)
             q = exp(t_sol)
 
             if abs(f(q)) < 1e-9
-                #@info "Converged with random initial guess (t₀=$t₀)"
                 return q
             end
         catch

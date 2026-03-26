@@ -8,14 +8,6 @@ The projection is computed node-by-node via a closed-form expression derived
 from a Lagrange multiplier argument (Erbar et al., section 4.5).
 """
 function proj_Jpm(q, ρ_minus, ρ_plus, Q)
-    #N, V = size(q)
-    #Qprime = reshape(Q, 1, size(Q) ...)
-    #α = (1 .+ sum(Q, dims=2)).^-1
-    #β = 0.5 * dropdims(sum((ρ_minus .+ permutedims(ρ_plus, (1,3,2))) .* Qprime, dims=3), dims=3)
-    #q_proj = (q .+ β) .* α'
-    #ρ_minus_proj = reshape(q_proj, N, V, 1)
-    #ρ_plus_proj = reshape(q_proj, N, 1, V)
-
     N, V = size(q)
     q_proj = zeros((N, V))
 
@@ -89,7 +81,6 @@ function proximal_IJpm_star(q, ρ_minus, ρ_plus, Q)
     ρ_minus_pr = similar(ρ_minus)
     ρ_plus_pr = similar(ρ_plus)
 
-    #TODO: change these for loops to not work via indexing
     for x in 1:V
         α = 1 / (1 + sum(Q[x,:]))
         for t in 1:N
