@@ -1,6 +1,11 @@
 using Documenter
 using GraphTransportation
 
+# Keep examples/README.md as the single source of truth; copy it into
+# docs/src/ so Documenter can include it as a page.
+cp(joinpath(@__DIR__, "..", "examples", "README.md"),
+   joinpath(@__DIR__, "src", "examples.md"); force=true)
+
 makedocs(
     sitename = "GraphTransportation.jl",
     authors = "David Gentile, James M. Murphy",
@@ -11,8 +16,9 @@ makedocs(
         edit_link = "main",
     ),
     pages = [
-        "Home"    => "index.md",
-        "API"     => "api.md",
+        "Home"      => "index.md",
+        "Examples"  => "examples.md",
+        "API"       => "api.md",
     ],
     checkdocs = :exports,
 )

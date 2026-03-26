@@ -60,4 +60,5 @@ Each returns `(Q, π)` where `Q` is the row-stochastic transition matrix and
 
 ## API reference
 
-See the [API Reference](api.md) page for full documentation of all exported functions.
+See the [Examples](examples.md) page for runnable experiment scripts, and the
+[API Reference](api.md) page for full documentation of all exported functions.
