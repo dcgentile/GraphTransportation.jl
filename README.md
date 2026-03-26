@@ -1,7 +1,7 @@
 # Optimal Transport on Graphs
 ## Installation
 
-To install this package, navigate in the commandline to your project directory, and start a Julia instance. Activate a virtual environment with
+To install this package, navigate in the terminal to your project directory, and start a Julia instance. Activate a virtual environment with
 
 ``` julia
 ]activate .
@@ -24,7 +24,7 @@ Q = [0. 1.; 1. 0.];
 a = [2.0; 0];
 b = [0.; 2];
 
-# set number of steps (optional, will default to 128)
+# set number of steps (optional, will default to 64)
 N = 100;
 
 # call the Benamou Brenier Distance (BBD) function
@@ -34,7 +34,7 @@ dist = sqrt(action(v))
 M = cat(a,b,dims=2)
 coordinates = [0.75;0.25]
 bary = barycenter(M, coordinates, Q)
-recovered_coordinates = analysis(bar, M, Q)
+recovered_coordinates = analysis(bary, M, Q)
 ```
 
 The variable v contains the vector information associated to the geodesic and all of its slack variables, while dist is the approximate Benamou-Brenier distance between the measures (i.e., the action of the computed geodesic, which is stored in v).
