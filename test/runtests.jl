@@ -1,13 +1,15 @@
 using GraphTransportation
 using Test
 
-@testset "GraphTransportation.jl" begin
-    Q = [0. 1.; 1. 0.];
-    a = [2.0; 0];
-    b = [0.; 2];
-    N = 100;
-    v, dist = BBD(Q, a, b, N);
-    println("Distance between Dirac masses on a 2 point graph: $(dist)")
+@testset "discrete_transport / transport_cost" begin
+    Q = [0.0 1.0; 1.0 0.0]
+    a = [2.0, 0.0]
+    b = [0.0, 2.0]
+    geo  = discrete_transport(Q, a, b; N=100)
+    dist = sqrt(action(geo))
+    @test dist > 0
+    @test isfinite(dist)
+    @test transport_cost(Q, a, b; N=100) ≈ dist  atol=1e-6
 end
 
 @testset "find_q_fast / project_by_newton_fast" begin
