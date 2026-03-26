@@ -1,29 +1,14 @@
 """
-this file contains the functions needed to compute the proximal mapping of IJ_avg_star
-as described in Erbar et al 2020, section 4.6.
+    form_avg_system(N) -> LU
 
-Let h be the step size, let n be the number of nodes, we are given
-ρ ∈ V_{n × h}^1 (i.e. a matrix of size (1 + 1/h) × n)
-ρ_avg ∈ V_{n × h}^0 (i.e. a matrix of size 1/h × n)
+Assemble and factorise the `N × N` tridiagonal matrix for the time-averaging
+projection linear system (Erbar et al. 2020, section 4.6).
 
-IJ_avg is an indicator function, so it's proximal mapping is a projection. Thus Moreau's identity
-prox_f_star = identity - prox_f allows us to compute the proximal mapping of IJ_avg_star
-by solving a projection problem and subtracting the answer from the argument. Thus one computes
-
-prox_IJavg_star(ρ,ρ_avg) = (ρ, ρ_avg) - proj_Javg(ρ, ρ_avg)
-
-A Lagrange multipliers argument leads to the conclusion that the solution to the projection problem
-is given in terms of the solution of a linear system.
-
+The matrix depends only on the step count `N = 1/h` and is constant across all
+nodes, so this should be called once when constructing an `ErbarCache`.
+Returns an `LU` factorisation.
 """
-
-# only gets called once, when initializing a vector
 function form_avg_system(N)
-    """
-    the projection problem is equivalent to solving a linear system Mx=b, whose dimension depends upon the
-    stepsize N ≡ 1/h
-    the matrix is always the same, so the function should only ever be called when initializing an ErbarCache
-    """
     off_diag = ones(N - 1)
     diag = 6 * ones(N)
     diag[1] = 5
@@ -34,23 +19,19 @@ function form_avg_system(N)
     return lu(sparse(0.25 * M))
 end
 
-# functions needed to solve the relevant problem
+"""
+    form_b(ρ, ρ_bar, ρ_A, ρ_B) -> Matrix
+
+Compute the right-hand side matrix `B` for the averaging-projection linear
+system (last unnumbered equation in Erbar et al. 2020, section 4.6):
+
+    B[1,:]   = ρ_bar[1,:]   - (1/2)·(ρ_A      + ρ[2,:])
+    B[i,:]   = ρ_bar[i,:]   - (1/2)·(ρ[i+1,:] + ρ[i,:])   for 2 ≤ i ≤ N-2
+    B[N-1,:] = ρ_bar[N-1,:] - (1/2)·(ρ_B      + ρ[N-1,:])
+
+All `V` node columns are computed simultaneously.
+"""
 function form_b(ρ, ρ_bar, ρ_A, ρ_B)
-    """
-    this function computes the vectors b in the aforementioned linear system. One has, as per
-    the last (unnumbered) eqn in Erbar Section 4.6
-
-    b = [
-         ρ_bar(t_0, x) - (1/2)*(ρ_A + ρ(t_1,x))
-         ...,
-         ρ_bar(t_i, x) - (1/2)*(ρ(t_{i+1}) + ρ(t_{i}, x))
-         ...,
-         ρ_bar(t_{N-1}, x) - (1/2)*(ρ_B + ρ(t_{N-1}, x))
-    ]
-
-    all the vectors b are computed simultaneously and returned in the matrix B
-    """
-
     N = size(ρ, 1)
     B = copy(ρ_bar)
     B[1,:] .-= 0.5 * (ρ_A + ρ[2,:])
@@ -60,6 +41,13 @@ function form_b(ρ, ρ_bar, ρ_A, ρ_B)
     return B
 end
 
+"""
+    proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M; safe=false) -> (ρ_proj, ρ_bar_proj)
+
+Project `(ρ, ρ_bar)` onto the set `J_avg = {(ρ, ρ_bar) : ρ_bar = avg_h(ρ)}`.
+`M` is the factorised system from `form_avg_system`.  If `safe=true`, asserts
+that the projection satisfies the averaging constraint.
+"""
 function proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M; safe=false)
 
     N, V = size(ρ_bar)
@@ -88,17 +76,20 @@ function proj_Javg(ρ, ρ_bar, ρ_A, ρ_B, M; safe=false)
 
 end
 
-function prox_IJavg_star(ρ, ρ_bar, ρ_A, ρ_B, M; safe=false)
-    """
-    compute the proximal mapping of IJavg_star via Moreau's identity
+"""
+    prox_IJavg_star(ρ, ρ_bar, ρ_A, ρ_B, M; safe=false) -> (ρ_new, ρ_bar_new)
 
-    arguments
-    Let h be the step size, let n be the number of nodes, we are given
-    ρ ∈ V_{n × h}^1 (i.e. a matrix of size (1 + 1/h) × n)
-    ρ_avg ∈ V_{n × h}^0 (i.e. a matrix of size 1/h × n)
-    ρ_A, ρ_B ∈ R^n are column vectors
-    M is the matrix defining the linear system to be solved
-    """
+Compute the proximal mapping of `IJ_avg*` via Moreau's identity:
+
+    prox_{IJ_avg*}(ρ, ρ_bar) = (ρ, ρ_bar) - proj_{J_avg}(ρ, ρ_bar)
+
+# Arguments
+- `ρ`: density curve, matrix of size `(N+1) × V`
+- `ρ_bar`: time-averaged density, matrix of size `N × V`
+- `ρ_A`, `ρ_B`: boundary measures (length-`V` vectors)
+- `M`: factorised system from `form_avg_system`
+"""
+function prox_IJavg_star(ρ, ρ_bar, ρ_A, ρ_B, M; safe=false)
     #N, V = size(ρ)
     #B = form_b(ρ, ρ_bar, ρ_A, ρ_B)
 	#Λ = M \ B
@@ -118,17 +109,12 @@ function prox_IJavg_star(ρ, ρ_bar, ρ_A, ρ_B, M; safe=false)
 
 end
 
-function prox_IJavg_star!(ρ, ρ_bar, ρ_A, ρ_B, M)
-    """
-    compute inplace the proximal mapping of IJavg_star via Moreau's identity
+"""
+    prox_IJavg_star!(ρ, ρ_bar, ρ_A, ρ_B, M) -> (ρ, ρ_bar)
 
-    arguments
-    Let h be the step size, let n be the number of nodes, we are given
-    ρ ∈ V_{n × h}^1 (i.e. a matrix of size (1 + 1/h) × n)
-    ρ_avg ∈ V_{n × h}^0 (i.e. a matrix of size 1/h × n)
-    ρ_A, ρ_B ∈ R^n are column vectors
-    M is the matrix defining the linear system to be solved
-    """
+In-place variant of `prox_IJavg_star`.
+"""
+function prox_IJavg_star!(ρ, ρ_bar, ρ_A, ρ_B, M)
     #N, V = size(ρ)
     #B = form_b(ρ, ρ_bar, ρ_A, ρ_B)
 	#Λ = M \ B

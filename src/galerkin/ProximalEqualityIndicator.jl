@@ -1,25 +1,23 @@
+"""
+    project_IJeq(ρ, q) -> (x, x)
+
+Project `(ρ, q)` onto `J_eq = {(ρ, q) : ρ = q}` by returning their
+element-wise average: both output arrays equal `0.5·(ρ + q)`.
+
+`ρ` and `q` must be matrices of size `N × V`.
+"""
 function project_IJeq(ρ::AbstractArray, q::AbstractArray)
-    """
-    compute the proximal mapping of IJ_eq in place
-
-    arguments
-    ρ, ρ_bar ∈ V^{0}_{n, h}, i.e, they are matrices of size 1/h × n, where h is the step size and n the number of nodes
-
-    given ρ and q, this function returns their vector average
-    """
 	x = 0.5 .* (ρ .+ q)
     return (x, x)
 end
 
+"""
+    project_IJeq!(ρ, q) -> (ρ, q)
+
+In-place variant of `project_IJeq`: sets both `ρ` and `q` to
+`0.5·(ρ + q)` without allocating.
+"""
 function project_IJeq!(ρ::AbstractArray, q::AbstractArray)
-    """
-    compute the proximal mapping of IJ_eq in place
-
-    arguments
-    ρ, ρ_bar ∈ V^{0}_{n, h}, i.e, they are matrices of size 1/h × n, where h is the step size and n the number of nodes
-
-    given ρ and q, this function returns their vector average
-    """
 	ρ .= q .= 0.5 .* (ρ .+ q)
     return (ρ, q)
 end

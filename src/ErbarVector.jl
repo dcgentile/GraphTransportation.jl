@@ -1,18 +1,25 @@
-# An ErbarVector is an element of the Hilbert space H, described in eqn (27)
-# of Erbar et al. 2020
-#
-# Type parameters:
-#   M — the concrete 2-D array type used for node fields (ρ, ρ_avg, q)
-#   T — the concrete 3-D array type used for edge fields (m, θ, ρ_minus, ρ_plus)
-#
-# In normal usage both are plain dense arrays:
-#   M = Matrix{Float64}  (alias for Array{Float64,2})
-#   T = Array{Float64,3}
-#
-# Carrying the concrete types as parameters lets Julia specialise every function
-# that touches an ErbarVector (combine!, assign!, the projection loops, …) on the
-# exact memory layout, eliminating dynamic dispatch on field accesses in the
-# Chambolle-Pock hot loop.
+"""
+    ErbarVector{M, T}
+
+An element of the Hilbert space H described in equation (27) of Erbar et al.
+2020, representing a discretised curve `(ρ, m)` together with the auxiliary
+variables `(θ, ρ_minus, ρ_plus, ρ_avg, q)` used by the Chambolle-Pock solver.
+
+Type parameters:
+- `M`: concrete 2-D array type for node fields (`ρ`, `ρ_avg`, `q`); typically `Matrix{Float64}`
+- `T`: concrete 3-D array type for edge fields (`m`, `θ`, `ρ_minus`, `ρ_plus`); typically `Array{Float64,3}`
+
+Parameterising on the concrete types allows Julia to fully specialise all
+operations on `ErbarVector` fields in the Chambolle-Pock inner loop.
+
+# Fields
+- `ρ`: density curve, shape `(N+1) × V`
+- `m`: edge flux, shape `N × V × V`
+- `θ`: dual edge variable, shape `N × V × V`
+- `ρ_minus`, `ρ_plus`: edge density copies, shape `N × V × V`
+- `ρ_avg`: time-averaged density, shape `N × V`
+- `q`: dual node variable, shape `N × V`
+"""
 mutable struct ErbarVector{M<:AbstractMatrix{Float64}, T<:AbstractArray{Float64,3}}
     # vector components to operate on
     ρ::M
@@ -24,8 +31,26 @@ mutable struct ErbarVector{M<:AbstractMatrix{Float64}, T<:AbstractArray{Float64,
     q::M
 end
 
-# An ErbarCache is an immutable struct that contains the "metadata" of a graph OT
-# problem, i.e. those object that we only need to compute and store once
+"""
+    ErbarCache
+
+Immutable container for the graph OT problem metadata: everything that needs
+to be computed only once given `(Q, μ, ν, N)`.
+
+Constructors:
+- `ErbarCache(Q, π, μ, ν, N)` — use a pre-computed stationary distribution `π`
+- `ErbarCache(Q, μ, ν, N)` — computes `π` internally
+- `ErbarCache(existing, μ_new, ν_new)` — cheap warm-start copy reusing the cached
+  linear-system factorisations (`ceh_sys`, `avg_sys` depend only on `Q` and `N`)
+
+# Fields
+- `Q`: Markov transition matrix
+- `μ`, `ν`: boundary probability densities
+- `π`: stationary distribution of `Q`
+- `N`: number of geodesic time steps
+- `ceh_sys`: factorised continuity-equation linear system
+- `avg_sys`: factorised time-averaging linear system
+"""
 struct ErbarCache
     # cached commonly needed data
     Q::AbstractMatrix            # Markov kernel defining the graph
@@ -110,13 +135,21 @@ struct ErbarCache
     end
 end
 
-# An ErbarBundle is an ErbarCache together with an ErbarVector.
-# An EB can be initialized by specifying a Markov kernel Q, two densities w.r.t to
-# the kernel's steady state μ, ν, and a number of steps N
-#
-# The type parameters {M, T} mirror those of ErbarVector so that accessing
-# bundle.vector in hot-path functions returns a concretely-typed value and Julia
-# can fully specialise the downstream code without dynamic dispatch.
+"""
+    ErbarBundle{M, T}
+
+A pair `(cache::ErbarCache, vector::ErbarVector)` representing the complete
+state of a graph OT problem: the problem metadata and the current iterate.
+
+Type parameters `{M, T}` mirror those of `ErbarVector` so that accessing
+`bundle.vector` in hot-path code returns a concretely-typed value, enabling
+full specialisation of the Chambolle-Pock inner loop without dynamic dispatch.
+
+Constructors:
+- `ErbarBundle(Q, μ, ν, N)` — compute `π` internally
+- `ErbarBundle(Q, π, μ, ν, N)` — use pre-computed stationary distribution
+- `ErbarBundle(cache, vector)` — assemble from existing components
+"""
 mutable struct ErbarBundle{M<:AbstractMatrix{Float64}, T<:AbstractArray{Float64,3}}
     cache::ErbarCache
     vector::ErbarVector{M,T}

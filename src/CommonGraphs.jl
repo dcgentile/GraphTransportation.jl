@@ -1,5 +1,11 @@
 include("MarkovChains.jl")
 
+"""
+    cube_markov_chain() -> (Q, π)
+
+Construct the uniform random walk Markov chain on the 3-cube (8 nodes, 12 edges).
+Returns `(Q, π)` where `Q` is the transition matrix and `π` the stationary distribution.
+"""
 function cube_markov_chain()
     edge_list = [
         (1, 2), (2, 3), (3, 4), (4, 1),
@@ -12,6 +18,11 @@ function cube_markov_chain()
     return (Q, sstate)
 end
 
+"""
+    triangle_markov_chain() -> (Q, π)
+
+Construct the uniform random walk Markov chain on the 3-cycle (triangle).
+"""
 function triangle_markov_chain()
     edge_list = [(1,2), (2, 3), (3, 1)]
     Q, sstate = markov_chain_from_edge_list(edge_list)
@@ -19,6 +30,12 @@ function triangle_markov_chain()
     return (Q, sstate)
 end
 
+"""
+    triangle_with_tail_markov_chain() -> (Q, π)
+
+Construct the uniform random walk Markov chain on a 3-cycle with one pendant
+edge (node 4 attached to node 3).
+"""
 function triangle_with_tail_markov_chain()
     edge_list = [(1,2), (2, 3), (3, 1), (3, 4)]
     Q, sstate = markov_chain_from_edge_list(edge_list)
@@ -26,6 +43,12 @@ function triangle_with_tail_markov_chain()
     return (Q, sstate)
 end
 
+"""
+    triangular_prism_markov_chain() -> (Q, π)
+
+Construct the uniform random walk Markov chain on the triangular prism graph
+(6 nodes: two triangular faces connected by three edges).
+"""
 function triangular_prism_markov_chain()
     edge_list = [
         (1,2), (2, 3), (3, 1),
@@ -38,6 +61,11 @@ function triangular_prism_markov_chain()
 end
 
 
+"""
+    square_markov_chain() -> (Q, π)
+
+Construct the uniform random walk Markov chain on the 4-cycle (square).
+"""
 function square_markov_chain()
     edge_list = [(1,2), (2, 3), (3, 4), (4, 1)]
 
@@ -46,6 +74,12 @@ function square_markov_chain()
     return (Q, sstate)
 end
 
+"""
+    T_markov_chain() -> (Q, π)
+
+Construct the uniform random walk Markov chain on the T-shaped graph
+(path 1–2–3 with a branch 2–4).
+"""
 function T_markov_chain()
     edge_list = [
         (1,2), (2, 3), (2, 4),
@@ -57,6 +91,13 @@ function T_markov_chain()
 	
 end
 
+"""
+    double_T_markov_chain() -> (Q, π)
+
+Construct the uniform random walk Markov chain on the double-T graph
+(8 nodes: two T-shaped graphs — nodes 1–4 and nodes 5–8 — connected at
+their corresponding vertices: 1↔5, 2↔6, 3↔7, 4↔8).
+"""
 function double_T_markov_chain()
     edge_list = [
         (1,2), (2, 3), (2, 4),
@@ -70,6 +111,12 @@ function double_T_markov_chain()
 	
 end
 
+"""
+    grid_markov_chain() -> (Q, π)
+
+Construct the uniform random walk Markov chain on a 9-node wheel-like graph:
+an 8-cycle (nodes 1–8) with a central hub (node 9) connected to the even nodes.
+"""
 function grid_markov_chain()
     edge_list = [
         (1, 2), (2, 3), (3, 4),
@@ -84,6 +131,13 @@ function grid_markov_chain()
 	
 end
 
+"""
+    weighted_hypercube_markov_chain() -> (Q, π)
+
+Construct a randomly weighted random walk Markov chain on the 4-cube (16 nodes,
+32 edges).  Edge weights are drawn uniformly from `{1, …, 10}` and symmetrised,
+so the stationary distribution is non-uniform.  Results vary across calls.
+"""
 function weighted_hypercube_markov_chain()
     edge_list = [
         (1, 2), (2, 3), (3, 4), (4, 1),
@@ -116,6 +170,13 @@ function weighted_hypercube_markov_chain()
 	
 end
 
+"""
+    hypercube_markov_chain() -> (Q, π)
+
+Construct the uniform random walk Markov chain on the 4-cube (16 nodes,
+32 edges).  All edges have equal weight, so the stationary distribution is
+uniform.
+"""
 function hypercube_markov_chain()
     edge_list = [
         (1, 2), (2, 3), (3, 4), (4, 1),
@@ -136,6 +197,12 @@ function hypercube_markov_chain()
 	
 end
 
+"""
+    grid_markov_chain(n) -> (Q, π)
+
+Construct the uniform random walk Markov chain on the `n × n` grid graph
+(`n²` nodes with nearest-neighbour edges).
+"""
 function grid_markov_chain(n)
     E = Tuple{Int,Int}[]
     for i in 1:n^2
@@ -145,6 +212,17 @@ function grid_markov_chain(n)
     return markov_chain_from_edge_list(E)
 end
 
+"""
+    ma_house_markov_chain() -> (Q, π)
+
+Construct the uniform random walk Markov chain on the Massachusetts state house
+district adjacency graph.  Nodes are legislative districts; edges connect
+districts that share a non-trivial boundary (point adjacencies are excluded).
+
+Reads district geometries from the bundled shapefile at
+`src/experiments/HOUSE2021/HOUSE2021_POLY.shp`.  Requires `LibGEOS` and
+`Shapefile` to be loaded.
+"""
 function ma_house_markov_chain()
     GI = LibGEOS.GeoInterface
 

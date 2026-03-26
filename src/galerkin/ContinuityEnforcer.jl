@@ -1,20 +1,17 @@
 """
-this file contains functionality for projecting pairs of discretized curves and vector fields
-on graphs onto the set of such pairs which satisfies the (graph, discretized) continuity equation
-"""
+    form_ceh_system(Q, N) -> LU
 
+Assemble and factorise the `(NV+1) × (NV+1)` linear system whose solution
+gives the Lagrange multiplier for the projection onto the Galerkin-discretised
+continuity equation constraint set (Erbar et al. 2020, eqn. 10).
+
+The system matrix is essentially the differential operator `D = ∂t² + L` where
+`L` is the graph Laplacian of `Q`.  A mean-zero normalisation constraint is
+appended (ones border, zero corner) to ensure a unique solution.
+
+Returns an `LU` factorisation for efficient repeated solves.
+"""
 function form_ceh_system(Q, N)
-    """
-    let L be the Laplacian associated to Q, and N = 1/h be the number of steps
-    given a ρ ∈ V_{n,h}^1, m ∈ V_{e,h}^0, we want to project onto the set of
-    (ρ, m) satisfying the Galerkin-discretized discrete continuity equation (see eqn (10)
-    in Erbar et al. 2020). A Lagrange mulitpliers argument shows that this can be done by solving
-    a linear system Ax=b, where A is, essentially, the "differential operator"
-    D = (∂t^2) + L
-    Now because the the value of Lf(x) will in general depend on non-local information
-    (i.e values of f away from x), care must be taken when setting up this projection problem,
-    and we must treat it as one simultaneous linear system on R^{NV + 1 × NV + 1}
-    """
 	V = size(Q,1)
     #form the Laplacian, and write N copies of it to an array
     L = 1. * laplacian_from_transition(Q)
@@ -45,17 +42,19 @@ function form_ceh_system(Q, N)
     #return A
 end
 
-function form_b(ρ_A, ρ_B, ρ, m, Q)
-    """
-    succintly, the target b in the system Ax=b that we need to solve can be written
-    b = - ∂tρ - div m
+"""
+    form_b(ρ_A, ρ_B, ρ, m, Q) -> Vector
 
-    arguments
-    ρ_A, ρ_B ∈ R^n, the initial and terminal measures
-    Q, the Markov kernel encoding the graph
-    ρ ∈ V_{n,h}^1 (i.e. a matrix of size (1 + 1/h) × n)
-    m ∈ V_{e,h}^1 (i.e. a matrix of size (1/h) × n × n)
-    """
+Compute the right-hand side `b = -(∂tρ + div m)` for the continuity-equation
+projection linear system.
+
+# Arguments
+- `ρ_A`, `ρ_B`: initial and terminal node measures (length-`V` vectors)
+- `ρ`: density curve, matrix of size `(N+1) × V`
+- `m`: edge-flux tensor of size `N × V × V`
+- `Q`: Markov transition matrix defining the graph
+"""
+function form_b(ρ_A, ρ_B, ρ, m, Q)
     N = size(ρ, 1) - 1
     V = size(Q, 1)
     h_inv = N
@@ -73,15 +72,21 @@ function form_b(ρ_A, ρ_B, ρ, m, Q)
 end
 
 
+"""
+    proj_CE!(ρ, m, μ, ν, Q, A=nothing) -> (ρ, m)
+
+Project `(ρ, m)` in-place onto the Galerkin-discretised continuity equation
+constraint set.  If `φ` solves the linear system `A·φ = b`, the update is:
+
+    ρ[1,:]   .= μ
+    ρ[2:N,:] .+= N·(φ[2:N,:] - φ[1:N-1,:])
+    ρ[N+1,:] .= ν
+    m[t,:,:] .+= ∇_G(φ[t,:])   for each t
+
+`A` is the factorised system from `form_ceh_system`; if omitted it is assembled
+on the fly (expensive — pass a cached factorisation when possible).
+"""
 function proj_CE!(ρ, m, μ, ν, Q, A=nothing)
-    """
-    solves the projection problem in place, updating ρ and m to satisying the Galerkin-discretized discrete continuity equation
-    if φ solves the linear system, the update is given by
-    ρ[1,x] = ρ_A
-    ρ[N+1,x] = ρ_B
-    ρ[2:N,x] .+= h^-1*(φ[2:N,:] - φ[1:N-1,:])
-    m[1:N,:,:] .+= ∇_G(φ[1:N,:])
-    """
     N, V, _ = size(m)
     if isnothing(A)
         A = form_ceh_system(Q, N)
@@ -102,6 +107,13 @@ function proj_CE!(ρ, m, μ, ν, Q, A=nothing)
     return (ρ, m)
 end
 
+"""
+    in_CEplus(ρ, m, μ, ν, Q; verbose=false) -> Bool
+
+Return `true` if `(ρ, m)` satisfies the continuity equation with boundary
+conditions `μ`, `ν` and has non-negative densities (tolerance `1e-10`).
+Prints the max discrepancy and minimum density when `verbose=true`.
+"""
 function in_CEplus(ρ, m, μ, ν, Q; verbose=false)
     discrep = maximum(abs.(CE_operator(ρ,m,Q)))
     if verbose
@@ -112,11 +124,17 @@ end
 
 
 
+"""
+    proj_CENN(ρ, m, μ, ν, Q, A=nothing; verbose=false, maxiters=2^32) -> (ρ, m)
+
+Project onto the intersection of the continuity-equation constraint set and the
+non-negativity constraint via the POCS (Projections onto Convex Sets) algorithm.
+
+Because discretised curves are not continuous, a continuity-equation-satisfying
+sequence can still leave the probability simplex; this POCS loop enforces both
+constraints simultaneously.
+"""
 function proj_CENN(ρ, m, μ, ν, Q, A=nothing; verbose=false, maxiters=2^32)
-    """
-    because our curves are not continuous, it's possible for a sequence of measures representing a rectification of a curve to actually leave the simplex
-    while satisfying the continuity equation, so here we employ the POCS routine to identify a curve of strictly non-negative measures
-    """
     xρ = ρ
     xm = m
 
@@ -151,15 +169,12 @@ function proj_CENN(ρ, m, μ, ν, Q, A=nothing; verbose=false, maxiters=2^32)
     return (xρ, xm)
 end
 
+"""
+    proj_CE(ρ, m, μ, ν, Q, A=nothing) -> (ρ_new, m_new)
+
+Non-mutating variant of `proj_CE!`: allocates and returns new arrays.
+"""
 function proj_CE(ρ, m, μ, ν, Q, A=nothing)
-    """
-    solves the projection problem returning ρ and m satisying the Galerkin-discretized discrete continuity equation
-    if φ solves the linear system, the update is given by
-    ρ[1,x] = ρ_A
-    ρ[N+1,x] = ρ_B
-    ρ[2:N,x] = ρ[2:N,x] +  h^-1*(φ[2:N,:] - φ[1:N-1,:])
-    m[1:N,:,:] = m[1:N,:,:] + ∇_G(φ[1:N,:])
-    """
     N, V, _ = size(m)
     if isnothing(A)
         A = form_ceh_system(convert(Array, Q), N)
@@ -179,15 +194,13 @@ function proj_CE(ρ, m, μ, ν, Q, A=nothing)
     return (ρ_pr, m_pr)
 end
 
+"""
+    find_lagrange_multiplier(ρ, m, μ, ν, Q, A=nothing) -> (b, ϕ, φ, ∂tφ, ∇φ)
+
+Solve the continuity-equation projection system and return the intermediate
+quantities `(b, ϕ, φ, ∂tφ, ∇φ)` for diagnostic or debugging purposes.
+"""
 function find_lagrange_multiplier(ρ, m, μ, ν, Q, A=nothing)
-    """
-    solves the projection problem returning ρ and m satisying the Galerkin-discretized discrete continuity equation
-    if φ solves the linear system, the update is given by
-    ρ[1,x] = ρ_A
-    ρ[N+1,x] = ρ_B
-    ρ[2:N,x] = ρ[2:N,x] +  h^-1*(φ[2:N,:] - φ[1:N-1,:])
-    m[1:N,:,:] = m[1:N,:,:] + ∇_G(φ[1:N,:])
-    """
     N, V, _ = size(m)
     if isnothing(A)
         A = form_ceh_system(convert(Array, Q), N)

@@ -1,23 +1,25 @@
 # various utility functions that don't belong to any particular subroutine
 
-# check that a vector μ is a probability density w.r.t the steady state π
+"""
+    is_distribution(μ, π) -> Bool
+
+Return `true` if `μ` is a probability density with respect to the steady state `π`,
+i.e. `μ ⋅ π == 1`. Asserts that `μ` and `π` have the same length.
+"""
 function is_distribution(μ, π)
-    """
-    check to see if a given vector μ is a probability distribution
-    w.r.t the steady state π
-    raises an error if μ and π are not defined for the same number of nodes
-    """
     @assert size(μ, 1) == size(π, 1)
     return μ ⋅ π == 1
 end
 
 ## ADMISSIBLE MEANS
 
+"""
+    geomean(x, y) -> Real
+
+Geometric mean of real numbers `x` and `y`.  Returns `-Inf` if either argument
+is negative (convention used by the graph Wasserstein metric tensor).
+"""
 function geomean(x,y)
-    """
-    compute the geometric mean of real numbers x, y
-    if either is negative, their geometric mean is taken to be -∞
-    """
 	if x < 0 || y < 0
         return -Inf
     else
@@ -25,12 +27,18 @@ function geomean(x,y)
     end
 end
 
+"""
+    logmean(s, t; tol=1e-5) -> Real
+
+Logarithmic mean of real numbers `s` and `t`:
+
+    L(s, t) = (s - t) / (log s - log t)
+
+Returns `-Inf` if either argument is negative, `0` if either is zero and the
+other non-negative, and `(s + t) / 2` (first-order Taylor approximation) when
+`|s - t| ≤ tol`.
+"""
 function logmean(s, t; tol=1e-5)
-    """
-    compute the logarithmic mean of real numbers s, t
-    if either is negative, their logmean is -∞
-    if at least one is 0 and the other non-negative, their logmean is 0
-    """
     if minimum([s t]) < 0
         return -Inf
 	elseif abs(s-t) ≤ tol
@@ -68,12 +76,17 @@ logmean_partial_t(s, t; tol=1e-5) = abs(s - t) < tol ? 0.5 : (s - t - t*log(s) +
 
 ## GRAPH CALCULUS
 
+"""
+    graph_gradient(Q, f) -> Matrix
+
+Compute the graph gradient ∇_G(f), where G is the graph induced by the
+transition matrix `Q` and `f` is a function defined on the nodes.
+
+Entry `(i, j)` of the result is `f[i] - f[j]` when the edge `(i,j)` exists
+(i.e. `Q[i,j] ≠ 0`) and zero otherwise.  The matrix is antisymmetric.
+Asserts that `Q` and `f` have compatible dimensions.
+"""
 function graph_gradient(Q, f)
-    """
-    given a transition rate matrix Q and a function defined on the nodes f
-    compute the ∇_G(f), where G is the graph induced by Q
-    raises an error if dimensions of Q and f are incompatible
-    """
     @assert size(Q,1) == size(f,1)
     ∇f = zeros(size(Q))
     V = size(Q,1)
@@ -106,11 +119,15 @@ function add_graph_gradient!(dest, Q, f)
     end
 end
 
+"""
+    graph_divergence(Q, m) -> Vector
+
+Compute the graph divergence of the V×V edge field `m` with respect to the
+graph induced by `Q`.  Entry `i` of the result is
+
+    (div m)[i] = (1/2) · Σ_j Q[i,j] · (m[j,i] - m[i,j])
+"""
 function graph_divergence(Q, m)
-    """
-    given a transition rate matrix Q and a vector field m, compute the
-    graph divergence of m w.r.t to the graph induced by Q
-    """
     V = size(Q, 1)
     div = zeros(V)
     @inbounds for i in 1:V
@@ -141,10 +158,13 @@ function graph_divergence!(out, Q, m_t)
 end
 
 
+"""
+    laplacian_from_transition(Q) -> Matrix
+
+Return the graph Laplacian `L = Q - D` where `D` is the diagonal degree matrix
+`D[i,i] = Σ_j Q[i,j]`.
+"""
 function laplacian_from_transition(Q)
-    """
-    form the Laplacian matrix of Q
-    """
     return Q - Diagonal(reshape(sum(Q, dims=2), (size(Q, 1),)))
 end
 

@@ -1,16 +1,27 @@
 """
-    step_direction(ν, M, weights, Q)
+    step_direction(ν, M, weights, Q; tol=1e-10, n_steps=100,
+                   prev_geodesics=nothing) -> (tangent_vector, variance, geodesics)
 
-REQUIRED ARGS
-Q: Markov transition rate matrix representing the underlying graph
-ν: probability measure w.r.t. the steady state of Q
-M: array of size (num_nodes, num_measures). Each column should be a probability measure w.r.t to the steady state of Q
-weights: a non-negative vector of size num_measures with sum(weights) == 1
+Compute the Wasserstein gradient direction and variance at `ν` for the
+weighted Fréchet mean objective with reference measures `M` and `weights`.
 
-OPTIONAL ARGS:
-tol: positive float, convergence threshold
-n_steps: integer, determines how many steps are used for computing the geodesics which yield the tangent vector
+For each reference measure `M[:,i]`, computes the geodesic from `ν` to
+`M[:,i]` via `discrete_transport` and accumulates the weighted sum of initial
+tangent vectors.
 
+# Arguments
+- `ν`: current iterate — probability density w.r.t. the stationary distribution of `Q`
+- `M`: `V × p` matrix whose columns are the reference probability densities
+- `weights`: non-negative length-`p` vector summing to 1
+- `Q`: row-stochastic Markov transition matrix defining the graph
+- `tol`: convergence tolerance for each `discrete_transport` call
+- `n_steps`: number of geodesic time steps
+- `prev_geodesics`: vector of `ErbarBundle`s from the previous iteration for warm-starting
+
+# Returns
+`(tangent_vector, variance, geodesics)` where `tangent_vector` is the gradient
+direction, `variance` is the current objective value, and `geodesics` is the
+vector of solved `ErbarBundle`s (for warm-starting the next call).
 """
 function step_direction(ν, M, weights, Q; tol=1e-10, n_steps=100, prev_geodesics=nothing)
     tangent_vector = zeros(size(Q))
@@ -29,29 +40,55 @@ end
 
 
 """
-    barycenter(M, weights, Q; h=0.1, maxiters=100, tol=1e-8, geodesic_tol=1e-10, geodesic_steps=100)
+    barycenter(M, weights, Q; h=1.0, maxiters=100, tol=1e-8,
+               geodesic_tol=1e-10, geodesic_steps=100,
+               return_stats=false, initialization_index=1,
+               initialization=nothing, uniform_init=false,
+               geodesic_warmstart=true, verbose=true,
+               stagnation_window=100, stagnation_tol=0.01,
+               h_min=1e-8) -> ν  (or (ν, norm_diffs, variances) if return_stats=true)
 
-REQUIRED ARGS
-Q: Markov transition rate matrix representing the underlying graph
-M: array of size (num_nodes, num_measures). Each column should be a probability measure w.r.t to the steady state of Q
-weights: a non-negative vector of size num_measures with sum(weights) == 1
+Compute the Wasserstein barycenter of the reference measures in `M` with
+respect to `weights` via Wasserstein gradient descent (WGD) on the graph
+defined by `Q`.
 
-OPTIONAL ARGS:
-h: positive float, step size for Wasserstein gradient descent scheme
-maxiters: positive integer, cap on number of iterations for scheme
-tol: positive float, convergence threshold
-geodesic_tol: positive float, convergence threshold for computing the geodesics which yield the tangent vectors
-geodesic_steps: integer, determines how many steps are used for computing the geodesics which yield the tangent vector
+Convergence is assessed on the gradient norm `‖∇J‖`; a stagnation detector
+halves the step size when relative improvement over the last `stagnation_window`
+iterates falls below `stagnation_tol`.
 
-
-#TODO
+# Arguments
+- `M`: `V × p` matrix whose columns are reference probability densities
+- `weights`: non-negative length-`p` vector summing to 1
+- `Q`: row-stochastic Markov transition matrix defining the graph
+- `h`: initial WGD step size (default 1.0)
+- `maxiters`: maximum number of WGD iterations
+- `tol`: gradient-norm convergence threshold
+- `geodesic_tol`: convergence tolerance passed to each `discrete_transport` call
+- `geodesic_steps`: number of time steps for each geodesic
+- `return_stats`: if `true`, return `(ν, norm_diffs, variances)` instead of `ν`
+- `initialization`: explicit starting measure; takes precedence over index-based init
+- `initialization_index`: column of `M` used as the starting point (default 1)
+- `uniform_init`: if `true`, start from the uniform density (density ≡ 1)
+- `geodesic_warmstart`: reuse geodesics from the previous iteration as warm starts
+- `verbose`: show a ProgressMeter display with per-iteration statistics
+- `stagnation_window`: number of iterations over which to measure relative improvement
+- `stagnation_tol`: minimum relative improvement before halving `h`
+- `h_min`: minimum allowed step size; stagnation halving stops here
 """
 function barycenter(M, weights, Q;
                     h=1., maxiters=100, tol=1e-8,
                     geodesic_tol=1e-10, geodesic_steps=100,
                     return_stats=false, initialization_index=1,
-                    initialization=nothing, geodesic_warmstart=true, verbose=true)
-    ν = isnothing(initialization) ? M[:,initialization_index] : copy(initialization)
+                    initialization=nothing, uniform_init=false,
+                    geodesic_warmstart=true, verbose=true,
+                    stagnation_window=100, stagnation_tol=0.01, h_min=1e-8)
+    ν = if !isnothing(initialization)
+        copy(initialization)
+    elseif uniform_init
+        ones(size(M, 1))   # density ≡ 1 w.r.t. stationary measure — full support everywhere
+    else
+        M[:, initialization_index]
+    end
     ν_next = copy(ν)
 
     steady_state = stationary_from_transition(Q)
@@ -73,7 +110,11 @@ function barycenter(M, weights, Q;
         variances[k] = variance
 
         div_term = graph_divergence(Q, metric_tensor(ν) .* δJ)
-        ν_next = ν .- (1 + 0.1 * randn()) * h * div_term
+        # Gradient norm is h-independent; used for convergence so that stagnation-driven
+        # step size reductions cannot trigger false convergence.
+        grad_norm = norm(div_term .* root_steady_state)
+
+        ν_next = ν .- h * div_term
 
         n_halve = 0
         while abs(dot(ν_next, steady_state) - 1) > 1e-8 || minimum(ν_next) < 0
@@ -87,14 +128,29 @@ function barycenter(M, weights, Q;
         norm_diff = norm((ν_next - ν) .* root_steady_state)
         norm_diffs[k] = norm_diff
 
+        if k > stagnation_window
+            relative_improvement = (norm_diffs[k - stagnation_window] - norm_diff) / norm_diff
+            if relative_improvement < stagnation_tol
+                if h <= h_min
+                    verbose && ProgressMeter.finish!(prog; desc="WGD (stagnated, h_min reached) ")
+                    break
+                else
+                    h /= 2
+                    verbose && println("\nStagnation detected — halving step size to h=$(h)")
+                end
+            end
+        end
+
         if verbose
             ProgressMeter.next!(prog; showvalues=[
+                ("‖∇J‖", @sprintf("%.4e", grad_norm)),
                 ("‖Δν‖", @sprintf("%.4e", norm_diff)),
-                ("var",  @sprintf("%.4f", variance)),
+                ("var",  @sprintf("%.4e", variance)),
+                ("h",    @sprintf("%.4e", h)),
             ])
         end
 
-        if norm_diff < tol
+        if grad_norm < tol
             verbose && ProgressMeter.finish!(prog; desc="WGD (converged) ")
             break
         else

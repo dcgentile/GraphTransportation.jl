@@ -1,38 +1,28 @@
 """
-This file contains functionality for solving the projection to B problem, as described in Erbar et al 2020,
-section 4.3.
+    prox_Astar!(θ, m) -> (θ, m)
 
-Let B = { (p,q) : p + 0.25 * q^2 ≤ 0 }
-given θ, m, to compute the proximal mapping of the conjugate of the edgewise action A, we must solve indexwise the projection
-onto B. This is accomplished via Newton's method.
+Compute in-place the proximal mapping of the conjugate of the edgewise action
+functional A, as described in Erbar et al. 2020 section 4.3.
 
-arguments
-let h be the step size, let n be the number of nodes
-θ,m ∈ V_{e,h}^0, i.e. tensors of size (1/h) × n × n
+The set `B = {(p, q) : p + 0.25·q² ≤ 0}` is the feasible region; for each
+index the point `(θ[i], m[i])` is projected onto B via `projection_by_newton`.
+
+`θ` and `m` must be tensors of size `(N, n, n)` where `N = 1/h` is the number
+of time steps and `n` is the number of nodes.
 """
 function prox_Astar!(θ::AbstractArray, m::AbstractArray)
-    """
-    solve the indexwise projection problems in place
-
-    arguments
-    θ, m ∈ V_{e,h}^0, i.e. they are tensors of size (1/h) × n × n, where h is the step size and n the number of nodes
-    """
-    #θ, m = proj_B.(θ, m)
     for i in eachindex(θ, m)
-        #θ[i], m[i] = proj_B(θ[i], m[i])
-        #θ[i], m[i] = project_by_bisection(θ[i], m[i])
         θ[i], m[i] = projection_by_newton(θ[i], m[i])
     end
     return (θ, m)
 end
 
-function prox_Astar(θ, m)
-    """
-    solve the indexwise projection and return a new pair of arrays
+"""
+    prox_Astar(θ, m) -> (θ_new, m_new)
 
-    arguments
-    θ, m ∈ V_{e,h}^0, i.e. they are tensors of size (1/h) × n × n, where h is the step size and n the number of nodes
-    """
+Non-mutating variant of `prox_Astar!`: allocates and returns new arrays.
+"""
+function prox_Astar(θ, m)
 	θ_pr, m_pr = similar(θ), similar(m)
     for idx in eachindex(θ)
         θ_pr[idx], m_pr[idx] = project_by_bisection(θ[idx], m[idx])

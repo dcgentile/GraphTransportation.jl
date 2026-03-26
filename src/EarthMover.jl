@@ -1,20 +1,24 @@
 """
-    discrete_transport(Q::AbstractMatrix, μ::AbstractVector, ν::AbstractVector, N=100; σ=0.5, τ=0.5, maxiters=2^16, tol=1e-10, verbose=false, progress=false)
+    discrete_transport(Q, μ, ν; N=64, σ=0.5, τ=0.5, maxiters=2^16, tol=1e-10,
+                       progress=false, initialization=nothing) -> ErbarBundle
 
-REQUIRED ARGS
-Q: Markov transition rate matrix representing the underlying graph
-μ: probability measure w.r.t. the steady state of Q
-ν: probability measure w.r.t. the steady state of Q
-weights: a non-negative vector of size num_measures with sum(weights) == 1
+Compute the discrete Wasserstein geodesic from `μ` to `ν` on the graph defined
+by the Markov transition matrix `Q`, using the Chambolle-Pock primal-dual
+algorithm of Erbar et al. 2020.
 
-OPTIONAL ARGS:
-N: integer, determines how many steps are used for computing the geodesics which yield the tangent vector
-σ: positive float, must satisfy στ < 1, roughly the equivalent of a learning rate
-τ: positive float, must satisfy στ < 1, roughly the equivalent of a learning rate
-tol: positive float, convergence threshold
-maxiters: positive integer, cap on number of iterations for scheme
-verbose: boolean, DO NOT USE WITH PROGRESS if true, causes Chambolle Pock routine to print status everytime it passes to a new step of the computation.
-progress: boolean, shows a progress meter if true
+Returns an `ErbarBundle` encoding the full geodesic; its `vector.m[1,:,:]`
+field is the initial tangent vector (logarithmic map at `μ`), and `action(result)`
+gives the squared Wasserstein distance.
+
+# Arguments
+- `Q`: row-stochastic Markov transition matrix defining the graph
+- `μ`, `ν`: probability densities w.r.t. the stationary distribution of `Q`
+- `N`: number of time steps for the geodesic discretisation (default 64)
+- `σ`, `τ`: Chambolle-Pock step sizes; must satisfy `σ·τ < 1` (default 0.5)
+- `maxiters`: maximum Chambolle-Pock iterations (default 65536)
+- `tol`: convergence tolerance on the density change between iterates
+- `progress`: show a progress spinner if `true`
+- `initialization`: an `ErbarBundle` from a prior solve to warm-start from
 """
 function discrete_transport(
     Q::AbstractMatrix,
@@ -42,22 +46,20 @@ end
 
 
 """
-    transport_cost(Q::AbstractMatrix, μ::AbstractVector, ν::AbstractVector, N=100; σ=0.5, τ=0.5, maxiters=2^16, tol=1e-10, verbose=false, progress=false)
+    transport_cost(Q, μ, ν; N=64, σ=0.5, τ=0.5, maxiters=2^16, tol=1e-10,
+                   progress=false) -> Float64
 
-REQUIRED ARGS
-Q: Markov transition rate matrix representing the underlying graph
-μ: probability measure w.r.t. the steady state of Q
-ν: probability measure w.r.t. the steady state of Q
-weights: a non-negative vector of size num_measures with sum(weights) == 1
+Return the discrete Wasserstein distance `W(μ, ν)` on the graph defined by `Q`,
+computed as `√(action(discrete_transport(Q, μ, ν; ...)))`.
 
-OPTIONAL ARGS:
-N: integer, determines how many steps are used for computing the geodesics which yield the tangent vector
-σ: positive float, must satisfy στ < 1, roughly the equivalent of a learning rate
-τ: positive float, must satisfy στ < 1, roughly the equivalent of a learning rate
-tol: positive float, convergence threshold
-maxiters: positive integer, cap on number of iterations for scheme
-verbose: boolean, DO NOT USE WITH PROGRESS if true, causes Chambolle Pock routine to print status everytime it passes to a new step of the computation.
-progress: boolean, shows a progress meter if true
+# Arguments
+- `Q`: row-stochastic Markov transition matrix defining the graph
+- `μ`, `ν`: probability densities w.r.t. the stationary distribution of `Q`
+- `N`: number of time steps for the geodesic discretisation (default 64)
+- `σ`, `τ`: Chambolle-Pock step sizes; must satisfy `σ·τ < 1` (default 0.5)
+- `maxiters`: maximum Chambolle-Pock iterations (default 65536)
+- `tol`: convergence tolerance on the density change between iterates
+- `progress`: show a progress spinner if `true`
 """
 function transport_cost(Q::AbstractMatrix,
              μ::AbstractVector,

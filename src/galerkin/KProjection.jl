@@ -1,25 +1,13 @@
 """
-This file contains functionality for solving the projection to K problem, as described in Erbar et al 2020,
-section 4.4. In one sense it is perhaps the most involved of all the subroutines, but it does have
-a highly convenient aspect to it: like the computation of the proximal mapping of the action conjugate, it
-fully decouples index-wise into low dimensional projection problems.
+    project_K(ρ_m, ρ_p, θ) -> (ρ_m_new, ρ_p_new, θ_new)
 
-let T be the chosen admissable mean (log mean, geo mean, etc.)
-recall that if min(x,y) < 0, T(x,y) = -∞
-let K = { (x,y,z) : 0 ≤ z ⩽ T(x,y) }
+Project each element of the triple `(ρ_m[I], ρ_p[I], θ[I])` onto the convex
+set `K = {(x,y,z) : 0 ≤ z ≤ T(x,y)}` (where `T` is the geometric mean) and
+return new arrays.  All three input tensors must have the same shape.
 
-arguments
-let h be the step size, let n be the number of nodes
-ρ_minus, ρ_plus, θ ∈ V_{e,h}^0, i.e. tensors of size (1/h) × n × n
+See Erbar et al. 2020 section 4.4.
 """
-
 function project_K(ρ_m, ρ_p, θ)
-    """
-    for  each index I, we compute the projection onto K of the point
-    p = projection((ρ_minus[I], ρ_plus[I], θ[I]))
-    and return three matrices where the first matrix is the composed of the
-    x components of p, the second the y components, and the third the z components
-    """
     ρ_m_pr, ρ_p_pr, θ_pr = similar(ρ_m), similar(ρ_p), similar(θ)
     for (idx, p) in enumerate(θ)
         p1, p2 = ρ_m[idx], ρ_p[idx]
@@ -28,61 +16,66 @@ function project_K(ρ_m, ρ_p, θ)
     return (ρ_m_pr, ρ_p_pr, θ_pr)
 end
 
+"""
+    project_K!(ρ_m, ρ_p, θ) -> (ρ_m, ρ_p, θ)
+
+In-place variant of `project_K`: projects each element-wise triple onto K and
+writes the result back into the input arrays.
+"""
 function project_K!(ρ_m, ρ_p, θ)
-    """
-    for  each index I, we compute in place the projection onto K of the point
-    p = projection((ρ_minus[I], ρ_plus[I], θ[I])
-    I.e, for each index,
-    ρ_m[idx], ρ_p[idx], θ[idx] = proj_K(ρ_m[idx], ρ_p[idx], θ[idx])
-    """
     @inbounds for idx in eachindex(θ)
         ρ_m[idx], ρ_p[idx], θ[idx] = proj_K(ρ_m[idx], ρ_p[idx], θ[idx])
     end
     return (ρ_m, ρ_p, θ)
 end
 
+"""
+    proj_K(x, y, z, tolerance=1e-6) -> (a, b, c)
+
+Project the scalar triple `(x, y, z)` onto `K = {(x,y,z) : 0 ≤ z ≤ √(xy)}`.
+
+Four cases are handled in order:
+1. Already in K → return unchanged.
+2. Below K (`z ≤ tolerance`) → project onto the bottom facet (non-negative orthant of the `z=0` plane).
+3. Both `x,y ≤ 0` and `(-x/z, -y/z) ∈ ∂⁺T(0)` (Lemma 4.7) → project to origin.
+4. Above K → solve the smooth convex projection via `project_by_newton`.
+"""
 function proj_K(x, y, z, tolerance=1e-6)
-    """
-    for real numbers x,y,z, we project to the convex set K
-    """
     if 0 ≤ z && z < geomean(x,y)
-        """
-        if this is true, the point is already in K and we are done
-        """
         return (x, y, z)
     elseif z ≤ tolerance
-        """
-        if (x,y,z) is "underneath" K, this is projection onto the first quadrant of the plane,
-        i.e. the bottom facet of K
-        """
         return (maximum([x 0]), maximum([y 0]), 0)
     elseif x ≤ 0 && y ≤ 0 && super_differential_inclusion(-x / z, -y / z)
-        """
-        if z is positive, but both x and y are negative, we may need to project onto the origin
-        this happens iff (-x/z, -y/z) ∈ ∂^+T(0) (see Lemma 4.4 for the proof, with details for the
-        decision problem itself in Lemma 4.7)
-        """
         return (0,0,0)
     else
-        """
-        finally, if (x,y,z) is above K, concavity of the mean makes the projection problem a smooth
-        convex program, which we solve via gradient descent. It is also possible to solve this via Newton's
-        method, but then we need some way to guarantee convergence
-        """
         return project_by_newton(x,y,z)
         #return project_by_bisection(x,y,z)
     end
 end
 
+"""
+    super_differential_inclusion(s, t) -> Bool
+
+Return `true` if `(s, t)` lies in the superdifferential of the geometric mean
+at `0`, i.e. `s·t ≥ 1/4` with `s > 0` and `t > 0`.
+
+Used by `proj_K` to decide whether to project to the origin (Lemma 4.6–4.7 of
+Erbar et al. 2020).
+"""
 function super_differential_inclusion(s, t)
-    """
-    test the point (s,t) for inclustion in the superdifferential at 0
-    for the geometric mean, this boils down to the following easy test, and
-    can be seen almost immediately by applying lemma 4.6
-    """
     return s * t ≥ 0.25 && s > 0 && t > 0
 end
 
+"""
+    project_by_newton(x, y, z; tolerance=1e-6, safety=false) -> (a, b, c)
+
+Project `(x, y, z)` onto the boundary of K by solving for the scalar `q > 0`
+such that `w(q) = [√q, 1/√q, 1]` points in the direction of the projection,
+using the `find_q` solver (ForwardDiff + Roots).
+
+This is the reference implementation; the production path uses
+`project_by_newton_fast`, which avoids allocations and external solver calls.
+"""
 function project_by_newton(x,y,z; tolerance=1e-6, safety=false)
     w(q) = [sqrt(q); 1/sqrt(q); 1]
     q_star = find_q([x;y;z])
@@ -221,6 +214,14 @@ function project_by_newton_fast(x, y, z)
     return (τ*w1, τ*w2, τ)
 end
 
+"""
+    proj_K_fast(x, y, z, tolerance=1e-6) -> (a, b, c)
+
+Allocation-free scalar projection onto `K = {(x,y,z) : 0 ≤ z ≤ √(xy)}`.
+Mirrors the case logic of `proj_K` but uses `project_by_newton_fast` for the
+boundary case, avoiding all heap allocations.  This is the production path
+called by `project_K_fast!` in the Chambolle-Pock inner loop.
+"""
 function proj_K_fast(x, y, z, tolerance=1e-6)
     gm = sqrt(max(x, 0.0) * max(y, 0.0))
     if 0 ≤ z && z < gm
@@ -234,6 +235,12 @@ function proj_K_fast(x, y, z, tolerance=1e-6)
     end
 end
 
+"""
+    project_K_fast!(ρ_m, ρ_p, θ) -> (ρ_m, ρ_p, θ)
+
+In-place variant of `proj_K_fast` applied element-wise to all index triples.
+The production entry point used by `prox_G!` in the Chambolle-Pock hot loop.
+"""
 function project_K_fast!(ρ_m, ρ_p, θ)
     @inbounds for idx in eachindex(θ)
         ρ_m[idx], ρ_p[idx], θ[idx] = proj_K_fast(ρ_m[idx], ρ_p[idx], θ[idx])

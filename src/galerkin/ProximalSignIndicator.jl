@@ -1,3 +1,12 @@
+"""
+    proj_Jpm(q, ρ_minus, ρ_plus, Q) -> (q_proj, ρ_minus_proj, ρ_plus_proj)
+
+Project `(q, ρ_minus, ρ_plus)` onto the set
+`J_pm = {(q, ρ_minus, ρ_plus) : ρ_minus[t,x,y] = q[t,x], ρ_plus[t,x,y] = q[t,y]}`.
+
+The projection is computed node-by-node via a closed-form expression derived
+from a Lagrange multiplier argument (Erbar et al., section 4.5).
+"""
 function proj_Jpm(q, ρ_minus, ρ_plus, Q)
     #N, V = size(q)
     #Qprime = reshape(Q, 1, size(Q) ...)
@@ -31,20 +40,19 @@ end
 
 
 
+"""
+    proximal_IJpm_star!(q, ρ_minus, ρ_plus, Q; safe=false) -> (q, ρ_minus, ρ_plus)
+
+Compute in-place the proximal mapping of `IJ_pm*` via Moreau's identity
+(Erbar et al., section 4.5):
+
+    prox_{IJ_pm*}(q, ρ_minus, ρ_plus) = (q, ρ_minus, ρ_plus) - proj_{J_pm}(q, ρ_minus, ρ_plus)
+
+The projection `q_proj` is computed node-by-node; the subtraction for
+`ρ_minus` and `ρ_plus` broadcasts via `reshape` without materialising
+the full `(N, V, V)` projected arrays.
+"""
 function proximal_IJpm_star!(q, ρ_minus, ρ_plus, Q; safe=false)
-    """
-    compute in place the IJpm, as described in section 4.5 of Erbar et al 2020
-    because IJ_pm^star if the fenchel conjugate of an indicator function, it can
-    be computed via Moreau's identity: prox_IJpm_star = identity - proj_IJpm
-    thus we solve the problem of projecting onto IJpm, and subtract the resultant
-    projection off of the argument
-
-    arguments
-    ρ ∈ V_{n × h}^0 (i.e. it is a matrix of size 1/h x n, where 1/h is the step size and n the number of nodes)
-    ρ_minus ∈ V_{e × h}^0 (i.e. it is a tensor of size 1/h x n × n, where 1/h is the step size and n the number of nodes)
-    ρ_plus ∈ V_{e × h}^0 (i.e. it is a tensor of size 1/h x n × n, where 1/h is the step size and n the number of nodes)
-    """
-
     N, V = size(q)
     q_proj = zeros(N, V)
 
@@ -70,19 +78,12 @@ function proximal_IJpm_star!(q, ρ_minus, ρ_plus, Q; safe=false)
 end
 
 
-function proximal_IJpm_star(q, ρ_minus, ρ_plus, Q)
-    """
-    compute the proximal mapping of  IJpm_star, as described in section 4.5 of Erbar et al 2020
-    because IJ_pm^star if the fenchel conjugate of an indicator function, it can
-    be computed via Moreau's identity: prox_IJpm_star = identity - proj_IJpm
-    thus we solve the problem of projecting onto IJpm, and subtract the resultant
-    projection off of the argument
+"""
+    proximal_IJpm_star(q, ρ_minus, ρ_plus, Q) -> (q_new, ρ_minus_new, ρ_plus_new)
 
-    arguments
-    ρ ∈ V_{n × h}^0 (i.e. it is a matrix of size 1/h x n, where 1/h is the step size and n the number of nodes)
-    ρ_minus ∈ V_{e × h}^0 (i.e. it is a tensor of size 1/h x n × n, where 1/h is the step size and n the number of nodes)
-    ρ_plus ∈ V_{e × h}^0 (i.e. it is a tensor of size 1/h x n × n, where 1/h is the step size and n the number of nodes)
-    """
+Non-mutating variant of `proximal_IJpm_star!`: allocates and returns new arrays.
+"""
+function proximal_IJpm_star(q, ρ_minus, ρ_plus, Q)
     N, V = size(q)
     ρ_pr = similar(q)
     ρ_minus_pr = similar(ρ_minus)

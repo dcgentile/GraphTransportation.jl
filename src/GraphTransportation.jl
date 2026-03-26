@@ -1,3 +1,23 @@
+"""
+    GraphTransportation
+
+Julia package for Wasserstein geometry on graphs, implementing the framework of
+Erbar, Rumpf, Schmitzer, and Simon — *Computation of optimal transport on
+discrete metric measure spaces*.
+
+The package provides:
+- **Geodesics** (`discrete_transport`, `transport_cost`): compute optimal
+  transport geodesics between probability measures on a graph via a
+  Galerkin-discretised Chambolle-Pock primal-dual algorithm.
+- **Barycenters** (`barycenter`, `iterated_barycenter`): compute Wasserstein
+  Fréchet means via gradient descent on the graph Wasserstein space.
+- **Coordinate recovery** (`analysis`): recover barycentric coordinates of a
+  measure with respect to a reference family by solving a quadratic programme
+  on the Gram matrix of logarithmic maps.
+- **Entropic barycenters** (`sinkhorn_barycenter`, `simplex_regression`):
+  entropy-regularised barycenter computation and coordinate recovery via the
+  Sinkhorn algorithm.
+"""
 module GraphTransportation
 
 # dependencies
@@ -37,8 +57,10 @@ include("EarthMover.jl")
 
 # include functionality for barycenter synthesis
 include("Barycenters.jl")
+include("Sinkhorn.jl")
 
 # expose functionality for computing geodesics
 export discrete_transport, transport_cost, action, barycenter, iterated_barycenter, analysis
+export sinkhorn_barycenter, simplex_regression
 
 end

@@ -1,19 +1,6 @@
 using Base.Threads
 
 """
-this file contains the Chambolle pock routine for minimizing the objective function described in eqn (26)
-of Erbar et al 2020.
-
-RELEVANT SETS:
-
-Javg = { ρ, ρ_bar : ρ_bar == avg_h(ρ) } (avg_h is the time average operator, see definition 3.2 in Erbar 2020)
-Jeq = { ρ_bar, q : ρ_bar == q }
-Jpm = { q, ρ_minus, ρ_plus : ρ_minus[t,i,j] == q[t,i] && ρ_plus[t,i,j] == q[t,j]}
-K = { x,y,z : 0 ≤ z ≤ T(x,y) } (here T is the chosen admissible mean)
-ScriptK = { ρ_minus, ρ_plus, θ: ρ_minus[t,i,j], ρ_plus[t,i,j], θ[t,i,j] ∈ K}
-"""
-
-"""
     chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d;
                            σ=0.5, τ=0.5, λ=1.0, maxiters=2^16, tol=1e-10,
                            show_progress=false)
@@ -53,6 +40,7 @@ function chambolle_pock_routine(
     show_progress ? p = ProgressUnknown(spinner=true) : 0
     normdiff = Inf
     N = a.cache.N
+    threshold = N * tol
 
     for i in 1:maxiters
         show_progress ? next!(p;
@@ -70,7 +58,7 @@ function chambolle_pock_routine(
         prox_G!(a_next, c)
         combine!(d, a_next, a, 1.0, -1.0)
         normdiff = sum(d.vector.ρ .* d.vector.ρ * d.cache.π)
-        if normdiff < tol
+        if normdiff < threshold
             return a_next
         end
         λ = 1 / √(1 + 2 * τ)
@@ -108,6 +96,16 @@ function chambolle_pock(a::ErbarBundle;maxiters=2^16, tol=1e-10, σ=0.5, τ=0.5,
 end
 
 
+"""
+    chambolle_pock(Q, μ, ν, N; maxiters=2^16, σ=0.5, τ=0.5, λ=1.0,
+                   tol=1e-10, show_progress=false)
+
+Allocate eight `ErbarBundle` working copies and solve the graph optimal
+transport problem for boundary measures `μ`, `ν` on the graph defined by `Q`
+with `N` time steps.  Delegates to `chambolle_pock_routine`.
+
+Iterations stop when `Σ_t ‖ρ_{k+1}[t] - ρ_k[t]‖²_π < N·tol`.
+"""
 function chambolle_pock(
     Q::AbstractMatrix,
     μ::AbstractVector,
@@ -120,15 +118,6 @@ function chambolle_pock(
     tol=1e-10,
     show_progress=false
 )
-    """
-    this is a memory efficient version of Chambolle Pock that does computations in place whenever possible
-    iterations cease if ∫||ρ_{k} - ρ_{k + 1}||_π dt < tol
-
-    arguments
-    Q, a Markov kernel defining the graph
-    μ, ν, probability densities w.r.t to the steady state π of Q
-    N, the number of steps in the geodesic
-    """
     # we will only ever use 8 vectors
     a = ErbarBundle(Q, μ, ν, N)
     b = ErbarBundle(Q, μ, ν, N)
