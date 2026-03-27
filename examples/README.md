@@ -93,7 +93,3 @@ Run `MassachusettsBarycenter.jl` first to generate the cached Markov chain.
 **Barycenter of four reference measures on the MA House graph:**
 
 ![MA House barycenter](assets/ma_house_barycenter.png)
-
-**Discrete transport geodesic on the MA House graph:**
-
-![MA House geodesic](assets/ma_house_geodesic.png)
