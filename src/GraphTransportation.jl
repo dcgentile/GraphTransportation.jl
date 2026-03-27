@@ -29,7 +29,6 @@ using BlockBandedMatrices
 using Convex, SCS
 using ForwardDiff, Roots
 using ProgressMeter
-using Base: signequal
 
 # include general helper functions
 include("GraphCalculus.jl")
