@@ -26,7 +26,7 @@ function form_ceh_system(Q, N)
     # the diagonal of our final matrix
     d = Ad .+ Ld
     # the off diagonals of our final matrix
-    o = fill(1. * N^2 * I(V), N - 1)
+    o = fill(Matrix(1. * N^2 * I(V)), N - 1)
     #glue it all together
     A = BlockTridiagonal(o, d, o)
     # in order to ensure a unique solution, an additional lagrange multiplier is added
