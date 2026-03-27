@@ -2,7 +2,7 @@
     step_direction(ν, M, weights, Q; tol=1e-10, n_steps=100,
                    prev_geodesics=nothing) -> (tangent_vector, variance, geodesics)
 
-Compute the Wasserstein gradient direction and variance at `ν` for the
+Compute the discrete transport gradient direction and variance at `ν` for the
 weighted Fréchet mean objective with reference measures `M` and `weights`.
 
 For each reference measure `M[:,i]`, computes the geodesic from `ν` to
@@ -48,9 +48,8 @@ end
                stagnation_window=100, stagnation_tol=0.01,
                h_min=1e-8) -> ν  (or (ν, norm_diffs, variances) if return_stats=true)
 
-Compute the Wasserstein barycenter of the reference measures in `M` with
-respect to `weights` via Wasserstein gradient descent (WGD) on the graph
-defined by `Q`.
+Compute the discrete transport barycenter of the reference measures in `M` with
+respect to `weights` via gradient descent on the graph defined by `Q`.
 
 Convergence is assessed on the gradient norm `‖∇J‖`; a stagnation detector
 halves the step size when relative improvement over the last `stagnation_window`
@@ -177,7 +176,7 @@ The method proceeds in three steps:
   2. Assemble the `p × p` Gram matrix `A[i,j] = ⟨log_ν(M[:,i]),
      log_ν(M[:,j])⟩_{g(ν)}` under the metric tensor `g(ν)`.
   3. Solve the simplex-constrained quadratic programme `min_{w≥0, Σw=1} w'Aw`
-     using Convex.jl / SCS, which recovers the weights at the Wasserstein
+     using Convex.jl / SCS, which recovers the weights at the discrete transport
      barycenter.
 
 Optional keyword arguments:

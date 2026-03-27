@@ -40,7 +40,7 @@ julia --project=examples examples/<ScriptName>.jl
 
 | Script | Description |
 |--------|-------------|
-| `CubeBarycenter.jl` | Wasserstein barycenter of four measures on the cube graph (8 nodes). Produces a 2×2 reference panel alongside the barycenter. |
+| `CubeBarycenter.jl` | Discrete transport barycenter of four measures on the cube graph (8 nodes). Produces a 2×2 reference panel alongside the barycenter. |
 | `HypercubeBarycenter.jl` | Barycenter on the unweighted and randomly weighted 4-dimensional hypercube (16 nodes), visualised with a Schlegel diagram. |
 
 ### ODE validation

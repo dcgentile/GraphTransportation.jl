@@ -1,6 +1,6 @@
 # GraphTransportation.jl
 
-A Julia package for Wasserstein geometry on graphs, implementing the framework
+A Julia package for discrete transport geometry on graphs, implementing the framework
 of Erbar, Rumpf, Schmitzer, and Simon —
 *Computation of optimal transport on discrete metric measure spaces*.
 
@@ -10,11 +10,10 @@ Given a graph encoded as a Markov transition matrix `Q`, this package computes:
 
 - **Geodesics** between probability measures on the graph via a
   Galerkin-discretised Chambolle-Pock primal-dual algorithm
-- **Wasserstein barycenters** (Fréchet means) via gradient descent on the
-  graph Wasserstein space
+- **Discrete transport barycenters** (Fréchet means) via gradient descent
 - **Barycentric coordinate recovery** by solving a quadratic programme on the
   Gram matrix of logarithmic maps
-- **Entropy-regularised barycenters** via the Sinkhorn algorithm, with
+- **Entropic optimal transport barycenters** via the Sinkhorn algorithm, with
   simplex-regression-based coordinate recovery
 
 ## Quick start
@@ -29,7 +28,7 @@ Q = [0.0 1.0; 1.0 0.0]
 μ = [2.0, 0.0]
 ν = [0.0, 2.0]
 
-# Geodesic and Wasserstein distance
+# Discrete transport geodesic and cost
 geo  = discrete_transport(Q, μ, ν)
 dist = transport_cost(Q, μ, ν)
 
@@ -61,7 +60,7 @@ Each returns `(Q, π)` where `Q` is the row-stochastic transition matrix and
 ## Barycentric coding model
 
 The figure below shows the Barycentric Coding Model (BCM) on the 49-node
-USA contiguous-states graph. Each sub-graph is a Wasserstein barycenter
+USA contiguous-states graph. Each sub-graph is a discrete transport barycenter
 whose position in the triangle reflects its recovered barycentric coordinates
 with respect to three reference measures (corners).
 

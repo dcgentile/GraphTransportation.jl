@@ -2,13 +2,13 @@
     discrete_transport(Q, μ, ν; N=64, σ=0.5, τ=0.5, maxiters=2^16, tol=1e-10,
                        progress=false, initialization=nothing) -> ErbarBundle
 
-Compute the discrete Wasserstein geodesic from `μ` to `ν` on the graph defined
+Compute the discrete transport geodesic from `μ` to `ν` on the graph defined
 by the Markov transition matrix `Q`, using the Chambolle-Pock primal-dual
 algorithm of Erbar et al. 2020.
 
 Returns an `ErbarBundle` encoding the full geodesic; its `vector.m[1,:,:]`
 field is the initial tangent vector (logarithmic map at `μ`), and `action(result)`
-gives the squared Wasserstein distance.
+gives the squared discrete transport distance.
 
 # Arguments
 - `Q`: row-stochastic Markov transition matrix defining the graph
@@ -49,7 +49,7 @@ end
     transport_cost(Q, μ, ν; N=64, σ=0.5, τ=0.5, maxiters=2^16, tol=1e-10,
                    progress=false) -> Float64
 
-Return the discrete Wasserstein distance `W(μ, ν)` on the graph defined by `Q`,
+Return the discrete transport distance `W(μ, ν)` on the graph defined by `Q`,
 computed as `√(action(discrete_transport(Q, μ, ν; ...)))`.
 
 # Arguments
