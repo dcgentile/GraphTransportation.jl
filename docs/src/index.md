@@ -58,6 +58,15 @@ Several standard graphs are provided in `CommonGraphs.jl`:
 Each returns `(Q, π)` where `Q` is the row-stochastic transition matrix and
 `π` is the stationary distribution.
 
+## Barycentric coding model
+
+The figure below shows the Barycentric Coding Model (BCM) on the 49-node
+USA contiguous-states graph. Each sub-graph is a Wasserstein barycenter
+whose position in the triangle reflects its recovered barycentric coordinates
+with respect to three reference measures (corners).
+
+![Barycentric coding model on the USA graph](assets/bcm.png)
+
 ## API reference
 
 See the [Examples](examples.md) page for runnable experiment scripts, and the

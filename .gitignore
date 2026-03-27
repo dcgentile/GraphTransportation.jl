@@ -9,6 +9,9 @@
 *.jld2.bak
 *.pdf
 *.png
+
+# but keep committed doc assets
+!docs/src/assets/*.png
 nbs/
 **/nbs/
 experiments/
