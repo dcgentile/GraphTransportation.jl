@@ -1,40 +1,41 @@
-# Optimal Transport on Graphs
+# GraphTransportation.jl
+
+[![CI](https://github.com/dcgentile/GraphTransportation.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/dcgentile/GraphTransportation.jl/actions/workflows/CI.yml)
+[![Docs (dev)](https://img.shields.io/badge/docs-dev-blue.svg)](https://dcgentile.github.io/GraphTransportation.jl/dev/)
+[![Docs (stable)](https://img.shields.io/badge/docs-stable-blue.svg)](https://dcgentile.github.io/GraphTransportation.jl/stable/)
+
+A Julia package for Wasserstein geometry on graphs, implementing the framework of
+Erbar, Rumpf, Schmitzer, and Simon —
+*Computation of optimal transport on discrete metric measure spaces*.
+
+Full documentation is available at **https://dcgentile.github.io/GraphTransportation.jl**.
+
 ## Installation
 
-To install this package, navigate in the terminal to your project directory, and start a Julia instance. Activate a virtual environment with
-
-``` julia
-]activate .
+```julia
+]add GraphTransportation
 ```
 
-Now install the package with
+## Quick start
 
-``` julia
-]add https://github.com/dcgentile/GraphTransportation.jl.git
-```
-
-Finally, you can test out the module with the following little example, which approximates the geodesic between two Dirac masses on a 2 point graph.
-
-``` julia
+```julia
 using GraphTransportation
-# establish your graph/markov kernel Q
-Q = [0. 1.; 1. 0.];
 
-# set measures
-a = [2.0; 0];
-b = [0.; 2];
+# Two-point graph
+Q = [0.0 1.0; 1.0 0.0]
 
-# set number of steps (optional, will default to 64)
-N = 100;
+# Two Dirac masses
+a = [2.0, 0.0]
+b = [0.0, 2.0]
 
-# call the Benamou Brenier Distance (BBD) function
-v = discrete_transport(Q, a, b, N=N)
-dist = sqrt(action(v))
+# Optimal transport geodesic and Wasserstein distance
+geo  = discrete_transport(Q, a, b)
+dist = transport_cost(Q, a, b)
 
-M = cat(a,b,dims=2)
-coordinates = [0.75;0.25]
-bary = barycenter(M, coordinates, Q)
-recovered_coordinates = analysis(bary, M, Q)
+# Wasserstein barycenter with weights (0.75, 0.25)
+M    = hcat(a, b)
+bary = barycenter(M, [0.75, 0.25], Q)
+
+# Recover barycentric coordinates
+coords = analysis(bary, M, Q)
 ```
-
-The variable v contains the vector information associated to the geodesic and all of its slack variables, while dist is the approximate Benamou-Brenier distance between the measures (i.e., the action of the computed geodesic, which is stored in v).
