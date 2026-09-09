@@ -3,6 +3,7 @@ using Test
 using SparseArrays
 using LinearAlgebra
 using Random
+using JuMP, Clarabel
 
 include("inclusion_helpers.jl")
 
@@ -356,6 +357,53 @@ end
             @test G.κ[e] ≈ Q[x, y] * π[x] atol=1e-12
             @test G.κ[e] ≈ Q[y, x] * π[y] atol=1e-12
         end
+    end
+
+    # Cross-validate the new sparse edge-vector grad/div against the pre-existing,
+    # already-tested dense (V×V matrix) implementations, rather than only checking
+    # internal self-consistency via the adjoint identity above.
+    @testset "matches dense graph_gradient/graph_divergence" begin
+        Random.seed!(7)
+        for (Q, π) in graphs
+            G = MarkovGraph(Q, π)
+            for _ in 1:20
+                φ = randn(G.n)
+                ∇φ_dense = graph_gradient(Q, φ)
+                ∇φ_sparse = graph_gradient(G, φ)
+                for (e, (x, y)) in enumerate(G.E)
+                    @test ∇φ_sparse[e] ≈ ∇φ_dense[x, y] atol=1e-12
+                end
+
+                m = randn(length(G.E))
+                m_dense = zeros(G.n, G.n)
+                for (e, (x, y)) in enumerate(G.E)
+                    m_dense[x, y] = m[e]
+                    m_dense[y, x] = -m[e]
+                end
+                @test graph_divergence(G, m) ≈ graph_divergence(Q, m_dense) atol=1e-10
+            end
+        end
+    end
+
+    # graph_divergence(G::MarkovGraph, ·) must also work when `m` holds JuMP variables
+    # (as geodesic_socp requires), not just Float64s. Note: div's image is the
+    # π-weighted-mean-zero subspace (⟨1, div m⟩_π = -⟨∇1, m⟩_Q = 0 for any m, since
+    # ∇1 = 0), so `target` must be feasible for that reason, not chosen arbitrarily —
+    # here we take it to be the divergence of a known ground-truth m.
+    @testset "graph_divergence works with JuMP variables" begin
+        Q, π = triangle_markov_chain()
+        G = MarkovGraph(Q, π)
+        m_truth = randn(length(G.E))
+        target = graph_divergence(G, m_truth)
+
+        model = Model(Clarabel.Optimizer)
+        set_silent(model)
+        @variable(model, m[1:length(G.E)])
+        @constraint(model, graph_divergence(G, m) .== target)
+        @objective(model, Min, sum(m .^ 2))
+        optimize!(model)
+        @test termination_status(model) == OPTIMAL
+        @test graph_divergence(G, value.(m)) ≈ target atol=1e-6
     end
 end
 

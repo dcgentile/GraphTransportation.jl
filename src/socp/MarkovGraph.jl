@@ -17,6 +17,9 @@ Fields:
 - `Q::SparseMatrixCSC{Float64,Int}`: transition rate matrix.
 - `κ::Vector{Float64}`: edge weights `κ[e] = Q[x,y] * π[x]` for `e = (x,y)`, which by
   reversibility equals `Q[y,x] * π[y]`.
+- `D::SparseMatrixCSC{Float64,Int}`: `n × |E|` incidence matrix with `D*m == graph_divergence(G, m)`
+  for any edge field `m`, cached at construction so repeated divergences (e.g. one per SOCP
+  time step) don't rebuild it. `D[x,e] = -Q[x,y]`, `D[y,e] = Q[y,x]` for edge `e = (x,y)`.
 """
 struct MarkovGraph
     n::Int
@@ -24,6 +27,7 @@ struct MarkovGraph
     π::Vector{Float64}
     Q::SparseMatrixCSC{Float64,Int}
     κ::Vector{Float64}
+    D::SparseMatrixCSC{Float64,Int}
 end
 
 """
@@ -53,7 +57,14 @@ function MarkovGraph(Q::AbstractMatrix, π::AbstractVector; rtol::Float64=1e-12)
         push!(κ, κ_ij)
     end
 
-    return MarkovGraph(n, E, collect(Float64, π), Qs, κ)
+    D_I = Int[]; D_J = Int[]; D_V = Float64[]
+    for (e, (x, y)) in enumerate(E)
+        push!(D_I, x); push!(D_J, e); push!(D_V, -Qs[x, y])
+        push!(D_I, y); push!(D_J, e); push!(D_V, Qs[y, x])
+    end
+    D = sparse(D_I, D_J, D_V, n, length(E))
+
+    return MarkovGraph(n, E, collect(Float64, π), Qs, κ, D)
 end
 
 """
@@ -68,19 +79,17 @@ function graph_gradient(G::MarkovGraph, φ::AbstractVector)
 end
 
 """
-    graph_divergence(G::MarkovGraph, m::AbstractVector) -> Vector{Float64}
+    graph_divergence(G::MarkovGraph, m::AbstractVector)
 
 Compact-edge-vector counterpart of the dense [`graph_divergence`](@ref), specialized to a
 single scalar per undirected edge (rather than a full antisymmetric `V×V` matrix). Agrees
 with the dense version under `m_dense[x,y] = m[e], m_dense[y,x] = -m[e]`, and therefore
 satisfies the same adjoint identity `⟨φ, div m⟩_π = -⟨∇φ, m⟩_Q` (with `⟨m,w⟩_Q := Σ_e κ[e] m[e] w[e]`).
+
+Implemented as `G.D * m` (see the `D` field), so `m` may hold `Float64`s or, e.g., JuMP
+variables/affine expressions when building an SOCP model.
 """
 function graph_divergence(G::MarkovGraph, m::AbstractVector)
     @assert length(m) == length(G.E)
-    out = zeros(G.n)
-    @inbounds for (e, (x, y)) in enumerate(G.E)
-        out[x] -= G.Q[x, y] * m[e]
-        out[y] += G.Q[y, x] * m[e]
-    end
-    return out
+    return G.D * m
 end
