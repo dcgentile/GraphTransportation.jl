@@ -2,6 +2,7 @@ using GraphTransportation
 using Test
 using SparseArrays
 using LinearAlgebra
+using Random
 
 include("inclusion_helpers.jl")
 
@@ -317,6 +318,43 @@ end
             @test isapprox(ρ2, ρ_pr)
             @test isapprox(m2, m_pr)
             @test is_in_CE_weakly(ρ2, m2, Q, v)
+        end
+    end
+end
+
+@testset "MarkovGraph / graph_gradient / graph_divergence (SOCP Module 0)" begin
+    graphs = [cube_markov_chain(), weighted_hypercube_markov_chain(), triangle_markov_chain()]
+
+    @testset "adjoint identity ⟨φ, div m⟩_π = -⟨∇φ, m⟩_Q" begin
+        Random.seed!(42)
+        for (Q, π) in graphs
+            G = MarkovGraph(Q, π)
+            for _ in 1:10
+                φ = randn(G.n)
+                m = randn(length(G.E))
+
+                lhs = dot(φ, graph_divergence(G, m) .* π)
+                rhs = -dot(graph_gradient(G, φ) .* G.κ, m)
+
+                @test lhs ≈ rhs atol=1e-12
+            end
+        end
+    end
+
+    @testset "reversibility check catches a broken chain" begin
+        Q, π = cube_markov_chain()
+        Q_broken = copy(Q)
+        idx = findfirst(!=(0), Q_broken)
+        Q_broken[idx] *= 2  # break Q(x,y)π(x) == Q(y,x)π(y)
+        @test_throws AssertionError MarkovGraph(Q_broken, π)
+    end
+
+    @testset "κ agrees from both directions" begin
+        Q, π = weighted_hypercube_markov_chain()
+        G = MarkovGraph(Q, π)
+        for (e, (x, y)) in enumerate(G.E)
+            @test G.κ[e] ≈ Q[x, y] * π[x] atol=1e-12
+            @test G.κ[e] ≈ Q[y, x] * π[y] atol=1e-12
         end
     end
 end
