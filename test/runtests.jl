@@ -4,6 +4,7 @@ using SparseArrays
 using LinearAlgebra
 using Random
 using JuMP, Clarabel
+using QuadGK
 
 include("inclusion_helpers.jl")
 
@@ -404,6 +405,66 @@ end
         optimize!(model)
         @test termination_status(model) == OPTIMAL
         @test graph_divergence(G, value.(m)) ≈ target atol=1e-6
+    end
+end
+
+@testset "geodesic_socp vs two-node closed form (SOCP Module 1, spec §1.3.1)" begin
+    # Two-node graph, θ = geometric mean. Parameterize densities w.r.t. π=[0.5,0.5]
+    # by r ∈ (-1,1): ρ(r) = [1-r, 1+r]. The closed-form distance is
+    #   W(ρ(s), ρ(t)) = (1/√2) ∫_s^t (1-r²)^{-1/4} dr
+    # and the geodesic satisfies ODE γ'(τ) = C·√2·((1-γ)(1+γ))^{1/4}, γ(0)=s, C=W(ρ(s),ρ(t)).
+    # This is the same closed form and explicit-Euler reference used in the paper's
+    # ODE-comparison experiment (src/experiments/ErbarODE.jl), which cross-validates the
+    # existing Chambolle-Pock discrete_transport. This test gates geodesic_socp's RSOC
+    # scaling/factor conventions against the same ground truth, independent of any
+    # convention choice inside geodesic_socp itself.
+    G = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5])
+
+    ε_reg = 1e-4  # avoid the integrable-but-singular boundary values ±1
+    s = -1.0 + ε_reg
+    t =  1.0 - ε_reg
+    ρA = [1.0 - s, 1.0 + s]
+    ρB = [1.0 - t, 1.0 + t]
+
+    W_ref(a, b) = quadgk(r -> (1 - r^2)^(-1/4), a, b)[1] / sqrt(2)
+    C = W_ref(s, t)
+
+    function ode_euler_interp(a, b, C; N=2000)
+        h = 1.0 / N
+        γ = Vector{Float64}(undef, N + 1)
+        γ[1] = a
+        for i in 1:N
+            x = γ[i]
+            γ[i+1] = clamp(x + h * C * sqrt(2) * max(0.0, (1 - x) * (1 + x))^(1/4), a, b)
+        end
+        return τ -> begin
+            raw  = τ * N
+            lo   = clamp(floor(Int, raw), 0, N - 1)
+            frac = raw - lo
+            γ[lo + 1] * (1 - frac) + γ[lo + 2] * frac
+        end
+    end
+    ode_γ = ode_euler_interp(s, t, C)
+
+    # Both the SOCP's own time discretization and the reference are O(h) accurate, so
+    # the discrepancy between them should also be O(h); check this at increasing N
+    # rather than pinning a single tolerance.
+    prev_W_err = Inf
+    prev_ρ_err = Inf
+    for N in (10, 20, 50, 100)
+        sol = geodesic_socp(G, ρA, ρB; N=N)
+        @test sol.status == OPTIMAL
+
+        W_err = abs(sqrt(sol.W2) - C)
+        @test W_err < 2.0 / N   # O(h) with generous constant
+
+        ts = range(0.0, 1.0, length=N + 1)
+        ρ_err = maximum(abs(sol.ρ[2, i] - (1.0 + ode_γ(τ))) for (i, τ) in enumerate(ts))
+        @test ρ_err < 2.0 / N
+
+        @test W_err < prev_W_err + 1e-9   # error should not grow as N increases
+        @test ρ_err < prev_ρ_err + 1e-9
+        prev_W_err, prev_ρ_err = W_err, ρ_err
     end
 end
 
