@@ -3,7 +3,7 @@ using Base.Threads
 """
     chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d;
                            σ=0.5, τ=0.5, λ=1.0, maxiters=2^16, tol=1e-10,
-                           show_progress=false)
+                           show_progress=false, adaptive=false)
 
 Core primal-dual iteration (Chambolle-Pock algorithm) for the graph optimal
 transport problem of Erbar et al. 2020, equation (26).
@@ -16,8 +16,21 @@ contains the converged primal solution.
 The update at each iteration is:
   1. `b_next = prox_{σF*}(b + σ · a_bar)`
   2. `a_next = prox_{τG}(a - τ · b_next)`
-  3. Step-size update: `λ ← 1/√(1 + 2τ)`, `τ ← λτ`, `σ ← σ/λ`
+  3. If `adaptive`: step-size update `λ ← 1/√(1 + 2τ)`, `τ ← λτ`, `σ ← σ/λ`; otherwise `λ, τ, σ` stay fixed.
   4. `a_bar_next = a_next + λ·(a_next - a)`
+
+`adaptive` selects Chambolle-Pock's Algorithm 2 (accelerated, `O(1/N²)`) step-size
+schedule, which is **only valid when `G` or `F*` is strongly convex** with modulus
+matching the implicit `γ=1` baked into the `1/√(1+2τ)` update. Here `F*` and `G` each
+decompose into indicator functions of convex sets (`K`, the continuity-equation affine
+set, `J_Eq`) and a positively-homogeneous perspective function (the edge-wise action)
+— none of these are strongly convex, so that premise never holds for this problem.
+Empirically, running with `adaptive=true` on any graph with more than 2 nodes converges
+to a stable but **wrong** fixed point (a persistent relative bias, confirmed against the
+Module 1 SOCP solver — see `test/runtests.jl`), not merely slow convergence; the 2-node
+case happens not to expose it. `adaptive=false` (the default) is the standard,
+provably-convergent Algorithm 1. `adaptive=true` is kept only to reproduce prior results
+computed with it; do not rely on it for new work.
 
 Convergence is declared when `Σ_t ||ρ_{k+1}[t] - ρ_k[t]||²_π < tol`.
 """
@@ -36,6 +49,7 @@ function chambolle_pock_routine(
     maxiters=2^16,
     tol=1e-10,
     show_progress=true,
+    adaptive=false,
     )
     show_progress ? p = ProgressUnknown(spinner=true) : 0
     normdiff = Inf
@@ -61,9 +75,11 @@ function chambolle_pock_routine(
         if normdiff < threshold
             return a_next
         end
-        λ = 1 / √(1 + 2 * τ)
-        τ *= λ
-        σ /= λ
+        if adaptive
+            λ = 1 / √(1 + 2 * τ)
+            τ *= λ
+            σ /= λ
+        end
 
         combine!(a_bar_next, a_next, d, 1.0, λ)
         assign!(a, a_next)
@@ -84,7 +100,7 @@ Memory-efficient entry point for the Chambolle-Pock solver.  Allocates seven
 working `ErbarBundle` copies of `a`, then delegates to `chambolle_pock_routine`.
 `a` is used as the initial primal iterate.  Returns the converged bundle.
 """
-function chambolle_pock(a::ErbarBundle;maxiters=2^16, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false)
+function chambolle_pock(a::ErbarBundle;maxiters=2^16, tol=1e-10, σ=0.5, τ=0.5, λ=1.0, show_progress=false, adaptive=false)
     b = copy(a)
     a_bar = copy(a)
     a_next = copy(a)
@@ -92,7 +108,7 @@ function chambolle_pock(a::ErbarBundle;maxiters=2^16, tol=1e-10, σ=0.5, τ=0.5,
     a_bar_next = copy(a)
     c = copy(a)
     d = copy(a)
-    return chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d, σ=σ, τ=τ, λ=λ, maxiters=maxiters, tol=tol, show_progress=show_progress)
+    return chambolle_pock_routine(a, b, a_bar, a_next, b_next, a_bar_next, c, d, σ=σ, τ=τ, λ=λ, maxiters=maxiters, tol=tol, show_progress=show_progress, adaptive=adaptive)
 end
 
 
@@ -116,7 +132,8 @@ function chambolle_pock(
     τ=0.5,
     λ=1.0,
     tol=1e-10,
-    show_progress=false
+    show_progress=false,
+    adaptive=false
 )
     # we will only ever use 8 vectors
     a = ErbarBundle(Q, μ, ν, N)
@@ -129,7 +146,7 @@ function chambolle_pock(
     d = ErbarBundle(Q, μ, ν, N)
     return chambolle_pock_routine(
         a, b, a_bar, a_next, b_next, a_bar_next, c, d,
-        maxiters=maxiters, tol=tol, σ=σ, τ=τ, λ=λ, show_progress=show_progress)
+        maxiters=maxiters, tol=tol, σ=σ, τ=τ, λ=λ, show_progress=show_progress, adaptive=adaptive)
 end
 
 
@@ -152,7 +169,8 @@ function chambolle_pock(
     τ=0.5,
     λ=1.0,
     tol=1e-10,
-    show_progress=false
+    show_progress=false,
+    adaptive=false
 )
     # we will only ever use 8 vectors
     a = ErbarBundle(Q, steady_state, μ, ν, N)
@@ -165,7 +183,7 @@ function chambolle_pock(
     d = ErbarBundle(Q, steady_state, μ, ν, N)
     return chambolle_pock_routine(
         a, b, a_bar, a_next, b_next, a_bar_next, c, d,
-        maxiters=maxiters, tol=tol, σ=σ, τ=τ, λ=λ, show_progress=show_progress)
+        maxiters=maxiters, tol=tol, σ=σ, τ=τ, λ=λ, show_progress=show_progress, adaptive=adaptive)
 end
 
 """

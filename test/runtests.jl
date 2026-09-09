@@ -468,6 +468,44 @@ end
     end
 end
 
+@testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
+    # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
+    # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here
+    # (the K-cone / continuity-equation / J_Eq indicators, the homogeneous-degree-1 edge
+    # action) is not strongly convex, so that premise never holds. Confirmed empirically:
+    # on graphs with more than 2 nodes, `adaptive=true` converges (tightly, no
+    # non-convergence warning) to a value with a PERSISTENT relative bias against the
+    # independently-validated geodesic_socp (§1.3.1), rather than merely converging
+    # slowly - the two-node case happens not to expose this. `adaptive=false` is now the
+    # default for exactly this reason; this test locks that default in and documents why.
+    Q, π = triangle_markov_chain()
+    G = MarkovGraph(Q, π)
+    rng = MersenneTwister(2024)
+    μ = (rand(rng, 3) .+ 0.1); μ ./= dot(μ, π)
+    ν = (rand(rng, 3) .+ 0.1); ν ./= dot(ν, π)
+
+    @testset "default (adaptive=false) converges to the SOCP-validated value" begin
+        prev_err = Inf
+        for N in (10, 20, 50, 100)
+            W2_socp = geodesic_socp(G, μ, ν; N=N).W2
+            W2_cp = action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20))
+            err = abs(W2_cp - W2_socp) / W2_socp
+            @test err < 2.0 / N          # O(h), same pattern as §1.3.1
+            @test err < prev_err + 1e-9  # should not grow with N
+            prev_err = err
+        end
+    end
+
+    @testset "adaptive=true stays biased even as N grows (documents the known issue)" begin
+        W2_socp = geodesic_socp(G, μ, ν; N=100).W2
+        errs = [abs(action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20, adaptive=true)) - W2_socp) / W2_socp
+                for N in (100, 400)]
+        # if this ever starts passing, the acceleration bug has changed behavior (or been
+        # fixed) and this test - and the `adaptive` docs - need to be revisited.
+        @test all(e -> e > 0.05, errs)
+    end
+end
+
 @testset "project_IJeq" begin
     ρ      = [1/3  2/3  1;  1/3  1/6  0;  1/3  1/6  0]
     q      = [1/2  3/4  1;  1/2  1/4  0;  0    0    0]
