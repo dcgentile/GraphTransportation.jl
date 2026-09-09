@@ -468,6 +468,48 @@ end
     end
 end
 
+@testset "geodesic_socp vs Chambolle-Pock (SOCP Module 1, spec §1.3.2)" begin
+    # Cross-validate against the incumbent Chambolle-Pock solver on the 3-cycle,
+    # 4-cycle, and 3x3 grid (Erbar Figs. 5-6 configurations). Unlike the exact §1.3.1
+    # two-node case, there's no closed form here, so - as with the adaptive step-size
+    # regression test above - we check convergence to a common value as N grows rather
+    # than a fixed tolerance at small N, since both solvers carry their own O(h) time-
+    # discretization error. Requires the `adaptive=false` fix above: with the buggy
+    # accelerated default, this comparison would not converge (see the testset above).
+    graphs = [
+        ("3-cycle", triangle_markov_chain()),
+        ("4-cycle", square_markov_chain()),
+        ("3x3 grid", grid_markov_chain(3)),
+    ]
+    for (name, (Q, π)) in graphs
+        @testset "$name" begin
+            G = MarkovGraph(Q, π)
+            rng = MersenneTwister(99)
+            μ = (rand(rng, G.n) .+ 0.1); μ ./= dot(μ, π)
+            ν = (rand(rng, G.n) .+ 0.1); ν ./= dot(ν, π)
+
+            prev_relW = Inf
+            prev_path_err = Inf
+            for N in (10, 20, 50, 100)
+                sol = geodesic_socp(G, μ, ν; N=N)
+                geo = discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20)
+                W2_cp = action(geo)
+
+                relW = abs(W2_cp - sol.W2) / sol.W2
+                @test relW < 2.0 / N
+                @test relW < prev_relW + 1e-9
+                prev_relW = relW
+
+                ρ_cp = permutedims(geo.vector.ρ)  # (N+1) × n -> n × (N+1)
+                path_err = maximum(abs.(ρ_cp .- sol.ρ))
+                @test path_err < 1.0 / N
+                @test path_err < prev_path_err + 1e-9
+                prev_path_err = path_err
+            end
+        end
+    end
+end
+
 @testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
     # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
     # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here
