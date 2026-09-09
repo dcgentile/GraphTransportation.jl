@@ -2,6 +2,7 @@ using GraphTransportation
 using Test
 using SparseArrays
 using LinearAlgebra
+using Random
 
 include("inclusion_helpers.jl")
 
@@ -321,6 +322,46 @@ end
     end
 end
 
+@testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
+    # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
+    # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here
+    # (the K-cone / continuity-equation / J_Eq indicators, the homogeneous-degree-1 edge
+    # action) is not strongly convex, so that premise never holds. Confirmed empirically
+    # (on a feature branch, cross-validated against an independent SOCP solver): on
+    # graphs with more than 2 nodes, `adaptive=true` converges tightly (no
+    # non-convergence warning, stable even at tol=1e-14) to a value with a PERSISTENT
+    # relative bias, rather than merely converging slowly to the right one - the 2-node
+    # case happens not to expose this. `adaptive=false` is now the default for exactly
+    # this reason. This test is self-contained (no external ground truth needed): it
+    # checks that the default converges in the ordinary Cauchy sense as N grows, and
+    # that `adaptive=true` does not converge to the same value.
+    Q, π = triangle_markov_chain()
+    rng = MersenneTwister(2024)
+    μ = (rand(rng, 3) .+ 0.1); μ ./= dot(μ, π)
+    ν = (rand(rng, 3) .+ 0.1); ν ./= dot(ν, π)
+
+    @testset "default (adaptive=false) converges as N grows" begin
+        w2 = [action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20))
+              for N in (50, 100, 200, 400)]
+        diffs = abs.(diff(w2))
+        # successive differences should shrink (Cauchy convergence), consistent with
+        # ordinary O(1/N) time-discretization error vanishing as N grows
+        @test all(diffs[i+1] < diffs[i] + 1e-9 for i in 1:length(diffs)-1)
+        @test diffs[end] < 1e-3
+    end
+
+    @testset "adaptive=true stays biased even as N grows (documents the known issue)" begin
+        w2_adaptive = [action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20, adaptive=true))
+                       for N in (100, 400)]
+        w2_default_400 = action(discrete_transport(Q, μ, ν; N=400, tol=1e-12, maxiters=2^20))
+        # adaptive=true is itself stable across N (not merely slow)...
+        @test abs(w2_adaptive[2] - w2_adaptive[1]) < 1e-3
+        # ...but stable at the WRONG value: if this ever starts passing, the
+        # acceleration bug has changed behavior (or been fixed) and this test - and the
+        # `adaptive` docs in galerkin/Chambolle.jl - need to be revisited.
+        @test all(w2 -> abs(w2 - w2_default_400) / w2_default_400 > 0.05, w2_adaptive)
+    end
+end
 @testset "project_IJeq" begin
     ρ      = [1/3  2/3  1;  1/3  1/6  0;  1/3  1/6  0]
     q      = [1/2  3/4  1;  1/2  1/4  0;  0    0    0]
