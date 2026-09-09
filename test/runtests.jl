@@ -510,6 +510,56 @@ end
     end
 end
 
+@testset "barycenter_socp vs geodesic_socp: p=2 sanity (SOCP Module 2, spec §2.3.1)" begin
+    # Bary({ν0,ν1}, (1-t,t)) must equal the geodesic point ν(t): with weights summing
+    # to 1 over exactly two references, the barycenter SOCP and the geodesic SOCP solve
+    # (mathematically) the same joint problem, so at grid times t=k/N they should agree
+    # at solver tolerance - much tighter than the ~1e-3 relative errors spec.txt reports
+    # for the intrinsic-descent comparison (Figs. 9-10), since both are now convex solves.
+    Q, π = grid_markov_chain(3)
+    G = MarkovGraph(Q, π)
+    rng = MersenneTwister(1)
+    ν0 = (rand(rng, G.n) .+ 0.1); ν0 ./= dot(ν0, π)
+    ν1 = (rand(rng, G.n) .+ 0.1); ν1 ./= dot(ν1, π)
+
+    N = 10
+    sol = geodesic_socp(G, ν0, ν1; N=N)
+
+    for k in 0:N
+        t = k / N
+        ν_bary = if t == 0.0
+            ν0
+        elseif t == 1.0
+            ν1
+        else
+            first(barycenter_socp(G, [ν0, ν1], [1 - t, t]; N=N))
+        end
+        @test maximum(abs.(ν_bary .- sol.ρ[:, k+1])) < 1e-3
+    end
+end
+
+@testset "barycenter_socp: symmetric sanity check" begin
+    # Three references related by the triangle's cyclic symmetry, equal weights: by
+    # symmetry the barycenter must be the uniform (w.r.t. π) density, and all three
+    # reference-to-barycenter distances must be equal.
+    Q, π = triangle_markov_chain()
+    G = MarkovGraph(Q, π)
+    refs = [[2.0, 0.5, 0.5], [0.5, 2.0, 0.5], [0.5, 0.5, 2.0]]
+
+    ν, J, geos = barycenter_socp(G, refs, fill(1/3, 3); N=10)
+    @test ν ≈ ones(3) atol=1e-6
+    @test all(g -> g.status == OPTIMAL, geos)
+    W2s = [g.W2 for g in geos]
+    @test W2s[1] ≈ W2s[2] atol=1e-6
+    @test W2s[2] ≈ W2s[3] atol=1e-6
+    @test J ≈ sum(W2s) / 3 atol=1e-6
+
+    @testset "λ[i]==0 drops that reference" begin
+        ν2, J2, geos2 = barycenter_socp(G, refs, [0.5, 0.5, 0.0]; N=10)
+        @test length(geos2) == 2
+    end
+end
+
 @testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
     # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
     # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here

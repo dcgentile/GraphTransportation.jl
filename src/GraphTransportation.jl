@@ -39,6 +39,7 @@ include("CommonGraphs.jl")
 # include SOCP formulation primitives (Module 0, spec.txt)
 include("socp/MarkovGraph.jl")
 include("socp/Geodesic.jl")
+include("socp/Barycenter.jl")
 
 # include components of Chambolle-Pock related functions
 include("galerkin/ProximalAvgIndicator.jl")
@@ -80,9 +81,10 @@ export grid_markov_chain, ma_house_markov_chain
 export graph_gradient, add_graph_gradient!, graph_divergence, graph_divergence!
 export laplacian_from_transition, metric_tensor, avg_operator, finite_difference_operator
 
-# SOCP formulation primitives (Module 0-1, spec.txt)
+# SOCP formulation primitives (Module 0-2, spec.txt)
 export MarkovGraph
 export geodesic_socp, GeodesicSolution
+export barycenter_socp
 
 # admissible means
 export geomean, logmean, logmean_partial_s, logmean_partial_t
