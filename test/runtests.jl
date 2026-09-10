@@ -560,6 +560,29 @@ end
     end
 end
 
+@testset "analyze_socp: recovers barycentric coordinates (SOCP Module 4, spec §4)" begin
+    # spec.txt's own validation for Module 4: synthesize a barycenter with Module 2,
+    # then recover its coordinates with Module 4 and check they match the synthesis
+    # weights. Also cross-check against the existing (dissertation-validated)
+    # Chambolle-Pock-based `analysis`, since analyze_socp reuses its exact Gram/QP
+    # formulation (see solve_barycentric_coordinates_qp) - the two should agree
+    # closely, not just each independently recover the truth.
+    Q, π = triangle_markov_chain()
+    G = MarkovGraph(Q, π)
+    refs = [[2.0, 0.5, 0.5], [0.5, 2.0, 0.5], [0.5, 0.5, 2.0]]
+    λ_true = [0.5, 0.3, 0.2]
+
+    ν, _, _ = barycenter_socp(G, refs, λ_true; N=10)
+    M = hcat(refs...)
+
+    λ_socp = vec(analyze_socp(G, ν, refs; N=10))
+    λ_cp = vec(analysis(ν, M, Q; N=50, tol=1e-10))
+
+    @test λ_socp ≈ λ_true atol=1e-2
+    @test λ_cp ≈ λ_true atol=1e-2
+    @test λ_socp ≈ λ_cp atol=1e-2
+end
+
 @testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
     # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
     # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here
