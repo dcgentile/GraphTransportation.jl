@@ -583,6 +583,82 @@ end
     @test λ_socp ≈ λ_cp atol=1e-2
 end
 
+@testset "Hamiltonian shooting: conservation laws (Module 3, spec §3.1)" begin
+    # The three invariants spec.txt calls out as the Module 3 gating tests: mass
+    # conservation, H conservation, and 2H == the squared discrete transport distance
+    # between the flow's own endpoints (cross-checked against the independently
+    # validated geodesic_socp) - i.e. the Hamiltonian flow really does trace a genuine
+    # geodesic, not just some curve that happens to conserve H by construction.
+    graphs = [triangle_markov_chain(), weighted_hypercube_markov_chain()]
+
+    rng = MersenneTwister(1)
+    for (Q, π) in graphs
+        G = MarkovGraph(Q, π)
+        for _ in 1:3
+            ρ0 = (rand(rng, G.n) .+ 0.5); ρ0 ./= dot(ρ0, π)
+            # Small scale: an arbitrary large random φ0 can drive some node's density
+            # through zero within [0,1] (a real feature of this geometry's boundary
+            # behavior, not a bug - see spec.txt §3.5's mollification fallback) even
+            # though ρ0 itself is safely interior. A genuine log_map-derived φ0 would
+            # be commensurately small for a nearby target; this mimics that regime
+            # without yet having exp_map/log_map built.
+            φ0 = 0.1 .* randn(rng, G.n)
+            φ0 .-= dot(φ0, π) .* ones(G.n)  # gauge: ⟨φ,1⟩_π = 0
+
+            H0 = hamiltonian(G, ρ0, φ0)
+            ρ_path, φ_path = integrate_hamiltonian(G, ρ0, φ0; nsteps=200, T=1.0)
+
+            @test dot(ρ_path[:, end], π) ≈ 1.0 atol=1e-10  # mass conservation
+
+            Hs = [hamiltonian(G, ρ_path[:, i], φ_path[:, i]) for i in 1:size(ρ_path, 2)]
+            @test maximum(abs.(Hs .- H0)) < 1e-4  # H conservation (RK4 truncation error)
+
+            # 2H vs geodesic_socp.W2 between the flow's own endpoints. Unlike the
+            # larger-magnitude §1.3.1/§1.3.2 gates, φ0's small scale (see above) makes
+            # 2H itself small (~0.01-0.04), so the residual here is dominated by
+            # Clarabel's own solver-tolerance noise floor rather than a shrinking O(h)
+            # truncation error - that floor doesn't shrink with N, so we check absolute
+            # magnitude rather than requiring monotonic improvement across N.
+            ρ_end = ρ_path[:, end]
+            for N in (20, 100)
+                W2 = geodesic_socp(G, ρ0, ρ_end; N=N).W2
+                @test abs(2 * H0 - W2) < 1e-4
+            end
+        end
+    end
+end
+
+@testset "Hamiltonian shooting vs two-node closed form (Module 3, spec §3.1)" begin
+    # Stronger, fully independent check than the geodesic_socp cross-check above: the
+    # same closed-form two-node quadrature used to gate geodesic_socp in spec §1.3.1
+    # (rho(r) = [1-r,1+r], W(rho(s),rho(t)) = (1/sqrt(2)) int_s^t (1-r^2)^(-1/4) dr).
+    # On this graph the gauge-fixed potential reduces to a scalar φ = (c0,-c0), so we
+    # can pick c0 directly (no log_map/shooting needed yet) and check that sqrt(2H0)
+    # matches the quadrature distance between rho0 and wherever the flow actually
+    # lands - no SOCP time-discretization error to hide behind here, unlike the
+    # (already tight) check above.
+    G = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5])
+    W_ref(a, b) = quadgk(r -> (1 - r^2)^(-1/4), a, b)[1] / sqrt(2)
+
+    r0 = -0.6
+    ρ0 = [1 - r0, 1 + r0]
+
+    for (c0, atol) in ((0.1, 1e-9), (0.3, 1e-8))
+        φ0 = [c0, -c0]
+        ρ_path, _ = integrate_hamiltonian(G, ρ0, φ0; nsteps=400, T=1.0)
+        r_end = 1 - ρ_path[1, end]
+
+        W_flow = sqrt(2 * hamiltonian(G, ρ0, φ0))
+        W_quad = abs(W_ref(r0, r_end))
+        @test W_flow ≈ W_quad atol=atol
+    end
+
+    # c0 large enough to drive r past the boundary -1 within [0,1]: the positivity
+    # floor guard should catch this as an error, not silently return garbage or crash
+    # with an uncaught DomainError.
+    @test_throws ErrorException integrate_hamiltonian(G, ρ0, [0.6, -0.6]; nsteps=400, T=1.0)
+end
+
 @testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
     # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
     # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here

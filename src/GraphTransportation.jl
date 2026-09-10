@@ -42,6 +42,9 @@ include("socp/Geodesic.jl")
 include("socp/Barycenter.jl")
 include("socp/Analysis.jl")
 
+# include Hamiltonian shooting primitives (Module 3, spec.txt)
+include("shooting/Hamiltonian.jl")
+
 # include components of Chambolle-Pock related functions
 include("galerkin/ProximalAvgIndicator.jl")
 include("galerkin/ProximalAction.jl")
@@ -87,6 +90,9 @@ export MarkovGraph
 export geodesic_socp, GeodesicSolution
 export barycenter_socp
 export analyze_socp
+
+# Hamiltonian shooting primitives (Module 3, spec.txt)
+export hamiltonian, hamiltonian_flow, integrate_hamiltonian, ρ_floor
 
 # admissible means
 export geomean, logmean, logmean_partial_s, logmean_partial_t
