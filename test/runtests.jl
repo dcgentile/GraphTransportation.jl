@@ -3,6 +3,8 @@ using Test
 using SparseArrays
 using LinearAlgebra
 using Random
+using JuMP, Clarabel
+using QuadGK
 
 include("inclusion_helpers.jl")
 
@@ -322,46 +324,303 @@ end
     end
 end
 
+@testset "MarkovGraph / graph_gradient / graph_divergence (SOCP Module 0)" begin
+    graphs = [cube_markov_chain(), weighted_hypercube_markov_chain(), triangle_markov_chain()]
+
+    @testset "adjoint identity ⟨φ, div m⟩_π = -⟨∇φ, m⟩_Q" begin
+        Random.seed!(42)
+        for (Q, π) in graphs
+            G = MarkovGraph(Q, π)
+            for _ in 1:10
+                φ = randn(G.n)
+                m = randn(length(G.E))
+
+                lhs = dot(φ, graph_divergence(G, m) .* π)
+                rhs = -dot(graph_gradient(G, φ) .* G.κ, m)
+
+                @test lhs ≈ rhs atol=1e-12
+            end
+        end
+    end
+
+    @testset "reversibility check catches a broken chain" begin
+        Q, π = cube_markov_chain()
+        Q_broken = copy(Q)
+        idx = findfirst(!=(0), Q_broken)
+        Q_broken[idx] *= 2  # break Q(x,y)π(x) == Q(y,x)π(y)
+        @test_throws AssertionError MarkovGraph(Q_broken, π)
+    end
+
+    @testset "κ agrees from both directions" begin
+        Q, π = weighted_hypercube_markov_chain()
+        G = MarkovGraph(Q, π)
+        for (e, (x, y)) in enumerate(G.E)
+            @test G.κ[e] ≈ Q[x, y] * π[x] atol=1e-12
+            @test G.κ[e] ≈ Q[y, x] * π[y] atol=1e-12
+        end
+    end
+
+    # Cross-validate the new sparse edge-vector grad/div against the pre-existing,
+    # already-tested dense (V×V matrix) implementations, rather than only checking
+    # internal self-consistency via the adjoint identity above.
+    @testset "matches dense graph_gradient/graph_divergence" begin
+        Random.seed!(7)
+        for (Q, π) in graphs
+            G = MarkovGraph(Q, π)
+            for _ in 1:20
+                φ = randn(G.n)
+                ∇φ_dense = graph_gradient(Q, φ)
+                ∇φ_sparse = graph_gradient(G, φ)
+                for (e, (x, y)) in enumerate(G.E)
+                    @test ∇φ_sparse[e] ≈ ∇φ_dense[x, y] atol=1e-12
+                end
+
+                m = randn(length(G.E))
+                m_dense = zeros(G.n, G.n)
+                for (e, (x, y)) in enumerate(G.E)
+                    m_dense[x, y] = m[e]
+                    m_dense[y, x] = -m[e]
+                end
+                @test graph_divergence(G, m) ≈ graph_divergence(Q, m_dense) atol=1e-10
+            end
+        end
+    end
+
+    # graph_divergence(G::MarkovGraph, ·) must also work when `m` holds JuMP variables
+    # (as geodesic_socp requires), not just Float64s. Note: div's image is the
+    # π-weighted-mean-zero subspace (⟨1, div m⟩_π = -⟨∇1, m⟩_Q = 0 for any m, since
+    # ∇1 = 0), so `target` must be feasible for that reason, not chosen arbitrarily —
+    # here we take it to be the divergence of a known ground-truth m.
+    @testset "graph_divergence works with JuMP variables" begin
+        Q, π = triangle_markov_chain()
+        G = MarkovGraph(Q, π)
+        m_truth = randn(length(G.E))
+        target = graph_divergence(G, m_truth)
+
+        model = Model(Clarabel.Optimizer)
+        set_silent(model)
+        @variable(model, m[1:length(G.E)])
+        @constraint(model, graph_divergence(G, m) .== target)
+        @objective(model, Min, sum(m .^ 2))
+        optimize!(model)
+        @test termination_status(model) == OPTIMAL
+        @test graph_divergence(G, value.(m)) ≈ target atol=1e-6
+    end
+end
+
+@testset "geodesic_socp vs two-node closed form (SOCP Module 1, spec §1.3.1)" begin
+    # Two-node graph, θ = geometric mean. Parameterize densities w.r.t. π=[0.5,0.5]
+    # by r ∈ (-1,1): ρ(r) = [1-r, 1+r]. The closed-form distance is
+    #   W(ρ(s), ρ(t)) = (1/√2) ∫_s^t (1-r²)^{-1/4} dr
+    # and the geodesic satisfies ODE γ'(τ) = C·√2·((1-γ)(1+γ))^{1/4}, γ(0)=s, C=W(ρ(s),ρ(t)).
+    # This is the same closed form and explicit-Euler reference used in the paper's
+    # ODE-comparison experiment (src/experiments/ErbarODE.jl), which cross-validates the
+    # existing Chambolle-Pock discrete_transport. This test gates geodesic_socp's RSOC
+    # scaling/factor conventions against the same ground truth, independent of any
+    # convention choice inside geodesic_socp itself.
+    G = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5])
+
+    ε_reg = 1e-4  # avoid the integrable-but-singular boundary values ±1
+    s = -1.0 + ε_reg
+    t =  1.0 - ε_reg
+    ρA = [1.0 - s, 1.0 + s]
+    ρB = [1.0 - t, 1.0 + t]
+
+    W_ref(a, b) = quadgk(r -> (1 - r^2)^(-1/4), a, b)[1] / sqrt(2)
+    C = W_ref(s, t)
+
+    function ode_euler_interp(a, b, C; N=2000)
+        h = 1.0 / N
+        γ = Vector{Float64}(undef, N + 1)
+        γ[1] = a
+        for i in 1:N
+            x = γ[i]
+            γ[i+1] = clamp(x + h * C * sqrt(2) * max(0.0, (1 - x) * (1 + x))^(1/4), a, b)
+        end
+        return τ -> begin
+            raw  = τ * N
+            lo   = clamp(floor(Int, raw), 0, N - 1)
+            frac = raw - lo
+            γ[lo + 1] * (1 - frac) + γ[lo + 2] * frac
+        end
+    end
+    ode_γ = ode_euler_interp(s, t, C)
+
+    # Both the SOCP's own time discretization and the reference are O(h) accurate, so
+    # the discrepancy between them should also be O(h); check this at increasing N
+    # rather than pinning a single tolerance.
+    prev_W_err = Inf
+    prev_ρ_err = Inf
+    for N in (10, 20, 50, 100)
+        sol = geodesic_socp(G, ρA, ρB; N=N)
+        @test sol.status == OPTIMAL
+
+        W_err = abs(sqrt(sol.W2) - C)
+        @test W_err < 2.0 / N   # O(h) with generous constant
+
+        ts = range(0.0, 1.0, length=N + 1)
+        ρ_err = maximum(abs(sol.ρ[2, i] - (1.0 + ode_γ(τ))) for (i, τ) in enumerate(ts))
+        @test ρ_err < 2.0 / N
+
+        @test W_err < prev_W_err + 1e-9   # error should not grow as N increases
+        @test ρ_err < prev_ρ_err + 1e-9
+        prev_W_err, prev_ρ_err = W_err, ρ_err
+    end
+end
+
+@testset "geodesic_socp vs Chambolle-Pock (SOCP Module 1, spec §1.3.2)" begin
+    # Cross-validate against the incumbent Chambolle-Pock solver on the 3-cycle,
+    # 4-cycle, and 3x3 grid (Erbar Figs. 5-6 configurations). Unlike the exact §1.3.1
+    # two-node case, there's no closed form here, so - as with the adaptive step-size
+    # regression test above - we check convergence to a common value as N grows rather
+    # than a fixed tolerance at small N, since both solvers carry their own O(h) time-
+    # discretization error. Requires the `adaptive=false` fix above: with the buggy
+    # accelerated default, this comparison would not converge (see the testset above).
+    graphs = [
+        ("3-cycle", triangle_markov_chain()),
+        ("4-cycle", square_markov_chain()),
+        ("3x3 grid", grid_markov_chain(3)),
+    ]
+    for (name, (Q, π)) in graphs
+        @testset "$name" begin
+            G = MarkovGraph(Q, π)
+            rng = MersenneTwister(99)
+            μ = (rand(rng, G.n) .+ 0.1); μ ./= dot(μ, π)
+            ν = (rand(rng, G.n) .+ 0.1); ν ./= dot(ν, π)
+
+            prev_relW = Inf
+            prev_path_err = Inf
+            for N in (10, 20, 50, 100)
+                sol = geodesic_socp(G, μ, ν; N=N)
+                geo = discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20)
+                W2_cp = action(geo)
+
+                relW = abs(W2_cp - sol.W2) / sol.W2
+                @test relW < 2.0 / N
+                @test relW < prev_relW + 1e-9
+                prev_relW = relW
+
+                ρ_cp = permutedims(geo.vector.ρ)  # (N+1) × n -> n × (N+1)
+                path_err = maximum(abs.(ρ_cp .- sol.ρ))
+                @test path_err < 1.0 / N
+                @test path_err < prev_path_err + 1e-9
+                prev_path_err = path_err
+            end
+        end
+    end
+end
+
+@testset "barycenter_socp vs geodesic_socp: p=2 sanity (SOCP Module 2, spec §2.3.1)" begin
+    # Bary({ν0,ν1}, (1-t,t)) must equal the geodesic point ν(t): with weights summing
+    # to 1 over exactly two references, the barycenter SOCP and the geodesic SOCP solve
+    # (mathematically) the same joint problem, so at grid times t=k/N they should agree
+    # at solver tolerance - much tighter than the ~1e-3 relative errors spec.txt reports
+    # for the intrinsic-descent comparison (Figs. 9-10), since both are now convex solves.
+    Q, π = grid_markov_chain(3)
+    G = MarkovGraph(Q, π)
+    rng = MersenneTwister(1)
+    ν0 = (rand(rng, G.n) .+ 0.1); ν0 ./= dot(ν0, π)
+    ν1 = (rand(rng, G.n) .+ 0.1); ν1 ./= dot(ν1, π)
+
+    N = 10
+    sol = geodesic_socp(G, ν0, ν1; N=N)
+
+    for k in 0:N
+        t = k / N
+        ν_bary = if t == 0.0
+            ν0
+        elseif t == 1.0
+            ν1
+        else
+            first(barycenter_socp(G, [ν0, ν1], [1 - t, t]; N=N))
+        end
+        @test maximum(abs.(ν_bary .- sol.ρ[:, k+1])) < 1e-3
+    end
+end
+
+@testset "barycenter_socp: symmetric sanity check" begin
+    # Three references related by the triangle's cyclic symmetry, equal weights: by
+    # symmetry the barycenter must be the uniform (w.r.t. π) density, and all three
+    # reference-to-barycenter distances must be equal.
+    Q, π = triangle_markov_chain()
+    G = MarkovGraph(Q, π)
+    refs = [[2.0, 0.5, 0.5], [0.5, 2.0, 0.5], [0.5, 0.5, 2.0]]
+
+    ν, J, geos = barycenter_socp(G, refs, fill(1/3, 3); N=10)
+    @test ν ≈ ones(3) atol=1e-6
+    @test all(g -> g.status == OPTIMAL, geos)
+    W2s = [g.W2 for g in geos]
+    @test W2s[1] ≈ W2s[2] atol=1e-6
+    @test W2s[2] ≈ W2s[3] atol=1e-6
+    @test J ≈ sum(W2s) / 3 atol=1e-6
+
+    @testset "λ[i]==0 drops that reference" begin
+        ν2, J2, geos2 = barycenter_socp(G, refs, [0.5, 0.5, 0.0]; N=10)
+        @test length(geos2) == 2
+    end
+end
+
+@testset "analyze_socp: recovers barycentric coordinates (SOCP Module 4, spec §4)" begin
+    # spec.txt's own validation for Module 4: synthesize a barycenter with Module 2,
+    # then recover its coordinates with Module 4 and check they match the synthesis
+    # weights. Also cross-check against the existing (dissertation-validated)
+    # Chambolle-Pock-based `analysis`, since analyze_socp reuses its exact Gram/QP
+    # formulation (see solve_barycentric_coordinates_qp) - the two should agree
+    # closely, not just each independently recover the truth.
+    Q, π = triangle_markov_chain()
+    G = MarkovGraph(Q, π)
+    refs = [[2.0, 0.5, 0.5], [0.5, 2.0, 0.5], [0.5, 0.5, 2.0]]
+    λ_true = [0.5, 0.3, 0.2]
+
+    ν, _, _ = barycenter_socp(G, refs, λ_true; N=10)
+    M = hcat(refs...)
+
+    λ_socp = vec(analyze_socp(G, ν, refs; N=10))
+    λ_cp = vec(analysis(ν, M, Q; N=50, tol=1e-10))
+
+    @test λ_socp ≈ λ_true atol=1e-2
+    @test λ_cp ≈ λ_true atol=1e-2
+    @test λ_socp ≈ λ_cp atol=1e-2
+end
+
 @testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
     # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
     # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here
     # (the K-cone / continuity-equation / J_Eq indicators, the homogeneous-degree-1 edge
-    # action) is not strongly convex, so that premise never holds. Confirmed empirically
-    # (on a feature branch, cross-validated against an independent SOCP solver): on
-    # graphs with more than 2 nodes, `adaptive=true` converges tightly (no
-    # non-convergence warning, stable even at tol=1e-14) to a value with a PERSISTENT
-    # relative bias, rather than merely converging slowly to the right one - the 2-node
-    # case happens not to expose this. `adaptive=false` is now the default for exactly
-    # this reason. This test is self-contained (no external ground truth needed): it
-    # checks that the default converges in the ordinary Cauchy sense as N grows, and
-    # that `adaptive=true` does not converge to the same value.
+    # action) is not strongly convex, so that premise never holds. Confirmed empirically:
+    # on graphs with more than 2 nodes, `adaptive=true` converges (tightly, no
+    # non-convergence warning) to a value with a PERSISTENT relative bias against the
+    # independently-validated geodesic_socp (§1.3.1), rather than merely converging
+    # slowly - the two-node case happens not to expose this. `adaptive=false` is now the
+    # default for exactly this reason; this test locks that default in and documents why.
     Q, π = triangle_markov_chain()
+    G = MarkovGraph(Q, π)
     rng = MersenneTwister(2024)
     μ = (rand(rng, 3) .+ 0.1); μ ./= dot(μ, π)
     ν = (rand(rng, 3) .+ 0.1); ν ./= dot(ν, π)
 
-    @testset "default (adaptive=false) converges as N grows" begin
-        w2 = [action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20))
-              for N in (50, 100, 200, 400)]
-        diffs = abs.(diff(w2))
-        # successive differences should shrink (Cauchy convergence), consistent with
-        # ordinary O(1/N) time-discretization error vanishing as N grows
-        @test all(diffs[i+1] < diffs[i] + 1e-9 for i in 1:length(diffs)-1)
-        @test diffs[end] < 1e-3
+    @testset "default (adaptive=false) converges to the SOCP-validated value" begin
+        prev_err = Inf
+        for N in (10, 20, 50, 100)
+            W2_socp = geodesic_socp(G, μ, ν; N=N).W2
+            W2_cp = action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20))
+            err = abs(W2_cp - W2_socp) / W2_socp
+            @test err < 2.0 / N          # O(h), same pattern as §1.3.1
+            @test err < prev_err + 1e-9  # should not grow with N
+            prev_err = err
+        end
     end
 
     @testset "adaptive=true stays biased even as N grows (documents the known issue)" begin
-        w2_adaptive = [action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20, adaptive=true))
-                       for N in (100, 400)]
-        w2_default_400 = action(discrete_transport(Q, μ, ν; N=400, tol=1e-12, maxiters=2^20))
-        # adaptive=true is itself stable across N (not merely slow)...
-        @test abs(w2_adaptive[2] - w2_adaptive[1]) < 1e-3
-        # ...but stable at the WRONG value: if this ever starts passing, the
-        # acceleration bug has changed behavior (or been fixed) and this test - and the
-        # `adaptive` docs in galerkin/Chambolle.jl - need to be revisited.
-        @test all(w2 -> abs(w2 - w2_default_400) / w2_default_400 > 0.05, w2_adaptive)
+        W2_socp = geodesic_socp(G, μ, ν; N=100).W2
+        errs = [abs(action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20, adaptive=true)) - W2_socp) / W2_socp
+                for N in (100, 400)]
+        # if this ever starts passing, the acceleration bug has changed behavior (or been
+        # fixed) and this test - and the `adaptive` docs - need to be revisited.
+        @test all(e -> e > 0.05, errs)
     end
 end
+
 @testset "project_IJeq" begin
     ρ      = [1/3  2/3  1;  1/3  1/6  0;  1/3  1/6  0]
     q      = [1/2  3/4  1;  1/2  1/4  0;  0    0    0]

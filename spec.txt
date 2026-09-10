@@ -1,0 +1,149 @@
+Implementation Spec: Fast Synthesis & Analysis for the Barycentric Coding Model on Graphs
+Context. We currently compute geodesics of the discrete transport metric 𝒲 (Maas/Chow et al. construction, θ = geometric mean) via the Erbar–Rumpf–Schmitzer–Simon time discretization solved with Chambolle–Pock, and build barycenters by intrinsic gradient descent. This spec replaces the expensive inner machinery with (A) direct second-order-cone programming for distances, geodesics, and barycenters, and (B) a Hamiltonian shooting method for log/exp maps. Target language: Julia (existing codebase is GraphTransportation.jl). Suggested dependencies: `JuMP`, `Clarabel` (or `MosekTools` if licensed), `Graphs`, `LinearAlgebra`, `SparseArrays`, `OrdinaryDiffEq` or a hand-rolled Störmer–Verlet, `ForwardDiff` (optional, for shooting Jacobians), `OSQP` or Clarabel again for the analysis QP.
+Throughout, the admissible mean is the geometric mean θ(s,t) = √(st). Everything in Modules 1–3 is exact for this choice; do not silently substitute another mean.
+Module 0: Graph and discretization primitives
+Reuse existing code where possible; otherwise implement:
+
+1. `MarkovGraph` struct: vertex set `V` (size n), undirected edge list `E` (size |E|), edge weights ω, and derived `π::Vector` (stationary distribution), `Q::SparseMatrixCSC` (transition rates), per the constructions already in the paper (Section 2.2). Store, for each undirected edge e = (x,y), the scalar weight `κ_e := Q(x,y)π(x)`; verify reversibility `Q(x,y)π(x) == Q(y,x)π(y)` at construction time (assert to 1e-12).
+2. Signed incidence structure: fix an arbitrary orientation for each undirected edge. Represent momenta/potential-gradients as one scalar per undirected edge (antisymmetry, Lemma 2.4 of Erbar et al., is thereby hard-coded). Provide sparse operators:
+   * `grad(φ)::Vector{|E|}`: (∇φ)_e = φ(x) − φ(y) for e = (x→y).
+   * `div(m)::Vector{n}`: adjoint of −grad w.r.t. the ⟨·,·⟩_π and ⟨·,·⟩_Q inner products. Unit test: ⟨φ, div m⟩_π = −⟨∇φ, m⟩_Q for random φ, m (to 1e-12), matching the paper's conventions.
+3. Time grid: N intervals, h = 1/N, node-time array ρ ∈ R^{n×(N+1)}, edge-time arrays (m, ϑ, w) ∈ R^{|E|×N}. Time-averaged density ρ̄_{·,i} := (ρ_{·,i} + ρ_{·,i+1})/2.
+
+Module 1: Geodesics and distances as a single SOCP
+1.1 Formulation
+Decision variables: ρ ∈ R^{n×(N+1)}, and per (edge e, interval i): m_{e,i}, ϑ_{e,i} ≥ 0, w_{e,i} ≥ 0.
+Constraints:
+
+* Boundary: ρ_{·,0} = ρ_A, ρ_{·,N} = ρ_B.
+* Nonnegativity: ρ ≥ 0 elementwise.
+* Discrete continuity equation, for each i = 0..N−1: (ρ_{·,i+1} − ρ_{·,i})/h + div(m_{·,i}) = 0. (Linear equalities; nN of them.)
+* Mean cone, for each (e,i) with e = (x,y): ϑ_{e,i}² ≤ ρ̄_{x,i} · ρ̄_{y,i}. This is a rotated second-order cone (RSOC) constraint `(ρ̄_x, ρ̄_y, ϑ√2) ∈ RSOC` — use JuMP's `RotatedSecondOrderCone`; check the solver's scaling convention (Clarabel/Mosek use 2uv ≥ ‖z‖², so encode as (u,v,z) = (ρ̄_x/…)). Get the constant right by the unit tests in 1.3, not by trusting this document.
+* Action epigraph, for each (e,i): m_{e,i}² ≤ ϑ_{e,i} · w_{e,i}. Also an RSOC.
+
+Objective:
+minimize h · Σ_{i=0}^{N−1} Σ_{e∈E} κ_e · w_{e,i}.
+(The factor accounting: the paper's action ½∫Σ_{x,y} m²/θ Qπ sums over ordered pairs; with antisymmetric m and reversibility, ordered-pair sum = 2 × undirected-edge sum, cancelling the ½. Confirm numerically in 1.3.)
+Outputs: `W2 = objective value` (so distance = √W2), the full path ρ, momenta m, and specifically the initial momentum m_{·,0} and, if the solver exposes duals of the continuity equation, the associated potentials φ_{·,i} (dual multipliers of the continuity constraints, up to sign/scaling — recover convention by comparing θ(ρ̄)∘∇φ to m).
+1.2 API
+
+```julia
+struct GeodesicSolution
+    W2::Float64          # squared distance
+    ρ::Matrix{Float64}   # n × (N+1)
+    m::Matrix{Float64}   # |E| × N
+    m0::Vector{Float64}  # = m[:,1], convenience
+    status, solvetime, iterations
+end
+geodesic_socp(G::MarkovGraph, ρA, ρB; N=10, solver=Clarabel) -> GeodesicSolution
+
+```
+
+Engineering notes:
+
+* Build the JuMP model once per (G, N) and use parameterized boundary vectors (`fix.(ρ[:,0], ρA)`) so repeated distance queries (analysis needs p of them per target) reuse the model.
+* Warm starts matter less for interior-point than for first-order methods; do not spend time on them initially.
+* Default tolerances: solver defaults (~1e-8 gap). Do not chase 1e-10; the time-discretization error is O(h).
+
+1.3 Unit tests / validation
+
+1. Two-node graph, exact solution. X = {a,b}, p = q = 1. For θ_geo the Maas closed form (Erbar et al. eq. (36)–(37)) gives W and the geodesic via a 1-D quadrature/ODE. Assert: √W2 matches quadrature of (36) to O(h); interpolated ρ_b(t) matches the ODE solution (reuse the explicit-Euler reference already in our Figure 8 pipeline).
+2. Cross-validation vs incumbent. On the 3-cycle, 4-cycle, and 3×3 grid (Erbar Figs. 5–6 configurations), compare W2 and paths against our existing Chambolle–Pock code at δ_g = 1e-10. Expect agreement to ~1e-6 or better at equal N.
+3. Symmetry & triangle inequality spot checks on random measures (10 triples, random 25-node graphs).
+4. Timing harness: wall-clock vs |V| ∈ {16, 49, 156 (MA districts), ~500}, N ∈ {5, 10, 20, 50}; record CP-equivalent timings for the paper's revision.
+
+Module 2: Barycenter synthesis as one joint SOCP (replaces intrinsic gradient descent)
+2.1 Formulation
+Given references {ν_1,…,ν_p} and weights λ ∈ Δ^{p−1}: replicate Module 1's variable blocks p times — (ρ^i, m^i, ϑ^i, w^i) for i = 1..p — with:
+
+* Left endpoints fixed: ρ^i_{·,0} = ν_i.
+* Shared free right endpoint: introduce ν ∈ R^n, ν ≥ 0, with ρ^i_{·,N} = ν for all i. Add Σ_x ν(x)π(x) = 1 explicitly (it is implied by mass conservation but adding it improves conditioning).
+* Objective: h · Σ_i λ_i Σ_{e,t} κ_e w^i_{e,t}.
+
+The minimizer ν* is the (discretized) barycenter; the optimal objective is Σ λ_i 𝒲_h²(ν_i, ν*); the blocks' m^i are the geodesics from each reference to the barycenter — exactly the data the analysis Gram matrix wants, for free.
+If λ_i = 0 for some i, drop that block entirely.
+2.2 API
+
+```julia
+barycenter_socp(G, refs::Vector{Vector{Float64}}, λ; N=10, solver=Clarabel)
+    -> (ν::Vector, J::Float64, geodesics::Vector{GeodesicSolution})
+
+```
+
+2.3 Validation
+
+1. p = 2 sanity: Bary({ν_0,ν_1}, (1−t,t)) must equal the geodesic point ν(t) (our Section 4.1 experiment). With the joint SOCP both come from convex programs, so agreement should be at solver tolerance for matched N — much tighter than the ~1e-3 relative errors in Figs. 9–10. Reproduce those figures' setups.
+2. Reproduce Figure 6 (hypercube, weighted & unweighted) and Figure 11a/b (49-grid, MA/US graphs). Compare ν* to the intrinsic-descent output; report ‖·‖_π discrepancy and wall-clock ratio.
+3. Objective certificate check: evaluate J at the intrinsic-descent barycenter using Module 1 distances; assert J_SOCP ≤ J_descent (global optimality of the convex solve).
+4. Initialization-independence experiment (Fig. 12) becomes moot — note this for the paper text; no test needed.
+
+2.4 Scaling fallback (only if p·n·N gets large)
+If the joint program exceeds memory (rough threshold: p·N·(n+3|E|) ≳ 5×10^6 variables), implement block coordinate descent: alternate (a) solve p independent Module-1 geodesic SOCPs with fixed right endpoint ν, (b) update ν by a projected gradient step using the endpoint duals. Do not build this until needed.
+Module 3: Hamiltonian shooting for log and exp maps
+Valid regime: strictly positive measures. Guard every entry point with `@assert minimum(ρ) > ρ_floor` (default ρ_floor = 1e-6 relative to min π-weight); on violation, either fall back to Module 1 or apply the mollification of §3.5.
+3.1 The ODE system
+State (ρ, φ) ∈ R^n × R^n. Define the Hamiltonian
+H(ρ, φ) = ¼ Σ_{x,y} θ(ρ(x),ρ(y)) (φ(x) − φ(y))² Q(x,y) π(x) = ½ Σ_{e=(x,y)∈E} θ(ρ_x, ρ_y) (∇φ)_e² κ_e.
+Equations of motion (gradients w.r.t. the ⟨·,·⟩_π structure; derive and verify, don't trust signs here):
+ρ̇(x) = Σ_y θ(ρ(x),ρ(y)) (φ(x) − φ(y)) Q(x,y) [= −div(θ(ρ)∘∇φ)(x) in paper conventions] φ̇(x) = −½ Σ_y ∂₁θ(ρ(x),ρ(y)) (φ(x) − φ(y))² Q(x,y)
+with ∂₁θ_geo(s,t) = ½√(t/s). Gauge freedom: φ ↦ φ + c; fix it by enforcing ⟨φ, 1⟩_π = 0 at t = 0.
+Invariants (unit tests): along trajectories, (i) total mass Σ ρ(x)π(x) is conserved to integrator tolerance; (ii) H is conserved; (iii) the metric speed satisfies 2H = const = 𝒲(ρ(0), ρ(1))² for a geodesic — cross-check against Module 1's W2 (agreement O(h) + O(integrator tol)).
+Integrator: fixed-step Störmer–Verlet / leapfrog (the system is separable enough in practice; if the ρ̇ update's dependence on ρ causes issues, use implicit midpoint or `OrdinaryDiffEq`'s `KahanLi6`/`McAte5` symplectic options, or simply RK4 with small steps — symplecticity is a nicety, not a requirement). Default 100–200 steps on [0,1]; positivity guard each step (if any ρ < ρ_floor, halve the step; if persistent, abort to fallback).
+3.2 Exponential map
+
+```julia
+exp_map(G, ν, tangent; t=1.0, nsteps=...) -> ρ_end
+
+```
+
+`tangent` may be given as a potential φ0 or a momentum vector m0 ∈ R^{|E|}; in the latter case recover φ0 by solving the weighted Laplacian system L_θ(ν) φ0 = −div(m0)-consistent right-hand side, where L_θ(ν) = div(θ(ν)∘∇(·)) restricted to the mean-zero subspace (sparse SPD solve; use `cholesky` of the reduced system, cache the symbolic factorization per graph). Integrate the ODE from (ν, φ0) for time t.
+This replaces the first-order update ν_{k+1} = ν_k + ε div(Σ λ_i m_i(0)) wherever the descent scheme is retained.
+3.3 Log map by shooting
+
+```julia
+log_map(G, ν, target; φ0_init=nothing, tol=1e-9) -> (φ0, m0, W2)
+
+```
+
+Solve F(φ0) := ρ(1; ν, φ0) − target = 0 over mean-zero φ0 (dimension n−1).
+
+* Newton loop: Jacobian ∂F/∂φ0 via ForwardDiff through the integrator (n ≤ a few hundred: fine), or finite differences as a fallback. Solve the (n−1)×(n−1) system; damped line search on ‖F‖.
+* Initialization: linearized geodesic — solve L_θ(ν) φ0 = target − ν (in the π-weighted sense). This is exact to first order in ‖target − ν‖ and is an excellent guess for nearby measures. Optional high-quality init: run Module 1 at coarse N=5 and read off φ from continuity-equation duals.
+* Multiple shooting (only if single shooting stalls on stiff instances): split [0,1] into 4 segments with continuity constraints.
+* Return m0 = θ(ν)∘∇φ0 and W2 = 2H(ν, φ0).
+
+Validation: (i) round trip `exp_map(ν, log_map(ν, μ)) ≈ μ` to 1e-6 on random strictly positive pairs (25-node and MA-district graphs); (ii) m0 vs Module 1's m_{·,0} (agreement O(h)); (iii) W2 vs Module 1; (iv) Newton iteration counts (expect 3–8 cold, 1–2 warm-started).
+3.4 Warm-start protocol
+Cache φ0 per (base, target) pair keyed by object identity; in any outer loop over slowly-moving base measures (e.g., if the descent-based synthesis is kept for comparison figures), reuse last φ0.
+3.5 Mollification fallback for near-boundary data
+For endpoints with zero/near-zero entries: ν_ε := (1−ε)ν + ε·𝟙 (𝟙 = uniform density; note ν_ε ∈ 𝒫(X) automatically). Run the log map on mollified data for ε ∈ {1e-2, 1e-3, 1e-4}, extrapolate W in √ε (empirically fit; see chat discussion — the perturbation costs O(√ε) in 𝒲). Flag results as approximate. Module 1 needs no such fallback — route boundary-supported instances there.
+Module 4: Analysis pipeline
+
+```julia
+analyze(G, target, refs; method=:shooting | :socp, N=..., qp_solver=...) -> λ̂
+
+```
+
+1. For each reference ν_i: obtain initial data of the geodesic from `target` to ν_i — via `log_map` (fast path, interior data) or Module 1 (robust path). Keep the potential φ_i, not just m_i.
+2. Gram matrix: A_ij = ½ Σ_{x,y} θ(target(x), target(y)) ∇φ_i(x,y) ∇φ_j(x,y) Q(x,y)π(x) = Σ_e θ(target)_e (∇φ_i)_e (∇φ_j)_e κ_e.
+3. Solve min_{λ∈Δ^{p−1}} λᵀAλ (tiny QP; Clarabel/OSQP). Symmetrize A, add 1e-12 ridge for PSD safety.
+
+Validation: reproduce the consistency experiments (Figs. 13–14): synthesize with Module 2, analyze with Module 4, report recovery error distributions; sweep (N, integrator steps) in place of (N, δ_g). Expected outcome to report: recovery error floor set by discretization, insensitive to solver tolerance.
+Module 5: Experiment scripts (deliverables for the paper revision)
+
+1. `bench_geodesics.jl` — Module 1.4 timing table + accuracy-vs-N plot (log-log; expect first-order in h, mirroring Erbar Fig. 9).
+2. `bench_barycenters.jl` — Module 2.3: side-by-side barycenters (SOCP vs incumbent descent vs Sinkhorn baselines), wall-clock table, objective-value table with certificates.
+3. `bench_logexp.jl` — Module 3 round-trip errors and Newton iteration histograms.
+4. `consistency.jl` — Module 4 validation, regenerating Figs. 13–15 analogues.
+5. `boundary_stress.jl` — measures with support on subsets of nodes (see chat discussion): Module 1/2 on Dirac-type references (reproduce Erbar Fig. 5 phenomenology; barycenters of Diracs on cycles/grids), plus mollified-shooting error curves vs ε.
+
+Order of implementation
+Module 0 → Module 1 (+tests 1.3.1–1.3.2 as the go/no-go gate) → Module 2 → Module 4 with `:socp` backend → Module 3 → Module 4 `:shooting` backend → Module 5. Modules 1–2 alone already replace the costly inner loops and de-risk everything downstream.
+Known pitfalls checklist
+
+* RSOC scaling conventions differ between solvers (factor of 2); pin down with test 1.3.1 before anything else.
+* Ordered-pair vs undirected-edge factor of 2 in the action; same test catches it.
+* Sign conventions in grad/div and in the Hamiltonian flow; catch with the integration-by-parts test (Module 0) and mass/H conservation (Module 3).
+* Duals from JuMP have solver-dependent sign; calibrate against θ(ρ̄)∘∇φ = m on a solved instance.
+* Do not evaluate θ_geo or ∂₁θ_geo at exactly 0 in Module 3; the guards exist for a reason.
+* W vs W²: Module 1 returns the squared distance; the metric is its square root. Keep the convention explicit in every function docstring.
