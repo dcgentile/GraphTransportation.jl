@@ -21,6 +21,16 @@ barycenter
 analysis
 ```
 
+## SOCP geodesics and barycenters
+
+```@docs
+MarkovGraph
+geodesic_socp
+GeodesicSolution
+barycenter_socp
+analyze_socp
+```
+
 ## Entropic barycenters
 
 ```@docs
