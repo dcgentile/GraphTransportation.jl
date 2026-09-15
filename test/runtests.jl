@@ -468,6 +468,81 @@ end
     end
 end
 
+@testset "geodesic_socp endpoint potentials: dual sign/scale calibration (SOCP Module 4 prerequisite)" begin
+    # SOCP_ANALYSIS_SPEC.md §5.3/§6.1: before building anything on JuMP's duals,
+    # pin down their sign and scale. `φ0`/`φ1` are defined as the gradient of W2 with
+    # respect to each endpoint density in the π-weighted pairing, so they must match
+    # (a) a central finite difference of `geodesic_socp`'s own W2 (tight — same
+    # discretization on both sides) and (b) the two-node closed form's derivative,
+    # d/ds W(ρ(s),ρ(t))² = -√2·W·(1-s²)^{-1/4}, with O(h) error.
+    G = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5])
+    s, t = -0.6, 0.7
+    ρ(r) = [1.0 - r, 1.0 + r]           # δρ/dr = [-1, 1], so ⟨φ, δρ⟩_π = (φ[2] - φ[1])/2
+    W_ref(a, b) = quadgk(r -> (1 - r^2)^(-1/4), a, b)[1] / sqrt(2)
+    C = W_ref(s, t)
+    dW2_ds = -sqrt(2) * C * (1 - s^2)^(-1/4)
+    dW2_dt =  sqrt(2) * C * (1 - t^2)^(-1/4)
+
+    ε = 1e-4
+    for N in (5, 20, 100)
+        sol = geodesic_socp(G, ρ(s), ρ(t); N=N)
+        @test sol.status == OPTIMAL
+        pair(φ) = (φ[2] - φ[1]) / 2
+
+        fd_s = (geodesic_socp(G, ρ(s + ε), ρ(t); N=N).W2 - geodesic_socp(G, ρ(s - ε), ρ(t); N=N).W2) / (2ε)
+        fd_t = (geodesic_socp(G, ρ(s), ρ(t + ε); N=N).W2 - geodesic_socp(G, ρ(s), ρ(t - ε); N=N).W2) / (2ε)
+        @test pair(sol.φ0) ≈ fd_s rtol=1e-3      # sign: no flip of JuMP's dual needed
+        @test pair(sol.φ1) ≈ fd_t rtol=1e-3
+        @test abs(pair(sol.φ0) - dW2_ds) < 1.0 / N
+        @test abs(pair(sol.φ1) - dW2_dt) < 1.0 / N
+    end
+
+    # The continuity-equation duals ψ_t are the half-step potentials and relate to the
+    # momenta through the interval *midpoint* density: m_t = -(1/2h) θ(ρ̄_t) ∇(ψ_t/π).
+    # This is the `θ(ρ̄)∘∇φ = m` calibration spec.txt asks for; it is exact (to solver
+    # tolerance) only with ρ̄_t, which is why reading φ off these duals and pairing it
+    # with θ(ρ0) looked "not a clean constant" in an earlier attempt.
+    Q, π = triangle_markov_chain()
+    G3 = MarkovGraph(Q, π)
+    N = 4; h = 1.0 / N
+    model = Model(Clarabel.Optimizer); set_silent(model)
+    blk = GraphTransportation._geodesic_block!(model, G3, N, h, [2.0, 0.5, 0.5], [0.4, 0.4, 2.2])
+    @objective(model, Min, h * sum(G3.κ[e] * blk.w[e, tt] for tt in 1:N, e in 1:length(G3.E)))
+    optimize!(model)
+    @test termination_status(model) == OPTIMAL
+    ρ_path = value.(blk.ρ); m_path = value.(blk.m)
+    for tt in 1:N
+        ψ = dual.(blk.c_cont[tt]) ./ G3.π
+        ρ̄ = (ρ_path[:, tt] .+ ρ_path[:, tt+1]) ./ 2
+        predicted = -(1 / (2h)) .* metric_tensor(G3, ρ̄) .* graph_gradient(G3, ψ)
+        @test predicted ≈ m_path[:, tt] rtol=1e-3   # solver tolerance, not O(h)
+    end
+end
+
+@testset "barycenter_socp endpoint potentials and KKT stationarity (SOCP Module 4 prerequisite)" begin
+    # The per-block potentials returned by barycenter_socp (with the λ[i] weighting
+    # divided out) must be the same as an independent geodesic_socp solve's, and the
+    # joint program's stationarity in ν is exactly Σᵢ λᵢ φ1ᵢ = const on supp(ν)
+    # (SOCP_ANALYSIS_SPEC.md §4.4). Potentials are only defined up to an additive
+    # constant, so compare gradients.
+    Q, π = triangle_markov_chain()
+    G = MarkovGraph(Q, π)
+    refs = [[2.0, 0.5, 0.5], [0.5, 2.0, 0.5], [0.5, 0.5, 2.0]]
+    λ = [0.5, 0.3, 0.2]
+    ν, _, geos = barycenter_socp(G, refs, λ; N=3)
+    @test all(ν .> 1e-3)   # fully supported, so stationarity has no slack term
+
+    for (i, geo) in enumerate(geos)
+        indep = geodesic_socp(G, refs[i], ν; N=3)
+        @test graph_gradient(G, geo.φ1) ≈ graph_gradient(G, indep.φ1) rtol=1e-3   # solver tolerance
+        @test graph_gradient(G, geo.φ0) ≈ graph_gradient(G, indep.φ0) rtol=1e-3
+    end
+
+    stationarity = sum(λ[i] .* geos[i].φ1 for i in eachindex(geos))
+    scale = maximum(abs, graph_gradient(G, geos[1].φ1))
+    @test maximum(abs, graph_gradient(G, stationarity)) < 1e-6 * scale
+end
+
 @testset "geodesic_socp vs Chambolle-Pock (SOCP Module 1, spec §1.3.2)" begin
     # Cross-validate against the incumbent Chambolle-Pock solver on the 3-cycle,
     # 4-cycle, and 3x3 grid (Erbar Figs. 5-6 configurations). Unlike the exact §1.3.1

@@ -13,8 +13,12 @@ Returns:
 - `ν`: the barycenter, i.e. the shared optimal right endpoint.
 - `J`: the optimal objective value, `Σᵢ λᵢ 𝒲_h²(refs[i], ν)`.
 - `geodesics`: one `GeodesicSolution` per reference with `λ[i] > 0` (in the same
-  relative order as `refs`), giving the geodesic from that reference to `ν`; these
-  momenta are exactly the data the analysis Gram matrix (Module 4) needs.
+  relative order as `refs`), giving the geodesic from that reference to `ν`. Each
+  carries its endpoint potentials (`φ0` at the reference, `φ1` at `ν`, both for the
+  *unweighted* geodesic — the `λ[i]` factor is divided out of the duals). KKT
+  stationarity of the joint program with respect to `ν` is exactly
+  `Σᵢ λᵢ φ1ᵢ = const` on the support of `ν`, which is the stationarity condition the
+  potential-based analysis (`analyze_socp`) checks.
 
 References with `λ[i] == 0` are dropped entirely rather than solved with a zero
 weight. `λ` must be a probability vector (`λ .>= 0`, `sum(λ) ≈ 1`).
@@ -48,14 +52,20 @@ function barycenter_socp(G::MarkovGraph, refs::Vector{<:AbstractVector}, λ::Abs
     status = termination_status(model)
     st = solve_time(model)
 
-    geodesics = [GeodesicSolution(
-                    h * sum(G.κ[e] * value(b.w[e, t]) for t in 1:N, e in 1:nE),
-                    value.(b.ρ),
-                    value.(b.m),
-                    value.(b.m)[:, 1],
-                    status,
-                    st,
-                 ) for b in blocks]
+    geodesics = map(blocks) do b
+        # This block's action enters the objective weighted by λ[i], so its endpoint
+        # duals are λ[i] times the unweighted geodesic's; divide that back out.
+        φ0, φ1 = _endpoint_potentials(G, b; weight=λ[b.ref_index])
+        GeodesicSolution(
+            h * sum(G.κ[e] * value(b.w[e, t]) for t in 1:N, e in 1:nE),
+            value.(b.ρ),
+            value.(b.m),
+            value.(b.m)[:, 1],
+            φ0, φ1,
+            status,
+            st,
+        )
+    end
 
     return value.(ν), objective_value(model), geodesics
 end

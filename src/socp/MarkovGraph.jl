@@ -93,3 +93,16 @@ function graph_divergence(G::MarkovGraph, m::AbstractVector)
     @assert length(m) == length(G.E)
     return G.D * m
 end
+
+"""
+    metric_tensor(G::MarkovGraph, ρ::AbstractVector, mean=geomean) -> Vector{Float64}
+
+Compact-edge-vector counterpart of the dense [`metric_tensor`](@ref): `θ[e] = mean(ρ[x], ρ[y])`
+for the oriented edge `e = (x, y)`. Does **not** include the edge weight `κ`; the
+Riemannian inner product of two potential gradients at `ρ` is
+`⟨∇φ, ∇ψ⟩_ρ = Σ_e κ[e] θ[e] (∇φ)[e] (∇ψ)[e]`.
+"""
+function metric_tensor(G::MarkovGraph, ρ::AbstractVector, mean=geomean)
+    @assert length(ρ) == G.n
+    return [mean(ρ[x], ρ[y]) for (x, y) in G.E]
+end
