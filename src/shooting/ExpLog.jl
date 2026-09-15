@@ -230,7 +230,7 @@ function analyze_shooting(G::MarkovGraph, target::AbstractVector, refs::Vector{<
 end
 
 """
-    log_map_mollified(G::MarkovGraph, ν, target; εs=(1e-2, 1e-3, 1e-4), kwargs...)
+    log_map_mollified(G::MarkovGraph, ν, target; εs=(1e-2, 1e-3, 1e-4), tol=1e-7, kwargs...)
         -> (; W2, W, φ0, m0, fit, εs, Ws, approximate=true)
 
 Module 3.5: `log_map` for endpoints with zero or near-zero entries, where shooting
@@ -246,10 +246,12 @@ near-boundary geodesic stiff) are skipped with a warning as long as two remain.
 Results are flagged `approximate=true`; for boundary-supported data `geodesic_socp`
 needs no such fallback and is the reference. Empirically the raw `W` at the smallest
 `ε` is often already as accurate as the extrapolation (the mollification error can
-decay faster than `√ε`), so both are returned. Remaining `kwargs` go to `log_map`.
+decay faster than `√ε`), so both are returned. The shooting tolerance `tol` defaults to a looser
+`1e-7` here (the result is approximate anyway, and the near-boundary trajectories make
+the last digits of the residual hard to reach). Remaining `kwargs` go to `log_map`.
 """
 function log_map_mollified(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
-                           εs=(1e-2, 1e-3, 1e-4), kwargs...)
+                           εs=(1e-2, 1e-3, 1e-4), tol::Float64=1e-7, kwargs...)
     @assert length(εs) ≥ 2 "need at least two ε values to extrapolate"
     εs = sort(collect(Float64, εs); rev=true)
     mollify(ρ, ε) = (1 - ε) .* ρ .+ ε
@@ -260,7 +262,7 @@ function log_map_mollified(G::MarkovGraph, ν::AbstractVector, target::AbstractV
         # Very small ε makes the near-boundary geodesic stiff for single shooting; skip
         # such levels rather than fail the whole extrapolation, as long as two remain.
         r_ε = try
-            log_map(G, mollify(ν, ε), mollify(target, ε); φ0_init=(r === nothing ? nothing : r.φ0), kwargs...)
+            log_map(G, mollify(ν, ε), mollify(target, ε); φ0_init=(r === nothing ? nothing : r.φ0), tol=tol, kwargs...)
         catch err
             err isa ErrorException || rethrow()
             @warn "log_map_mollified: shooting failed at ε=$ε, skipping this level" exception=err.msg
