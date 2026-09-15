@@ -655,11 +655,24 @@ end
     M = hcat(refs...)
 
     λ_socp = vec(analyze_socp(G, ν, refs; N=10))
+    λ_mom  = vec(analyze_socp(G, ν, refs; N=10, convention=:momentum))
     λ_cp = vec(analysis(ν, M, Q; N=50, tol=1e-10))
 
-    @test λ_socp ≈ λ_true atol=1e-2
+    @test λ_socp ≈ λ_true atol=1e-3   # potential convention: exact stationarity, solver tol
+    @test λ_mom ≈ λ_true atol=1e-2    # momentum convention: O(h) proxy
     @test λ_cp ≈ λ_true atol=1e-2
     @test λ_socp ≈ λ_cp atol=1e-2
+
+    # The point of the potential convention (SOCP_ANALYSIS_SPEC.md §4): recovery does
+    # not depend on N being fine. Re-synthesize and analyze at N=2, where the momentum
+    # proxy is worst, and require the true λ to already be the QP's minimizer
+    # (residual ratio λᵀAλ / λ̂ᵀAλ̂ ≈ 1, spec §2.3's diagnostic).
+    ν2, _, _ = barycenter_socp(G, refs, λ_true; N=2)
+    λ̂2, A2 = analyze_socp(G, ν2, refs; N=2, return_system=true)
+    λ̂2 = vec(λ̂2)
+    @test λ̂2 ≈ λ_true atol=1e-3
+    @test λ_true' * A2 * λ_true ≤ 1e-6 * maximum(diag(A2))   # true λ is (numerically) a zero of the Gram form
+    @test λ̂2' * A2 * λ̂2 ≤ 1e-6 * maximum(diag(A2))
 end
 
 @testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
