@@ -42,6 +42,7 @@ weighted_laplacian
 solve_weighted_laplacian
 momentum_to_potential
 exp_map
+log_map
 ```
 
 ## Entropic barycenters

@@ -92,3 +92,111 @@ function exp_map(G::MarkovGraph, ν::AbstractVector, tangent::AbstractVector;
     ρ_path, _ = integrate_hamiltonian(G, ν, φ0; nsteps=nsteps, T=t, floor_rtol=floor_rtol)
     return ρ_path[:, end]
 end
+
+# Reduced coordinates for the shooting unknown: z ∈ R^{n-1} ↦ φ0 ∈ Rⁿ with the gauge
+# ⟨φ0, 1⟩_π = 0 solved for the last component. Removes the flow's gauge freedom, so
+# the Newton system below is square and (generically) nonsingular.
+function _reduced_to_potential(G::MarkovGraph, z::AbstractVector)
+    n = G.n
+    last = -dot(view(G.π, 1:n-1), z) / G.π[n]
+    return vcat(z, last)
+end
+
+"""
+    log_map(G::MarkovGraph, ν, target; φ0_init=nothing, tol=1e-9, maxiters=50, nsteps=150,
+            floor_rtol=1e-6, verbose=false) -> (; φ0, m0, W2, iters, residual)
+
+Module 3.3: the Riemannian logarithm at `ν`, by single shooting. Solves
+`F(φ0) := ρ(1; ν, φ0) − target = 0` with a damped Newton iteration over the mean-zero
+potentials (`n − 1` unknowns, the gauge `⟨φ0, 1⟩_π = 0` and the mass constraint each
+removing one dimension), with the Jacobian computed by `ForwardDiff` through
+`integrate_hamiltonian` and a backtracking line search on `‖F‖_π`.
+
+Initialization is the linearized geodesic `L_θ(ν) φ0 = π ∘ (target − ν)`, exact to first
+order in `target − ν` (spec §3.3), unless `φ0_init` (a potential) is given, e.g. from a
+previous solve at a nearby base point (spec §3.4 warm-start).
+
+Returns the potential `φ0`, the momentum `m0 = θ(ν) ∘ ∇φ0`, the squared distance
+`W2 = 2H(ν, φ0)`, the Newton iteration count, and the final residual `‖F‖_π`. Errors if
+the iteration has not reached `tol` after `maxiters` steps, or if the shooting
+trajectory persistently hits the positivity floor (fall back to `geodesic_socp`, or
+mollify, spec §3.5). Requires `ν` and `target` strictly positive (see `ρ_floor`).
+"""
+function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
+                 φ0_init=nothing, tol::Float64=1e-9, maxiters::Int=50, nsteps::Int=150,
+                 floor_rtol::Float64=1e-6, verbose::Bool=false)
+    n = G.n
+    floor_val = ρ_floor(G; rtol=floor_rtol)
+    @assert minimum(ν) > floor_val && minimum(target) > floor_val "log_map requires strictly positive endpoints (see ρ_floor)"
+    @assert abs(dot(ν, G.π) - 1) < 1e-8 && abs(dot(target, G.π) - 1) < 1e-8 "endpoints must be probability densities"
+
+    sqrtπ = sqrt.(G.π)
+    # Full residual (all n components; the last is redundant but harmless for the norm).
+    function shoot(z)
+        φ0 = _reduced_to_potential(G, z)
+        ρ_path, _ = integrate_hamiltonian(G, ν, φ0; nsteps=nsteps, T=1.0, floor_rtol=floor_rtol)
+        return ρ_path[:, end] .- target
+    end
+    F_reduced(z) = shoot(z)[1:n-1]
+    resnorm(F) = norm(F .* sqrtπ)
+
+    φ0 = if φ0_init === nothing
+        solve_weighted_laplacian(G, ν, G.π .* (target .- ν))
+    else
+        φ0_init .- dot(φ0_init, G.π)
+    end
+    z = φ0[1:n-1]
+
+    # The linearized guess can overshoot through the positivity floor for far-apart
+    # endpoints (it is only first-order accurate); damp it until the first shot survives.
+    local F
+    for k in 0:12
+        F = try
+            shoot(z)
+        catch err
+            err isa ErrorException || rethrow()
+            k == 12 && error("log_map: no admissible initial potential found (endpoints too far apart for shooting); " *
+                             "fall back to geodesic_socp or mollify the endpoints (spec §3.5).")
+            z ./= 2
+            nothing
+        end
+        F === nothing || break
+    end
+    r = resnorm(F)
+    iters = 0
+    while r > tol
+        iters ≥ maxiters && error("log_map: Newton did not converge in $maxiters iterations (residual $r > tol $tol); " *
+                                  "fall back to geodesic_socp or mollify the endpoints (spec §3.5).")
+        J = ForwardDiff.jacobian(F_reduced, z)
+        δ = -(J \ F[1:n-1])
+
+        # Backtracking on ‖F‖_π; a step whose trajectory hits the positivity floor counts
+        # as a failed step and is shortened the same way.
+        α = 1.0
+        accepted = false
+        for _ in 1:12
+            z_try = z .+ α .* δ
+            F_try = try
+                shoot(z_try)
+            catch err
+                err isa ErrorException || rethrow()
+                nothing
+            end
+            if F_try !== nothing && resnorm(F_try) ≤ (1 - 1e-4 * α) * r
+                z, F, r = z_try, F_try, resnorm(F_try)
+                accepted = true
+                break
+            end
+            α /= 2
+        end
+        accepted || error("log_map: line search failed at iteration $(iters + 1) (residual $r); " *
+                          "the target may be too far from ν for single shooting, or the geodesic leaves the positive cone.")
+        iters += 1
+        verbose && @info "log_map" iter=iters residual=r step=α
+    end
+
+    φ0 = _reduced_to_potential(G, z)
+    m0 = metric_tensor(G, ν) .* graph_gradient(G, φ0)
+    W2 = 2 * hamiltonian(G, ν, φ0)
+    return (; φ0, m0, W2, iters, residual=r)
+end

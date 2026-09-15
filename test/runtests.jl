@@ -792,6 +792,70 @@ end
     end
 end
 
+@testset "log_map by shooting (Module 3, spec §3.3)" begin
+    rng = MersenneTwister(4)
+
+    @testset "round trip, W2 and m0 vs geodesic_socp, Newton counts" begin
+        for (Q, π) in (weighted_hypercube_markov_chain(), grid_markov_chain(5))
+            G = MarkovGraph(Q, π)
+            for _ in 1:3
+                ν = rand(rng, G.n) .+ 0.5; ν ./= dot(ν, π)
+                μ = rand(rng, G.n) .+ 0.5; μ ./= dot(μ, π)
+                r = log_map(G, ν, μ)
+                @test r.iters ≤ 8                                  # spec: 3-8 cold
+                @test norm((exp_map(G, ν, r.φ0) .- μ) .* sqrt.(π)) < 1e-6   # spec (i)
+                @test norm((exp_map(G, ν, r.m0) .- μ) .* sqrt.(π)) < 1e-6   # via the momentum too
+                @test abs(dot(r.φ0, π)) < 1e-12                    # gauge
+                @test log_map(G, ν, μ; φ0_init=r.φ0).iters == 0    # warm start
+
+                # (ii)/(iii): m0 and W2 vs Module 1, O(h) in the SOCP's h=1/N
+                prev = Inf
+                for N in (10, 40, 160)
+                    sol = geodesic_socp(G, ν, μ; N=N)
+                    m_err = norm(r.m0 .- sol.m0) / norm(sol.m0)
+                    @test m_err < 5.0 / N
+                    @test m_err < prev + 1e-6
+                    @test abs(r.W2 - sol.W2) < 1.0 / N
+                    prev = m_err
+                end
+                # The SOCP's endpoint potential is the gradient of W2, and the flow's φ0
+                # is the Hamiltonian velocity potential: φ_socp ≈ -2 φ0 (continuum limit).
+                sol = geodesic_socp(G, ν, μ; N=160)
+                @test graph_gradient(G, sol.φ0) ≈ -2 .* graph_gradient(G, r.φ0) rtol=0.05
+            end
+        end
+    end
+
+    @testset "two-node closed form" begin
+        G = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5])
+        W_ref(a, b) = quadgk(r -> (1 - r^2)^(-1/4), a, b)[1] / sqrt(2)
+        s, t = -0.6, 0.7
+        r = log_map(G, [1 - s, 1 + s], [1 - t, 1 + t]; nsteps=400)
+        @test sqrt(r.W2) ≈ W_ref(s, t) atol=1e-8
+    end
+
+    @testset "far-apart concentrated endpoints (damped initialization)" begin
+        # The linearized initial guess overshoots through the positivity floor here; the
+        # damped initialization must recover and Newton must still converge.
+        Q, π = grid_markov_chain(5)
+        G = MarkovGraph(Q, π)
+        A = Q .> 0
+        conc(c) = (m = ones(G.n); m[c] *= 10; for j in 1:G.n; A[c, j] && (m[j] *= 10); end; m ./ dot(m, π))
+        ν, μ = conc(1), conc(25)
+        r = log_map(G, ν, μ)
+        @test r.residual < 1e-9
+        @test norm((exp_map(G, ν, r.φ0) .- μ) .* sqrt.(π)) < 1e-6
+        @test abs(r.W2 - geodesic_socp(G, ν, μ; N=100).W2) < 2e-2
+    end
+
+    @testset "guards" begin
+        Q, π = triangle_markov_chain()
+        G = MarkovGraph(Q, π)
+        @test_throws AssertionError log_map(G, [1.0, 1.0, 1.0], [0.0, 1.5, 1.5])   # zero entry
+        @test_throws AssertionError log_map(G, [1.0, 1.0, 1.0], [2.0, 1.0, 1.0])   # not a density
+    end
+end
+
 @testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
     # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
     # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here
