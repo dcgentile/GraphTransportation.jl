@@ -881,6 +881,32 @@ end
     @test vec(analyze_shooting(G, ν, refs; φ0_inits=inits)) ≈ λ̂ atol=1e-8
 end
 
+@testset "log_map_mollified (Module 3.5 boundary fallback)" begin
+    # Target supported on two columns of a 5x5 grid (zero elsewhere): shooting cannot
+    # run directly, so mollify and extrapolate. geodesic_socp handles the boundary case
+    # natively and is the reference. Both the extrapolated and the raw smallest-ε
+    # distance should be within a percent of it (the fallback is approximate by design).
+    Q, π = grid_markov_chain(5)
+    G = MarkovGraph(Q, π)
+    rng = MersenneTwister(7)
+    ν = rand(rng, G.n) .+ 0.5; ν ./= dot(ν, π)
+    tgt = zeros(G.n)
+    for i in 1:G.n
+        mod(i - 1, 5) < 2 && (tgt[i] = 1.0 + rand(rng))
+    end
+    tgt ./= dot(tgt, π)
+    @test_throws AssertionError log_map(G, ν, tgt)
+
+    W_ref = sqrt(geodesic_socp(G, ν, tgt; N=400).W2)
+    r = log_map_mollified(G, ν, tgt)
+    @test r.approximate
+    @test length(r.Ws) == 3
+    @test issorted(r.Ws)                       # W increases as ε → 0 (less smoothing)
+    @test abs(r.W - W_ref) / W_ref < 1e-2
+    @test abs(r.Ws[end] - W_ref) / W_ref < 5e-3
+    @test r.W2 ≈ r.W^2
+end
+
 @testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
     # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
     # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here

@@ -228,3 +228,49 @@ function analyze_shooting(G::MarkovGraph, target::AbstractVector, refs::Vector{<
     return potential_gram_qp(G, target, potentials;
                              compute_condition=compute_condition, return_system=return_system)
 end
+
+"""
+    log_map_mollified(G::MarkovGraph, ν, target; εs=(1e-2, 1e-3, 1e-4), kwargs...)
+        -> (; W2, W, φ0, m0, fit, εs, Ws, approximate=true)
+
+Module 3.5: `log_map` for endpoints with zero or near-zero entries, where shooting
+cannot be run directly. Both endpoints are mollified toward the uniform density,
+`ρ_ε = (1−ε)ρ + ε·𝟙` (still a probability density), `log_map` is run for each `ε` in
+`εs` (warm-starting each from the previous, coarser `ε`), and the distance is
+extrapolated to `ε → 0` by a least-squares fit `W(ε) ≈ W₀ + a·√ε` (the mollification
+perturbs the endpoints by `O(√ε)` in `𝒲`). Returns the extrapolated `W` and `W2 = W²`,
+plus the potential/momentum from the smallest solved `ε` (at the mollified base point
+`ν_ε`, so only approximately a tangent at `ν`), the fit coefficients `(W₀, a)`, and the
+raw per-`ε` distances. Levels whose shooting fails (very small `ε` makes the
+near-boundary geodesic stiff) are skipped with a warning as long as two remain.
+Results are flagged `approximate=true`; for boundary-supported data `geodesic_socp`
+needs no such fallback and is the reference. Empirically the raw `W` at the smallest
+`ε` is often already as accurate as the extrapolation (the mollification error can
+decay faster than `√ε`), so both are returned. Remaining `kwargs` go to `log_map`.
+"""
+function log_map_mollified(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
+                           εs=(1e-2, 1e-3, 1e-4), kwargs...)
+    @assert length(εs) ≥ 2 "need at least two ε values to extrapolate"
+    εs = sort(collect(Float64, εs); rev=true)
+    mollify(ρ, ε) = (1 - ε) .* ρ .+ ε
+    Ws = Float64[]
+    used = Float64[]
+    r = nothing
+    for ε in εs
+        # Very small ε makes the near-boundary geodesic stiff for single shooting; skip
+        # such levels rather than fail the whole extrapolation, as long as two remain.
+        r_ε = try
+            log_map(G, mollify(ν, ε), mollify(target, ε); φ0_init=(r === nothing ? nothing : r.φ0), kwargs...)
+        catch err
+            err isa ErrorException || rethrow()
+            @warn "log_map_mollified: shooting failed at ε=$ε, skipping this level" exception=err.msg
+            continue
+        end
+        r = r_ε
+        push!(Ws, sqrt(r.W2)); push!(used, ε)
+    end
+    length(used) ≥ 2 || error("log_map_mollified: fewer than two ε levels solved; fall back to geodesic_socp")
+    X = hcat(ones(length(used)), sqrt.(used))
+    W0, a = X \ Ws
+    return (; W2=W0^2, W=W0, φ0=r.φ0, m0=r.m0, fit=(W0, a), εs=used, Ws, approximate=true)
+end
