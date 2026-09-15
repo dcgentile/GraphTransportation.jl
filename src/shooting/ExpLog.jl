@@ -200,3 +200,31 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
     W2 = 2 * hamiltonian(G, ν, φ0)
     return (; φ0, m0, W2, iters, residual=r)
 end
+
+"""
+    analyze_shooting(G::MarkovGraph, target, refs; nsteps=150, tol=1e-9, φ0_inits=nothing,
+                     compute_condition=false, return_system=false) -> λ̂ (or (λ̂, A))
+
+Module 4's `:shooting` backend: like `analyze_socp`, but each reference's potential
+comes from `log_map(G, target, ref)` (the Hamiltonian velocity potential `φ0` at
+`target`) instead of the geodesic SOCP's endpoint dual. The Gram matrix and simplex QP
+are shared (`potential_gram_qp`). Requires strictly positive `target` and `refs`.
+
+`φ0_inits`, if given, is a vector of warm-start potentials, one per reference (spec §3.4).
+
+Note that this checks stationarity in the Hamiltonian flow's (RK4, `nsteps`)
+discretization, which differs from both `barycenter_socp`'s and the Chambolle-Pock
+descent's. A barycenter synthesized by either of those is therefore recovered only to
+`O(h)` in *that* method's time step, not to solver tolerance — see
+`SOCP_ANALYSIS_SPEC.md` §8 for why synthesis and analysis conventions must match.
+"""
+function analyze_shooting(G::MarkovGraph, target::AbstractVector, refs::Vector{<:AbstractVector};
+                          nsteps::Int=150, tol::Float64=1e-9, φ0_inits=nothing,
+                          compute_condition::Bool=false, return_system::Bool=false)
+    potentials = map(eachindex(refs)) do i
+        init = φ0_inits === nothing ? nothing : φ0_inits[i]
+        log_map(G, target, refs[i]; nsteps=nsteps, tol=tol, φ0_init=init).φ0
+    end
+    return potential_gram_qp(G, target, potentials;
+                             compute_condition=compute_condition, return_system=return_system)
+end

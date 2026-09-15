@@ -856,6 +856,31 @@ end
     end
 end
 
+@testset "analyze_shooting (Module 4 :shooting backend, spec §4)" begin
+    Q, π = weighted_hypercube_markov_chain()
+    G = MarkovGraph(Q, π)
+    rng = MersenneTwister(6)
+    refs = [(v = rand(rng, G.n) .+ 0.3; v ./= dot(v, π)) for _ in 1:3]
+    λ_true = [0.5, 0.3, 0.2]
+
+    # Synthesized by the SOCP at fine N: the shooting backend checks stationarity in a
+    # different discretization, so expect O(1/N) agreement, not solver tolerance.
+    ν, _, _ = barycenter_socp(G, refs, λ_true; N=80)
+    λ̂ = vec(analyze_shooting(G, ν, refs))
+    @test λ̂ ≈ λ_true atol=1e-2
+    @test sum(λ̂) ≈ 1.0 atol=1e-6
+
+    # Same point, same reference potentials from the two backends: at fine N the SOCP's
+    # endpoint duals and the flow's φ0 give the same Gram matrix up to the factor (-2)²
+    # and O(h), so the two backends must agree closely with each other.
+    λ_socp = vec(analyze_socp(G, ν, refs; N=80))
+    @test λ̂ ≈ λ_socp atol=1e-2
+
+    # Warm starts are accepted and don't change the answer.
+    inits = [log_map(G, ν, r).φ0 for r in refs]
+    @test vec(analyze_shooting(G, ν, refs; φ0_inits=inits)) ≈ λ̂ atol=1e-8
+end
+
 @testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
     # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
     # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here

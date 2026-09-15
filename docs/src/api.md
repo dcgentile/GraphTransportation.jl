@@ -43,6 +43,7 @@ solve_weighted_laplacian
 momentum_to_potential
 exp_map
 log_map
+analyze_shooting
 ```
 
 ## Entropic barycenters
