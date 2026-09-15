@@ -51,7 +51,7 @@ function hamiltonian_flow(G::MarkovGraph, ρ::AbstractVector, φ::AbstractVector
     θ = [sqrt(ρ[x] * ρ[y]) for (x, y) in G.E]
     ρ̇ = .-graph_divergence(G, θ .* ∇φ)
 
-    φ̇ = zeros(G.n)
+    φ̇ = zeros(promote_type(eltype(ρ), eltype(φ)), G.n)
     for (e, (x, y)) in enumerate(G.E)
         Δφ² = ∇φ[e]^2
         φ̇[x] -= 0.5 * (0.5 * sqrt(ρ[y] / ρ[x])) * Δφ² * G.Q[x, y]
@@ -80,13 +80,14 @@ function integrate_hamiltonian(G::MarkovGraph, ρ0::AbstractVector, φ0::Abstrac
     @assert minimum(ρ0) > floor_val "ρ0 violates the positivity floor (Module 3 requires strictly positive densities)"
 
     n = G.n
-    ρ_path = zeros(n, nsteps + 1)
-    φ_path = zeros(n, nsteps + 1)
+    T_el = promote_type(eltype(ρ0), eltype(φ0))   # generic so ForwardDiff can differentiate through (log_map)
+    ρ_path = zeros(T_el, n, nsteps + 1)
+    φ_path = zeros(T_el, n, nsteps + 1)
     ρ_path[:, 1] = ρ0
     φ_path[:, 1] = φ0
 
     h = T / nsteps
-    ρ, φ = copy(ρ0), copy(φ0)
+    ρ, φ = convert(Vector{T_el}, ρ0), convert(Vector{T_el}, φ0)
     for i in 1:nsteps
         ρ, φ = _advance_interval(G, ρ, φ, h, floor_val, 4)
         ρ_path[:, i+1] = ρ
@@ -121,7 +122,7 @@ function _advance_interval(G::MarkovGraph, ρ, φ, Δt, floor_val, depth)
         _rk4_step(G, ρ, φ, Δt)
     catch err
         err isa DomainError || rethrow()
-        (fill(-Inf, length(ρ)), φ)
+        (fill(convert(eltype(ρ), -Inf), length(ρ)), φ)
     end
     minimum(ρ_next) > floor_val && return ρ_next, φ_next
     depth <= 0 && error("Hamiltonian integration hit the positivity floor after repeated step " *

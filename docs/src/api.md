@@ -31,6 +31,19 @@ barycenter_socp
 analyze_socp
 ```
 
+## Hamiltonian shooting (Module 3)
+
+```@docs
+hamiltonian
+hamiltonian_flow
+integrate_hamiltonian
+ρ_floor
+weighted_laplacian
+solve_weighted_laplacian
+momentum_to_potential
+exp_map
+```
+
 ## Entropic barycenters
 
 ```@docs

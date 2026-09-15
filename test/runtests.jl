@@ -751,6 +751,47 @@ end
     @test_throws ErrorException integrate_hamiltonian(G, ρ0, [0.6, -0.6]; nsteps=400, T=1.0)
 end
 
+@testset "exp_map / weighted Laplacian (Module 3, spec §3.2)" begin
+    rng = MersenneTwister(2)
+    Q, π = weighted_hypercube_markov_chain()
+    G = MarkovGraph(Q, π)
+    ν = rand(rng, G.n) .+ 0.5; ν ./= dot(ν, π)
+    φ = 0.1 .* randn(rng, G.n); φ .-= dot(φ, π)
+
+    @testset "π∘ρ̇ == L_θ(ν) φ" begin
+        ρ̇, _ = hamiltonian_flow(G, ν, φ)
+        @test weighted_laplacian(G, ν) * φ ≈ π .* ρ̇ rtol=1e-12
+        @test weighted_laplacian(G, ν) * ones(G.n) ≈ zeros(G.n) atol=1e-14
+    end
+
+    @testset "momentum_to_potential inverts m = θ(ν)∘∇φ" begin
+        m = metric_tensor(G, ν) .* graph_gradient(G, φ)
+        φ_rec = momentum_to_potential(G, ν, m)
+        @test φ_rec ≈ φ rtol=1e-10
+        @test abs(dot(φ_rec, π)) < 1e-12   # gauge
+    end
+
+    @testset "exp_map agrees with integrate_hamiltonian for both tangent kinds" begin
+        ρ_path, _ = integrate_hamiltonian(G, ν, φ; nsteps=100, T=1.0)
+        m = metric_tensor(G, ν) .* graph_gradient(G, φ)
+        @test exp_map(G, ν, φ; nsteps=100) ≈ ρ_path[:, end] rtol=1e-12
+        @test exp_map(G, ν, φ .+ 3.0; nsteps=100) ≈ ρ_path[:, end] rtol=1e-12   # gauge-invariant
+        @test exp_map(G, ν, m; nsteps=100) ≈ ρ_path[:, end] rtol=1e-8
+        @test exp_map(G, ν, φ; nsteps=100, t=0.5) ≈ ρ_path[:, 51] rtol=1e-10
+        @test dot(exp_map(G, ν, φ; nsteps=100), π) ≈ 1.0 atol=1e-10
+    end
+
+    @testset "kind inference refuses the ambiguous n == |E| case" begin
+        Q3, π3 = triangle_markov_chain()
+        G3 = MarkovGraph(Q3, π3)
+        ν3 = [1.2, 0.9, 0.9]; ν3 ./= dot(ν3, π3)
+        φ3 = [0.05, -0.02, -0.03]
+        @test_throws ArgumentError exp_map(G3, ν3, φ3)
+        @test exp_map(G3, ν3, φ3; kind=:potential) ≈ integrate_hamiltonian(G3, ν3, φ3 .- dot(φ3, π3); nsteps=150)[1][:, end]
+        @test_throws ArgumentError exp_map(G, ν, ones(5))
+    end
+end
+
 @testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
     # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
     # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here
