@@ -87,7 +87,7 @@ Run `MassachusettsBarycenter.jl` first to generate the cached Markov chain.
 
 | Script | Description |
 |--------|-------------|
-| `MassachusettsBarycenter.jl` | Computes a WGD barycenter of four geographically concentrated measures on the MA House graph at two solver tolerances, with coordinate recovery. |
+| `MassachusettsBarycenter.jl` | Computes the barycenter of four geographically concentrated measures on the MA House graph via the joint SOCP (`barycenter_socp`) at two time resolutions, with coordinate recovery via `analyze_socp`. |
 | `MassachusettsGeodesic.jl` | Visualises the discrete transport geodesic between two geographically distant districts (nodes 5 and 145) in five time frames. |
 
 **Barycenter of four reference measures on the MA House graph:**
