@@ -91,6 +91,11 @@ function partial_s(::LogarithmicMean, s, t)
 end
 partial_s(θ::QuadLogMean, s, t) = sum(θ.w[k] * θ.α[k] * s^(θ.α[k] - 1) * t^(1 - θ.α[k]) for k in eachindex(θ.α))
 
+"""
+    partial_t(θ::AdmissibleMean, s, t)
+
+`∂θ/∂t(s, t)`, i.e. `partial_s(θ, t, s)` by the symmetry of admissible means.
+"""
 partial_t(θ::AdmissibleMean, s, t) = partial_s(θ, t, s)
 
 Base.show(io::IO, θ::QuadLogMean) = print(io, "QuadLogMean(", length(θ.α), ")")
