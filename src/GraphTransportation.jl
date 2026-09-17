@@ -30,6 +30,7 @@ using Convex, SCS
 using ForwardDiff, Roots
 using ProgressMeter
 using JuMP, Clarabel
+const MOI = JuMP.MOI
 using Optim
 
 # include general helper functions

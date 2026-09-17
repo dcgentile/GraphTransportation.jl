@@ -42,18 +42,18 @@ function solve_barycentric_coordinates_qp(tangent_vectors, g; compute_condition=
 end
 
 """
-    potential_gram_qp(G, target, potentials; compute_condition=false, return_system=false) -> λ̂ (or (λ̂, A))
+    potential_gram_qp(G, target, potentials; mean=GeometricMean(), compute_condition=false, return_system=false) -> λ̂ (or (λ̂, A))
 
 Gram matrix and simplex QP, shared by the `:socp` and `:shooting` backends: given one potential
 `φ_i` per reference (the geodesic from `target` to `ref_i`, in any sign/scale convention
 common to all `i`), assemble the Gram matrix
-`A_ij = Σ_e κ_e θ(target)_e (∇φ_i)_e (∇φ_j)_e` and solve `min_{λ∈Δ} λᵀAλ` via
+`A_ij = Σ_e κ_e θ(target)_e (∇φ_i)_e (∇φ_j)_e` (with `θ` the given `mean`) and solve `min_{λ∈Δ} λᵀAλ` via
 `solve_barycentric_coordinates_qp`.
 """
 function potential_gram_qp(G::MarkovGraph, target::AbstractVector, potentials;
-                           compute_condition::Bool=false, return_system::Bool=false)
+                           mean=GeometricMean(), compute_condition::Bool=false, return_system::Bool=false)
     tangent_vectors = [graph_gradient(G, φ) for φ in potentials]
-    g = G.κ .* metric_tensor(G, target)
+    g = G.κ .* metric_tensor(G, target, mean)
     return solve_barycentric_coordinates_qp(tangent_vectors, g;
                                              compute_condition=compute_condition, return_system=return_system)
 end

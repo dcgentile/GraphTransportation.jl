@@ -1242,6 +1242,62 @@ end
     end
 end
 
+@testset "SOCP with each admissible mean" begin
+    # Generalized two-node closed form: with ρ(r) = [1−r, 1+r] and π = [½,½],
+    #   W(ρ(s), ρ(t)) = (1/√2) ∫_s^t θ(1−r, 1+r)^(−1/2) dr
+    # (the geometric case is the (1−r²)^(−1/4) integrand used to gate Module 1). This
+    # pins each mean's conic form, including its constants, independently of the SOCP.
+    G2 = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5])
+    s, t = -0.6, 0.7
+    ρA = [1 - s, 1 + s]; ρB = [1 - t, 1 + t]
+    W_ref(θ) = quadgk(r -> θ(1 - r, 1 + r)^(-1/2), s, t)[1] / sqrt(2)
+
+    @testset "two-node closed form: $(θ)" for θ in (GeometricMean(), ArithmeticMean(), HarmonicMean(), QuadLogMean(8))
+        C = W_ref(θ)
+        prev = Inf
+        for N in (10, 40, 160)
+            sol = geodesic_socp(G2, ρA, ρB; N=N, mean=θ)
+            @test sol.status == OPTIMAL
+            err = abs(sqrt(sol.W2) - C)
+            @test err < 2.0 / N
+            @test err < prev + 1e-6
+            prev = err
+        end
+    end
+    @test ArithmeticMean()(1 - 0.3, 1 + 0.3) == 1.0   # constant mobility on two nodes ⇒ W = (t−s)/√2
+    @test sqrt(geodesic_socp(G2, ρA, ρB; N=5, mean=ArithmeticMean()).W2) ≈ (t - s) / sqrt(2) atol=1e-6
+    @test_throws ArgumentError geodesic_socp(G2, ρA, ρB; N=5, mean=LogarithmicMean())
+
+    Q, π = triangle_markov_chain()
+    G = MarkovGraph(Q, π)
+    a = [2.0, 0.5, 0.5]; b = [0.5, 0.5, 2.0]
+    @testset "distance ordering harmonic ≥ geometric ≥ logarithmic ≥ arithmetic" begin
+        W2 = Dict(name => geodesic_socp(G, a, b; N=20, mean=θ).W2
+                  for (name, θ) in (("H", HarmonicMean()), ("G", GeometricMean()), ("L", QuadLogMean(8)), ("A", ArithmeticMean())))
+        @test W2["H"] > W2["G"] > W2["L"] > W2["A"]
+        # K=8 vs K=12 quadrature agree to solver tolerance
+        @test geodesic_socp(G, a, b; N=20, mean=QuadLogMean(12)).W2 ≈ W2["L"] rtol=1e-6
+    end
+
+    @testset "barycenter + analysis round trip per mean" begin
+        refs = [[2.0, 0.5, 0.5], [0.5, 2.0, 0.5], [0.5, 0.5, 2.0]]
+        λ = [0.5, 0.3, 0.2]
+        for θ in (ArithmeticMean(), HarmonicMean(), QuadLogMean(8))
+            ν, J, geos = barycenter_socp(G, refs, λ; N=6, mean=θ)
+            @test abs(dot(ν, π) - 1) < 1e-8 && minimum(ν) ≥ -1e-8
+            @test J ≈ sum(λ[i] * geodesic_socp(G, refs[i], ν; N=6, mean=θ).W2 for i in 1:3) rtol=1e-4
+            λ̂ = vec(analyze_socp(G, ν, refs; N=6, mean=θ))
+            @test λ̂ ≈ λ atol=2e-3
+            # Σλᵢφ1ᵢ = const (KKT stationarity) holds for any mean
+            stationarity = sum(λ[i] .* geos[i].φ1 for i in 1:3)
+            @test maximum(abs, graph_gradient(G, stationarity)) < 1e-5 * maximum(abs, graph_gradient(G, geos[1].φ1))
+        end
+        # analysing with the wrong mean is a convention mismatch, not exact
+        ν_h, _, _ = barycenter_socp(G, refs, λ; N=6, mean=HarmonicMean())
+        @test norm(vec(analyze_socp(G, ν_h, refs; N=6, mean=ArithmeticMean())) .- λ) > 1e-3
+    end
+end
+
 @testset "project_IJeq" begin
     ρ      = [1/3  2/3  1;  1/3  1/6  0;  1/3  1/6  0]
     q      = [1/2  3/4  1;  1/2  1/4  0;  0    0    0]
