@@ -4,7 +4,7 @@
 # defined and tested but are not exported.
 
 const GEODESIC_METHODS   = (:socp, :shooting, :chambolle_pock, :sinkhorn)
-const BARYCENTER_METHODS = (:socp, :chambolle_pock, :sinkhorn)
+const BARYCENTER_METHODS = (:socp, :shooting, :chambolle_pock, :sinkhorn)
 const ANALYSIS_METHODS   = (:socp, :shooting, :chambolle_pock, :sinkhorn)
 
 _check_method(method, allowed, what) =
@@ -118,6 +118,17 @@ densities on `G`) with weights `λ`, i.e. the minimizer of `J(ν) = Σᵢ λᵢ 
 - `:socp` (default): one joint second-order-cone program (`barycenter_socp`), solved to
   its global optimum. `info = (; geodesics)` holds one `GeodesicSolution` per reference
   with `λᵢ > 0`. Keywords: `N`, `optimizer`, `silent`.
+- `:shooting`: intrinsic (Riemannian) gradient descent with exact-in-time geodesics:
+  each iteration log-maps `ν` to every reference (`log_map`, warm-started from the
+  previous iteration), forms the descent direction `Σᵢ λᵢ φ0ᵢ` as a potential, and moves
+  along the geodesic with `exp_map`. Requires strictly positive references and works with
+  every `AdmissibleMean`, including the exact `LogarithmicMean`, which the SOCP cannot
+  represent. `info = (; iters, J_hist, grad_hist, h)`: the objective and the Riemannian
+  gradient norm per iteration and the final step size. Keywords: `h` (step, default 1,
+  halved on a positivity-floor hit or an objective increase), `maxiters` (200), `tol`
+  (gradient-norm stopping threshold, 1e-7), `nsteps` (integrator steps, 150), `init`
+  (starting density, default the λ-weighted average of the references), `verbose`.
+  First-order, so it converges linearly; the SOCP remains the certificate.
 - `:chambolle_pock`: the paper's intrinsic gradient descent with Chambolle-Pock
   geodesics (the `barycenter(M, weights, Q)` method). `info = (; norm_diffs, variances)`
   are the descent's per-iteration statistics. Keywords: `h`, `maxiters`, `tol`,
@@ -144,6 +155,8 @@ function barycenter(G::MarkovGraph, refs::Vector{<:AbstractVector}, λ::Abstract
         return ν, J, (; geodesics)
     elseif method == :sinkhorn
         return _barycenter_sinkhorn(G, refs, λ; kwargs...)
+    elseif method == :shooting
+        return _barycenter_shooting(G, refs, λ; kwargs...)
     end
     _require_geometric(G, "barycenter")
     kw = Dict{Symbol,Any}(kwargs)
@@ -218,4 +231,47 @@ function _barycenter_sinkhorn(G::MarkovGraph, refs, λ; cost=nothing, epsilon=no
     J = sum(λ[i] * dot(cost, P) for (i, P) in zip(active, plans))
     marginal_errors = [norm(vec(sum(P, dims=2)) .- μ[:, i], 1) for (i, P) in zip(active, plans)]
     return p ./ G.π, J, (; cost, epsilon, iters, marginal_errors)
+end
+
+function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters::Int=200, tol::Float64=1e-7,
+                              nsteps::Int=150, init=nothing, verbose::Bool=false)
+    active = findall(>(0), λ)
+    ν = init === nothing ? sum(λ[i] .* refs[i] for i in active) : copy(init)
+    ν = ν ./ dot(ν, G.π)
+    φ_prev = Dict{Int,Any}(i => nothing for i in active)
+    J_hist = Float64[]; grad_hist = Float64[]
+    iters = 0
+    J = NaN
+    for k in 1:maxiters
+        rs = Dict(i => log_map(G, ν, refs[i]; nsteps=nsteps, φ0_init=φ_prev[i]) for i in active)
+        for i in active; φ_prev[i] = rs[i].φ0; end
+        J = sum(λ[i] * rs[i].W2 for i in active)
+        g = sum(λ[i] .* rs[i].φ0 for i in active)          # Riemannian descent direction as a potential
+        gnorm = sqrt(2 * hamiltonian(G, ν, g))              # its metric norm at ν
+        push!(J_hist, J); push!(grad_hist, gnorm)
+        verbose && @info "barycenter(:shooting)" iter=k J=J gradnorm=gnorm h=h
+        gnorm < tol && break
+        # step along the geodesic; halve h on a floor hit or if the objective goes up
+        ν_new = nothing
+        for _ in 1:20
+            candidate = try
+                exp_map(G, ν, h .* g; nsteps=nsteps)
+            catch err
+                err isa PositivityFloorError || rethrow()
+                nothing
+            end
+            if candidate !== nothing && minimum(candidate) > 0
+                J_new = sum(λ[i] * log_map(G, candidate, refs[i]; nsteps=nsteps, φ0_init=φ_prev[i]).W2 for i in active)
+                if J_new ≤ J + 1e-12
+                    ν_new = candidate; break
+                end
+            end
+            h /= 2
+        end
+        ν_new === nothing && error("barycenter(:shooting): no admissible step found at iteration $k (h=$h); the barycenter may touch the boundary — use method=:socp")
+        ν = ν_new
+        iters = k
+    end
+    iters == maxiters && grad_hist[end] ≥ tol && @warn "barycenter(:shooting) reached maxiters=$maxiters with gradient norm $(grad_hist[end]) > tol=$tol"
+    return ν, J, (; iters, J_hist, grad_hist, h)
 end
