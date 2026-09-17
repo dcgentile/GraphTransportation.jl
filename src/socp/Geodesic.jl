@@ -144,7 +144,26 @@ function _endpoint_potentials(G::MarkovGraph, blk; weight::Float64=1.0)
 end
 
 """
-    geodesic_socp(G::MarkovGraph, ρA, ρB; N=10, optimizer=Clarabel.Optimizer, silent=true) -> GeodesicSolution
+    _check_solved(model, what)
+
+Throw unless the conic solve reached `OPTIMAL` or `ALMOST_OPTIMAL`. Clarabel can stop
+with `ITERATION_LIMIT` or `SLOW_PROGRESS` on large or ill-conditioned instances (seen with
+the quadrature-log mean's power cones at N=10 on a 49-node graph) and the iterate it
+leaves behind is not a solution: it need not even have unit mass. Returning it silently
+produced a barycenter with total mass 0.05. Callers who want the partial iterate can pass
+`check=false`.
+"""
+function _check_solved(model, what)
+    st = termination_status(model)
+    st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) && return st
+    throw(ErrorException("$what: solver stopped with status $st (not OPTIMAL); the iterate is not a " *
+                         "solution. Try a smaller N (or fewer quadrature nodes for QuadLogMean), " *
+                         "raise the solver's iteration limit via `optimizer`, or pass check=false " *
+                         "to get the partial iterate anyway."))
+end
+
+"""
+    geodesic_socp(G::MarkovGraph, ρA, ρB; N=10, optimizer=Clarabel.Optimizer, silent=true, check=true) -> GeodesicSolution
 
 Compute the discrete transport geodesic between densities `ρA` and `ρB` on `G` as a
 single second-order-cone program, rather than via the
@@ -159,10 +178,12 @@ for the conic representations and `AdmissibleMean` for the theory.
 
 `N` is the number of time-discretization intervals (`h = 1/N`); the returned `ρ` has
 `N+1` columns and `m` has `N` columns. `optimizer` is any solver JuMP can dispatch to
-that supports rotated second-order cone constraints (Clarabel by default).
+that supports rotated second-order cone constraints (Clarabel by default). With `check=true`
+(default) a solve that does not reach `OPTIMAL`/`ALMOST_OPTIMAL` throws rather than
+returning the solver's last iterate (see `_check_solved`).
 """
 function geodesic_socp(G::MarkovGraph, ρA::AbstractVector, ρB::AbstractVector;
-                        N::Int=10, optimizer=Clarabel.Optimizer, silent::Bool=true)
+                        N::Int=10, optimizer=Clarabel.Optimizer, silent::Bool=true, check::Bool=true)
     h = 1.0 / N
 
     model = Model(optimizer)
@@ -172,6 +193,7 @@ function geodesic_socp(G::MarkovGraph, ρA::AbstractVector, ρB::AbstractVector;
     @objective(model, Min, h * sum(G.κ[e] * blk.w[e, t] for t in 1:N, e in 1:length(G.E)))
 
     optimize!(model)
+    check && _check_solved(model, "geodesic_socp")
 
     φ0, φ1 = _endpoint_potentials(G, blk)
     return GeodesicSolution(
