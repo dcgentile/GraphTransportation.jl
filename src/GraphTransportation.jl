@@ -32,43 +32,44 @@ using ProgressMeter
 using JuMP, Clarabel
 
 # include general helper functions
-include("GraphCalculus.jl")
-include("MarkovChains.jl")
-include("CommonGraphs.jl")
+# --- core: graph calculus, Markov chains, graph constructors, the compact MarkovGraph
+#     representation, and the analysis QP shared by all three methods
+include("core/GraphCalculus.jl")
+include("core/MarkovChains.jl")
+include("core/CommonGraphs.jl")
+include("core/MarkovGraph.jl")
+include("core/Analysis.jl")
 
-# include SOCP formulation primitives
-include("socp/MarkovGraph.jl")
+# --- Chambolle-Pock: the paper's reference implementation (Galerkin-discretised
+#     primal-dual geodesics, gradient-descent barycenters, momentum-based analysis)
+include("chambolle_pock/ProximalAvgIndicator.jl")
+include("chambolle_pock/ProximalAction.jl")
+include("chambolle_pock/ProximalSignIndicator.jl")
+include("chambolle_pock/ContinuityEnforcer.jl")
+include("chambolle_pock/ProximalEqualityIndicator.jl")
+include("chambolle_pock/KProjection.jl")
+include("chambolle_pock/ErbarVector.jl")
+include("chambolle_pock/Chambolle.jl")
+include("chambolle_pock/Geodesic.jl")
+include("chambolle_pock/Barycenter.jl")
+
+# --- SOCP: geodesics and barycenters as second-order-cone programs; potential-based analysis
 include("socp/Geodesic.jl")
 include("socp/Barycenter.jl")
 include("socp/Analysis.jl")
 
-# include Hamiltonian shooting primitives (exp/log maps)
+# --- Hamiltonian shooting: exp/log maps and the :shooting analysis backend
 include("shooting/Hamiltonian.jl")
 include("shooting/ExpLog.jl")
 
-# include components of Chambolle-Pock related functions
-include("galerkin/ProximalAvgIndicator.jl")
-include("galerkin/ProximalAction.jl")
-include("galerkin/ProximalSignIndicator.jl")
-include("galerkin/ContinuityEnforcer.jl")
-include("galerkin/ProximalEqualityIndicator.jl")
-include("galerkin/KProjection.jl")
-
-# include the abstraction for the vector space defined in Erbar et al 2020
-include("ErbarVector.jl")
-
-# include the Chambolle-Pock routine
-include("galerkin/Chambolle.jl")
-
-# include functionality for computing geodesics
-include("EarthMover.jl")
-
-# include functionality for barycenter synthesis
-include("Barycenters.jl")
-include("Sinkhorn.jl")
+# --- Sinkhorn: entropic barycenters and simplex-regression analysis
+include("sinkhorn/Sinkhorn.jl")
 
 # core API
+# Chambolle-Pock (reference implementation)
 export discrete_transport, transport_cost, action, barycenter, analysis
+
+# Sinkhorn
 export sinkhorn_barycenter, simplex_regression
 
 # Markov chain constructors

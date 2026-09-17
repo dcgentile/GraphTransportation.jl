@@ -5,7 +5,7 @@ using SparseArrays
 using LinearAlgebra
 using JLD2, DelimitedFiles
 using GraphTransportation
-include("CommonGraphs.jl")
+include("../core/CommonGraphs.jl")
 
 
 function cube_analysis(n;N=32,tol=1e-9, σ=0.5, τ=0.5)

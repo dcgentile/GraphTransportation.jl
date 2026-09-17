@@ -1,7 +1,7 @@
 using CairoMakie
 using LinearAlgebra, SparseArrays, Statistics
 using GraphTransportation
-include("../CommonGraphs.jl")
+include("../core/CommonGraphs.jl")
 
 function experiment(;grid_size=3,
                     h=0.5, maxiters=1000, tol=1e-9,

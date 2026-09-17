@@ -6,7 +6,7 @@
 GraphTransportation
 ```
 
-## Geodesics
+## Chambolle-Pock (reference implementation): geodesics
 
 ```@docs
 discrete_transport
@@ -14,7 +14,7 @@ transport_cost
 action
 ```
 
-## Barycenters
+## Chambolle-Pock (reference implementation): barycenters and analysis
 
 ```@docs
 barycenter
@@ -48,7 +48,7 @@ log_map_mollified
 analyze_shooting
 ```
 
-## Entropic barycenters
+## Sinkhorn: entropic barycenters
 
 ```@docs
 sinkhorn_barycenter
@@ -97,7 +97,7 @@ logmean_partial_s
 logmean_partial_t
 ```
 
-## Data structures
+## Chambolle-Pock data structures
 
 ```@docs
 ErbarVector
