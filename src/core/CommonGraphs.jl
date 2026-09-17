@@ -224,7 +224,7 @@ Reads district geometries from the bundled shapefile at
 function ma_house_markov_chain()
     GI = LibGEOS.GeoInterface
 
-    shp_file = joinpath(@__DIR__, "experiments", "HOUSE2021", "HOUSE2021_POLY.shp")
+    shp_file = joinpath(@__DIR__, "..", "experiments", "HOUSE2021", "HOUSE2021_POLY.shp")
     table = Shapefile.Table(shp_file)
     geoms = Shapefile.shapes(table)
     N = length(geoms)

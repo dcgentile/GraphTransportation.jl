@@ -33,7 +33,7 @@ using LaTeXStrings
 # Include Sinkhorn.jl directly so that simplex_regression can see Optim in the
 # calling scope.
 include("./ExperimentUtils.jl")
-include("../src/Sinkhorn.jl")
+include("../src/sinkhorn/Sinkhorn.jl")
 
 # Helper functions needed by form_diffusion_map_from_graph in ExperimentUtils.jl.
 function adj_mat_to_markov_chain(adj_mat)

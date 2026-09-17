@@ -25,7 +25,7 @@ using JLD2
 # Include Sinkhorn.jl directly so that simplex_regression can see Optim in the
 # calling scope. (GraphTransportation exports these names too; the include
 # shadows them with identical definitions that have Optim available.)
-include("../src/Sinkhorn.jl")
+include("../src/sinkhorn/Sinkhorn.jl")
 
 # Helper functions needed by form_diffusion_map_from_graph in ExperimentUtils.jl.
 # These are simple random-walk utilities not exported from GraphTransportation;

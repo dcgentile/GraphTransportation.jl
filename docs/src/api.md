@@ -6,36 +6,62 @@
 GraphTransportation
 ```
 
-## Geodesics
+## Unified API
+
+One function per task; `method=:socp` (default), `:shooting` or `:chambolle_pock`
+selects the algorithm. All of `geodesic`, `transport_cost`, `barycenter` and `analysis`
+also accept `method=:sinkhorn` (entropic transport for a ground cost, a different object;
+`cost` and `epsilon` are required; see each docstring). Keywords are
+forwarded to the chosen implementation.
 
 ```@docs
-discrete_transport
+geodesic
 transport_cost
+barycenter
+analysis
+GeodesicSolution
+MarkovGraph
+```
+
+## SOCP implementation (internal)
+
+```@docs
+GraphTransportation.geodesic_socp
+GraphTransportation.barycenter_socp
+GraphTransportation.analyze_socp
+```
+
+## Hamiltonian shooting (exp/log maps)
+
+```@docs
+hamiltonian
+hamiltonian_flow
+integrate_hamiltonian
+ρ_floor
+PositivityFloorError
+weighted_laplacian
+solve_weighted_laplacian
+momentum_to_potential
+exp_map
+log_map
+log_map_mollified
+GraphTransportation.analyze_shooting
+```
+
+## Chambolle-Pock implementation (reference, internal)
+
+```@docs
+GraphTransportation.discrete_transport
 action
 ```
 
-## Barycenters
-
-```@docs
-barycenter
-analysis
-```
-
-## SOCP geodesics and barycenters
-
-```@docs
-MarkovGraph
-geodesic_socp
-GeodesicSolution
-barycenter_socp
-analyze_socp
-```
-
-## Entropic barycenters
+## Sinkhorn: entropic barycenters
 
 ```@docs
 sinkhorn_barycenter
 simplex_regression
+ground_cost
+graph_diameter
 ```
 
 ## Graph constructors
@@ -74,13 +100,21 @@ finite_difference_operator
 ## Admissible means
 
 ```@docs
+AdmissibleMean
+GeometricMean
+ArithmeticMean
+HarmonicMean
+LogarithmicMean
+QuadLogMean
+partial_s
+partial_t
 geomean
 logmean
 logmean_partial_s
 logmean_partial_t
 ```
 
-## Data structures
+## Chambolle-Pock data structures
 
 ```@docs
 ErbarVector

@@ -113,16 +113,7 @@ function barycenter(M, weights, Q;
         # step size reductions cannot trigger false convergence.
         grad_norm = norm(div_term .* root_steady_state)
 
-        ν_next = ν .- h * div_term
-
-        n_halve = 0
-        while abs(dot(ν_next, steady_state) - 1) > 1e-8 || minimum(ν_next) < 0
-            n_halve += 1
-            n_halve > 3 && error("Step size reduction failed 3 times at iteration $k: " *
-                                 "ν_next is not a valid probability measure " *
-                                 "(⟨ν_next, u⟩ = $(dot(ν_next, steady_state)))")
-            ν_next = ν .- (h / 2^n_halve) * div_term
-        end
+        ν_next = accept_descent_step(ν, div_term, h, steady_state; iteration=k)
 
         norm_diff = norm((ν_next - ν) .* root_steady_state)
         norm_diffs[k] = norm_diff
@@ -162,6 +153,33 @@ end
 
 
 """
+    accept_descent_step(ν, div_term, h, steady_state; max_halve=8, tol=1e-8, iteration=0) -> ν_next
+
+Take the WGD step `ν - h * div_term`, halving `h` (up to `max_halve` times) until the
+result is a valid probability density: `|⟨ν_next, π⟩ - 1| ≤ tol` and `min(ν_next) ≥ -tol`.
+
+Nonnegativity is checked with the same `tol` as the mass constraint rather than
+exactly: a component that is negative only by solver/roundoff noise (say `-1e-11`, from
+the Chambolle-Pock momenta feeding `div_term`) is not a real overshoot, and no amount
+of step halving can remove noise of that size - it just exhausts the retries and errors
+spuriously. A genuine overshoot (density driven through zero at some node) is still
+caught and halved. Any residual sub-`tol` negative entries are clamped to zero so the
+next iteration's `metric_tensor`/geodesic solves never see a negative density.
+"""
+function accept_descent_step(ν, div_term, h, steady_state; max_halve=8, tol=1e-8, iteration=0)
+    ν_next = ν .- h * div_term
+    n_halve = 0
+    while abs(dot(ν_next, steady_state) - 1) > tol || minimum(ν_next) < -tol
+        n_halve += 1
+        n_halve > max_halve && error("Step size reduction failed $max_halve times at iteration $iteration: " *
+                                     "ν_next is not a valid probability measure " *
+                                     "(⟨ν_next, u⟩ = $(dot(ν_next, steady_state)), min = $(minimum(ν_next)))")
+        ν_next = ν .- (h / 2^n_halve) * div_term
+    end
+    return max.(ν_next, 0.0)
+end
+
+"""
     analysis(ν, M, Q; N=100, tol=1e-10, compute_condition=false,
              return_system=false) -> weights
 
@@ -194,44 +212,4 @@ function analysis(ν, M, Q; N=100, tol=1e-10, compute_condition=false, return_sy
 
     return solve_barycentric_coordinates_qp(tangent_vectors, g;
                                              compute_condition=compute_condition, return_system=return_system)
-end
-
-"""
-    solve_barycentric_coordinates_qp(tangent_vectors, g; compute_condition=false, return_system=false)
-
-Shared Gram-matrix-assembly and simplex-QP-solve core of `analysis`: given the initial
-tangent vectors (dense `V × V` antisymmetric matrices, one per reference) of the
-geodesics from a target measure to each reference, and the target's metric tensor `g`,
-assembles `A[i,j] = Σ_{x,y} tangent_vectors[i][x,y] * tangent_vectors[j][x,y] * g[x,y]`
-and solves `min_{w≥0, Σw=1} w'Aw` via Convex.jl/SCS. Factored out of `analysis` so
-`analyze_socp` (which sources tangent vectors from `geodesic_socp` instead of
-`discrete_transport`) can reuse the exact same, already-validated Gram/QP formulation
-rather than re-deriving it.
-"""
-function solve_barycentric_coordinates_qp(tangent_vectors, g; compute_condition=false, return_system=false)
-    p = length(tangent_vectors)
-    A = zeros(p, p)
-    for i=1:p, j=i:p
-        A[i,j] = A[j,i] = sum(tangent_vectors[i] .* tangent_vectors[j] .* g)
-    end
-
-    if compute_condition
-        e = abs.(eigvals(A))
-        κ = maximum(e) / minimum(e)
-        println("Estimated condition number of analysis matrix: $(κ)")
-    end
-    # solve the QP
-    n = size(A, 1)
-    x = Variable(n)
-    problem = minimize(quadform(x, A))
-    # Simplex constraints
-    problem.constraints = vcat(problem.constraints, [x >= 0])
-    problem.constraints = vcat(problem.constraints, [sum(x) == 1])
-
-    Convex.solve!(problem, SCS.Optimizer)
-    if return_system
-        return (x.value, A)
-    end
-
-    x.value  # optimal solution
 end

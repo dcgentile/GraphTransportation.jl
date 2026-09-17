@@ -3,7 +3,7 @@ using LinearAlgebra, SparseArrays, Statistics
 using ProgressMeter 
 using JLD2 
 using GraphTransportation
-include("../CommonGraphs.jl")
+include("../core/CommonGraphs.jl")
 
 function generate_barycenters(grid_size, n_steps;
                               h=0.5, maxiters=1000, tol=1e-9,
@@ -21,7 +21,7 @@ function generate_barycenters(grid_size, n_steps;
     ρ1 = random_measure()
     M = cat(ρ0, ρ1, dims=2)
 
-    geovec = discrete_transport(Q, ρ0, ρ1, N=100)
+    geovec = GraphTransportation.discrete_transport(Q, ρ0, ρ1, N=100)
     coords = [[1 - i/10; i/10] for i=1:9]
     barys = [barycenter(M, coord, Q,
                         maxiters=maxiters, tol=tol,

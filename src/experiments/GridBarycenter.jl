@@ -1,7 +1,7 @@
 using LinearAlgebra, SparseArrays, Statistics
 using JLD2, DelimitedFiles
 using GraphTransportation
-include("../CommonGraphs.jl")
+include("../core/CommonGraphs.jl")
 
 function grid_barycenter(;N_steps=16, tol=1e-8)
     Qusa, sstate = grid_markov_chain(7)

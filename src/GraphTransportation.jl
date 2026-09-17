@@ -30,42 +30,59 @@ using Convex, SCS
 using ForwardDiff, Roots
 using ProgressMeter
 using JuMP, Clarabel
+# MathOptInterface is the modelling layer under JuMP. JuMP exports the common cones by
+# name (SecondOrderCone, RotatedSecondOrderCone) but the power cone only as
+# MOI.PowerCone(α); this alias lets src/socp/Geodesic.jl write MOI.PowerCone.
+const MOI = JuMP.MOI
+using Optim
 
 # include general helper functions
-include("GraphCalculus.jl")
-include("MarkovChains.jl")
-include("CommonGraphs.jl")
+# --- core: graph calculus, Markov chains, graph constructors, the compact MarkovGraph
+#     representation, and the analysis QP shared by all three methods
+include("core/GraphCalculus.jl")
+include("core/Means.jl")
+include("core/MarkovChains.jl")
+include("core/CommonGraphs.jl")
+include("core/MarkovGraph.jl")
+include("core/Analysis.jl")
 
-# include SOCP formulation primitives (Module 0, spec.txt)
-include("socp/MarkovGraph.jl")
+# --- Chambolle-Pock: the paper's reference implementation (Galerkin-discretised
+#     primal-dual geodesics, gradient-descent barycenters, momentum-based analysis)
+include("chambolle_pock/ProximalAvgIndicator.jl")
+include("chambolle_pock/ProximalAction.jl")
+include("chambolle_pock/ProximalSignIndicator.jl")
+include("chambolle_pock/ContinuityEnforcer.jl")
+include("chambolle_pock/ProximalEqualityIndicator.jl")
+include("chambolle_pock/KProjection.jl")
+include("chambolle_pock/ErbarVector.jl")
+include("chambolle_pock/Chambolle.jl")
+include("chambolle_pock/Geodesic.jl")
+include("chambolle_pock/Barycenter.jl")
+
+# --- SOCP: geodesics and barycenters as second-order-cone programs; potential-based analysis
 include("socp/Geodesic.jl")
 include("socp/Barycenter.jl")
 include("socp/Analysis.jl")
 
-# include components of Chambolle-Pock related functions
-include("galerkin/ProximalAvgIndicator.jl")
-include("galerkin/ProximalAction.jl")
-include("galerkin/ProximalSignIndicator.jl")
-include("galerkin/ContinuityEnforcer.jl")
-include("galerkin/ProximalEqualityIndicator.jl")
-include("galerkin/KProjection.jl")
+# --- Hamiltonian shooting: exp/log maps and the :shooting analysis backend
+include("shooting/Hamiltonian.jl")
+include("shooting/ExpLog.jl")
 
-# include the abstraction for the vector space defined in Erbar et al 2020
-include("ErbarVector.jl")
+# --- Sinkhorn: entropic barycenters and simplex-regression analysis
+include("sinkhorn/Sinkhorn.jl")
 
-# include the Chambolle-Pock routine
-include("galerkin/Chambolle.jl")
-
-# include functionality for computing geodesics
-include("EarthMover.jl")
-
-# include functionality for barycenter synthesis
-include("Barycenters.jl")
-include("Sinkhorn.jl")
+# --- unified entry points (geodesic / transport_cost / barycenter / analysis; method=)
+include("API.jl")
 
 # core API
-export discrete_transport, transport_cost, action, barycenter, analysis
-export sinkhorn_barycenter, simplex_regression
+# unified API: one function per task, `method=:socp | :shooting | :chambolle_pock`
+export geodesic, transport_cost, barycenter, analysis, GeodesicSolution
+
+# Chambolle-Pock (reference implementation); discrete_transport is not exported
+export action
+
+# Sinkhorn (entropic, ground-cost based; also barycenter(...; method=:sinkhorn))
+export sinkhorn_barycenter, simplex_regression, ground_cost, graph_diameter
 
 # Markov chain constructors
 export markov_chain_from_edge_list, markov_chain_from_adjacency_matrix
@@ -82,14 +99,17 @@ export grid_markov_chain, ma_house_markov_chain
 export graph_gradient, add_graph_gradient!, graph_divergence, graph_divergence!
 export laplacian_from_transition, metric_tensor, avg_operator, finite_difference_operator
 
-# SOCP formulation primitives (Module 0-2, 4:socp, spec.txt)
-export MarkovGraph
-export geodesic_socp, GeodesicSolution
-export barycenter_socp
-export analyze_socp
+# SOCP formulation: graph primitives, geodesics, barycenters, analysis
+export MarkovGraph   # geodesic_socp / barycenter_socp / analyze_socp are internal (use method=:socp)
+
+# Hamiltonian shooting: exp/log maps and the :shooting analysis backend
+export hamiltonian, hamiltonian_flow, integrate_hamiltonian, ρ_floor, PositivityFloorError
+export weighted_laplacian, solve_weighted_laplacian, momentum_to_potential, exp_map, log_map, log_map_mollified   # analyze_shooting is internal (use method=:shooting)
 
 # admissible means
 export geomean, logmean, logmean_partial_s, logmean_partial_t
+export AdmissibleMean, GeometricMean, ArithmeticMean, HarmonicMean, LogarithmicMean, QuadLogMean
+export partial_s, partial_t
 
 # data structures
 export ErbarVector, ErbarCache, ErbarBundle, combine!, assign!
