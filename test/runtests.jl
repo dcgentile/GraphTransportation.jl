@@ -1375,6 +1375,8 @@ end
         ν_h, _, _ = barycenter_socp(Gh, refs, λ; N=40)
         @test vec(analyze_shooting(Gh, ν_h, refs)) ≈ λ atol=2e-2
     end
+end
+
 @testset "SOCP solves that do not reach OPTIMAL throw instead of returning the iterate" begin
     # Clarabel's last iterate after ITERATION_LIMIT / SLOW_PROGRESS is not a solution (a
     # log-mean barycenter on the USA graph came back with total mass 0.05). Force the
