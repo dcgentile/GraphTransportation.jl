@@ -99,23 +99,23 @@ what keeps synthesis and analysis consistent.
 | `QuadLogMean(K)` | Gauss–Legendre approximation of the logarithmic mean | the SOCP's representation of it, `K` power cones per edge and time step; `K=8` is accurate to 1e-10 |
 
 For all `s, t > 0`: harmonic ≤ geometric ≤ logarithmic ≤ arithmetic, so transport is
-cheapest under the arithmetic mean and dearest under the harmonic one. `method=:socp`
-and `method=:shooting` honour every mean (the SOCP needs `QuadLogMean` for the
+cheapest under the arithmetic mean and most expensive under the harmonic one. `method=:socp`
+and `method=:shooting` honor every mean (the SOCP needs `QuadLogMean` for the
 logarithmic one); `method=:chambolle_pock` supports only the geometric mean and errors
 otherwise.
 
 The figure shows the equal-weight barycenter of the same three reference measures on
-the USA graph under each mean, computed by `barycenter(G, refs, λ; method=:shooting)`
-(`src/experiments/MeansComparison.jl`; 12 to 25 descent iterations and about a minute
-per mean). The panels are ordered by the variance `J = Σᵢ λᵢ W²(νᵢ, ν)`, which orders
-exactly as the means do. The barycenters differ modestly, by 0.05 to 0.28 in the
-π-weighted norm, with the arithmetic mean concentrating mass the most and the harmonic
-mean spreading it the most. The joint SOCP reproduces the first three at N=32 in a few
-seconds each, but its quadrature-log program stalls in Clarabel for N ≥ 8 on this
-graph (reported as an error rather than a stale iterate), which is what the shooting
-barycenter is for.
+the USA graph under the geometric, harmonic and logarithmic means, computed by
+`barycenter(G, refs, λ; method=:shooting)` (`src/experiments/MeansComparison.jl`; 12 to
+18 descent iterations and about a minute per mean). The panels are ordered by the
+variance `J = Σᵢ λᵢ W²(νᵢ, ν)`, which orders exactly as the means do. The barycenters
+differ modestly, by 0.05 to 0.14 in the π-weighted norm, with the logarithmic mean
+concentrating mass the most and the harmonic mean spreading it the most. The joint SOCP
+reproduces the geometric and harmonic barycenters at N=32 in a few seconds each, but its
+quadrature-log program stalls in Clarabel for N ≥ 8 on this graph (reported as an error
+rather than a stale iterate), which is what the shooting barycenter is for.
 
-![Barycenters under four admissible means](assets/means_comparison.png)
+![Barycenters under three admissible means](assets/means_comparison.png)
 
 ## API reference
 
