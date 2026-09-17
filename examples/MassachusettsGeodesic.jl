@@ -20,7 +20,7 @@ weight = 10
 # --- Geodesic ---
 N = 10
 println("Computing the geodesic between the measures")
-geovec = discrete_transport(Q, ρ0, ρ1, N=N, progress=true)
+geovec = GraphTransportation.discrete_transport(Q, ρ0, ρ1, N=N, progress=true)
 ρ = geovec.vector.ρ   # (N+1) × n_nodes
 
 # --- Geographic positions from shapefile centroids ---

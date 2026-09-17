@@ -31,7 +31,7 @@ function experiment(;
     println(ρ1)
     M = cat(ρ0, ρ1, dims=2)
     N = n_experiments
-    geovec = discrete_transport(Q, ρ0, ρ1, N=N)
+    geovec = GraphTransportation.discrete_transport(Q, ρ0, ρ1, N=N)
 
     coords = [[1 - i/N; i/N] for i=1:N-1]
 
@@ -86,7 +86,7 @@ function experiment_randomized(;
         ρ0 = random_measure()
         ρ1 = random_measure()
         M = cat(ρ0, ρ1, dims=2)
-        geovec = discrete_transport(Q, ρ0, ρ1, N=N)
+        geovec = GraphTransportation.discrete_transport(Q, ρ0, ρ1, N=N)
         t = rand(1:N)
         coords = [1 - t/N; t/N]
         bary = barycenter(
@@ -230,7 +230,7 @@ function experiment_randomized_debug(;
         ρ1 = random_measure()
         M  = cat(ρ0, ρ1, dims=2)
 
-        geovec = discrete_transport(Q, ρ0, ρ1, N=N)
+        geovec = GraphTransportation.discrete_transport(Q, ρ0, ρ1, N=N)
         t = rand(1:N)
         t_values[i] = t
         coords = [1 - t/N; t/N]

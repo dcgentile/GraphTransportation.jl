@@ -6,29 +6,26 @@
 GraphTransportation
 ```
 
-## Chambolle-Pock (reference implementation): geodesics
+## Unified API
+
+One function per task; `method=:socp` (default), `:shooting` or `:chambolle_pock`
+selects the algorithm. Keywords are forwarded to the chosen implementation.
 
 ```@docs
-discrete_transport
+geodesic
 transport_cost
-action
-```
-
-## Chambolle-Pock (reference implementation): barycenters and analysis
-
-```@docs
 barycenter
 analysis
+GeodesicSolution
+MarkovGraph
 ```
 
-## SOCP geodesics and barycenters
+## SOCP implementation (internal)
 
 ```@docs
-MarkovGraph
-geodesic_socp
-GeodesicSolution
-barycenter_socp
-analyze_socp
+GraphTransportation.geodesic_socp
+GraphTransportation.barycenter_socp
+GraphTransportation.analyze_socp
 ```
 
 ## Hamiltonian shooting (exp/log maps)
@@ -45,7 +42,14 @@ momentum_to_potential
 exp_map
 log_map
 log_map_mollified
-analyze_shooting
+GraphTransportation.analyze_shooting
+```
+
+## Chambolle-Pock implementation (reference, internal)
+
+```@docs
+GraphTransportation.discrete_transport
+action
 ```
 
 ## Sinkhorn: entropic barycenters

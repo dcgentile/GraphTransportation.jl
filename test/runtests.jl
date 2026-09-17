@@ -1,4 +1,5 @@
 using GraphTransportation
+using GraphTransportation: geodesic_socp, barycenter_socp, analyze_socp, analyze_shooting, discrete_transport
 using Test
 using SparseArrays
 using LinearAlgebra
@@ -1005,6 +1006,66 @@ end
     @test_throws ErrorException GraphTransportation.accept_descent_step(ν, d_big, h, π)
     # Mass violation that halving cannot repair (⟨d, π⟩ ≠ 0) still errors.
     @test_throws ErrorException GraphTransportation.accept_descent_step(ν, [1.0, 1.0, 1.0], h, π)
+end
+
+@testset "unified API: geodesic / transport_cost / barycenter / analysis with method=" begin
+    Q, π = grid_markov_chain(4)
+    G = MarkovGraph(Q, π)
+    rng = MersenneTwister(9)
+    ρA = rand(rng, G.n) .+ 0.5; ρA ./= dot(ρA, π)
+    ρB = rand(rng, G.n) .+ 0.5; ρB ./= dot(ρB, π)
+
+    @testset "geodesic: all methods return a GeodesicSolution with consistent W2" begin
+        g_socp = geodesic(G, ρA, ρB; N=40)
+        g_sh   = geodesic(G, ρA, ρB; method=:shooting)
+        g_cp   = geodesic(G, ρA, ρB; method=:chambolle_pock, N=40, tol=1e-11, maxiters=2^18)
+        for g in (g_socp, g_sh, g_cp)
+            @test g isa GeodesicSolution
+            @test size(g.ρ, 1) == G.n && size(g.m, 1) == length(G.E)
+            @test g.ρ[:, 1] ≈ ρA atol=1e-6
+            @test g.ρ[:, end] ≈ ρB atol=1e-6
+            @test g.m0 == g.m[:, 1]
+        end
+        @test g_socp.status == OPTIMAL && g_sh.status == :converged && g_cp.status == :converged
+        @test abs(g_socp.W2 - g_sh.W2) < 2e-2 * g_sh.W2      # O(1/N) at N=40
+        @test abs(g_cp.W2 - g_sh.W2) < 5e-2 * g_sh.W2
+        @test norm(g_socp.m0 .- g_sh.m0) / norm(g_sh.m0) < 0.1
+        # Chambolle-Pock's momentum agrees with the others away from the endpoints, but its
+        # first-interval momentum is a boundary-cell artifact of the Galerkin scheme (~50%
+        # off, not shrinking with N); see the `geodesic` docstring. Compare mid-path.
+        mid = size(g_socp.m, 2) ÷ 2
+        @test norm(g_cp.m[:, mid] .- g_socp.m[:, mid]) / norm(g_socp.m[:, mid]) < 0.05
+        @test_broken norm(g_cp.m0 .- g_sh.m0) / norm(g_sh.m0) < 0.15
+        @test all(isnan, g_cp.φ0) && all(isnan, g_cp.φ1)
+        # shooting's endpoint potentials use the W2-gradient convention of the SOCP duals
+        g_fine = geodesic(G, ρA, ρB; N=160)
+        @test graph_gradient(G, g_sh.φ0) ≈ graph_gradient(G, g_fine.φ0) rtol=0.05
+        @test graph_gradient(G, g_sh.φ1) ≈ graph_gradient(G, g_fine.φ1) rtol=0.05
+        @test transport_cost(G, ρA, ρB; N=40) ≈ sqrt(g_socp.W2)
+        @test transport_cost(G, ρA, ρB; method=:shooting) ≈ sqrt(g_sh.W2)
+        @test_throws ArgumentError geodesic(G, ρA, ρB; method=:sinkhorn)
+    end
+
+    @testset "barycenter and analysis dispatch" begin
+        refs = [ρA, ρB, (v = rand(rng, G.n) .+ 0.5; v ./= dot(v, π))]
+        λ = [0.5, 0.3, 0.2]
+        ν, J, info = barycenter(G, refs, λ; N=10)
+        @test info.geodesics isa Vector{GeodesicSolution} && length(info.geodesics) == 3
+        @test J ≈ sum(λ[i] * geodesic(G, refs[i], ν; N=10).W2 for i in 1:3) rtol=1e-4
+        @test vec(analysis(G, ν, refs; N=10)) ≈ λ atol=1e-3
+        @test vec(analysis(G, ν, refs; method=:shooting)) ≈ λ atol=5e-2
+        @test vec(analysis(G, ν, refs; method=:chambolle_pock, N=10, tol=1e-10)) ≈ λ atol=5e-2
+        λ̂, A = analysis(G, ν, refs; N=10, return_system=true)
+        @test size(A) == (3, 3) && A ≈ A'
+
+        ν_cp, J_cp, info_cp = barycenter(G, refs, λ; method=:chambolle_pock, h=0.1, maxiters=30,
+                                          geodesic_steps=10, geodesic_tol=1e-8, verbose=false)
+        @test haskey(info_cp, :variances) && abs(dot(ν_cp, π) - 1) < 1e-8 && minimum(ν_cp) ≥ 0
+        # optimality certificate, with both objectives evaluated by the same geodesic solver
+        J_at(ν) = sum(λ[i] * geodesic(G, refs[i], ν; N=10).W2 for i in 1:3)
+        @test J_at(ν_cp) ≥ J_at(ν) - 1e-6
+        @test_throws ArgumentError barycenter(G, refs, λ; method=:shooting)
+    end
 end
 
 @testset "project_IJeq" begin

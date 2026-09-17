@@ -21,7 +21,7 @@ function gromov_convergence(N, n, verbose=false, tol=1e-6)
     ν = zeros(N)
     μ[1] = 1 / π[1]
     ν[N] = 1 / π[N]
-    γ = discrete_transport(Q, μ, ν, N=n, verbose=verbose, tol=tol, σ=σ, τ=τ)
+    γ = GraphTransportation.discrete_transport(Q, μ, ν, N=n, verbose=verbose, tol=tol, σ=σ, τ=τ)
     return γ, sqrt(action(γ))
 end
 
