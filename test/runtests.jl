@@ -1377,6 +1377,22 @@ end
     end
 end
 
+@testset "SOCP solves that do not reach OPTIMAL throw instead of returning the iterate" begin
+    # Clarabel's last iterate after ITERATION_LIMIT / SLOW_PROGRESS is not a solution (a
+    # log-mean barycenter on the USA graph came back with total mass 0.05). Force the
+    # limit with max_iter=1 and check both entry points refuse, and that check=false
+    # still hands the iterate back with its status.
+    Q, π = triangle_markov_chain()
+    G = MarkovGraph(Q, π)
+    capped = optimizer_with_attributes(Clarabel.Optimizer, "max_iter" => 1, "verbose" => false)
+    a = [2.0, 0.5, 0.5]; b = [0.5, 0.5, 2.0]
+    @test_throws ErrorException geodesic_socp(G, a, b; N=5, optimizer=capped)
+    @test_throws ErrorException barycenter_socp(G, [a, b], [0.5, 0.5]; N=5, optimizer=capped)
+    sol = geodesic_socp(G, a, b; N=5, optimizer=capped, check=false)
+    @test sol.status != OPTIMAL
+    @test geodesic_socp(G, a, b; N=5).status == OPTIMAL
+end
+
 @testset "project_IJeq" begin
     ρ      = [1/3  2/3  1;  1/3  1/6  0;  1/3  1/6  0]
     q      = [1/2  3/4  1;  1/2  1/4  0;  0    0    0]

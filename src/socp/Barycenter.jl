@@ -1,5 +1,5 @@
 """
-    barycenter_socp(G, refs, λ; N=10, optimizer=Clarabel.Optimizer, silent=true)
+    barycenter_socp(G, refs, λ; N=10, optimizer=Clarabel.Optimizer, silent=true, check=true)
         -> (ν::Vector{Float64}, J::Float64, geodesics::Vector{GeodesicSolution})
 
 Compute the discrete transport barycenter of reference measures `refs` (a vector of
@@ -21,10 +21,10 @@ Returns:
   potential-based analysis (`analyze_socp`) checks.
 
 References with `λ[i] == 0` are dropped entirely rather than solved with a zero
-weight. The mobility is `G.mean`, as in `geodesic_socp`. `λ` must be a probability vector (`λ .>= 0`, `sum(λ) ≈ 1`).
+weight. The mobility is `G.mean`, and `check` behaves, as in `geodesic_socp`. `λ` must be a probability vector (`λ .>= 0`, `sum(λ) ≈ 1`).
 """
 function barycenter_socp(G::MarkovGraph, refs::Vector{<:AbstractVector}, λ::AbstractVector;
-                          N::Int=10, optimizer=Clarabel.Optimizer, silent::Bool=true)
+                          N::Int=10, optimizer=Clarabel.Optimizer, silent::Bool=true, check::Bool=true)
     @assert length(refs) == length(λ)
     @assert all(λ .>= 0)
     @assert sum(λ) ≈ 1.0 atol=1e-8
@@ -48,6 +48,7 @@ function barycenter_socp(G::MarkovGraph, refs::Vector{<:AbstractVector}, λ::Abs
         h * sum(λ[b.ref_index] * G.κ[e] * b.w[e, t] for b in blocks for t in 1:N, e in 1:nE))
 
     optimize!(model)
+    check && _check_solved(model, "barycenter_socp")
 
     status = termination_status(model)
     st = solve_time(model)
