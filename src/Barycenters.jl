@@ -113,16 +113,7 @@ function barycenter(M, weights, Q;
         # step size reductions cannot trigger false convergence.
         grad_norm = norm(div_term .* root_steady_state)
 
-        ν_next = ν .- h * div_term
-
-        n_halve = 0
-        while abs(dot(ν_next, steady_state) - 1) > 1e-8 || minimum(ν_next) < 0
-            n_halve += 1
-            n_halve > 3 && error("Step size reduction failed 3 times at iteration $k: " *
-                                 "ν_next is not a valid probability measure " *
-                                 "(⟨ν_next, u⟩ = $(dot(ν_next, steady_state)))")
-            ν_next = ν .- (h / 2^n_halve) * div_term
-        end
+        ν_next = accept_descent_step(ν, div_term, h, steady_state; iteration=k)
 
         norm_diff = norm((ν_next - ν) .* root_steady_state)
         norm_diffs[k] = norm_diff
@@ -160,6 +151,33 @@ function barycenter(M, weights, Q;
     return return_stats ? (ν_next, norm_diffs, variances) : ν_next
 end
 
+
+"""
+    accept_descent_step(ν, div_term, h, steady_state; max_halve=8, tol=1e-8, iteration=0) -> ν_next
+
+Take the WGD step `ν - h * div_term`, halving `h` (up to `max_halve` times) until the
+result is a valid probability density: `|⟨ν_next, π⟩ - 1| ≤ tol` and `min(ν_next) ≥ -tol`.
+
+Nonnegativity is checked with the same `tol` as the mass constraint rather than
+exactly: a component that is negative only by solver/roundoff noise (say `-1e-11`, from
+the Chambolle-Pock momenta feeding `div_term`) is not a real overshoot, and no amount
+of step halving can remove noise of that size - it just exhausts the retries and errors
+spuriously. A genuine overshoot (density driven through zero at some node) is still
+caught and halved. Any residual sub-`tol` negative entries are clamped to zero so the
+next iteration's `metric_tensor`/geodesic solves never see a negative density.
+"""
+function accept_descent_step(ν, div_term, h, steady_state; max_halve=8, tol=1e-8, iteration=0)
+    ν_next = ν .- h * div_term
+    n_halve = 0
+    while abs(dot(ν_next, steady_state) - 1) > tol || minimum(ν_next) < -tol
+        n_halve += 1
+        n_halve > max_halve && error("Step size reduction failed $max_halve times at iteration $iteration: " *
+                                     "ν_next is not a valid probability measure " *
+                                     "(⟨ν_next, u⟩ = $(dot(ν_next, steady_state)), min = $(minimum(ν_next)))")
+        ν_next = ν .- (h / 2^n_halve) * div_term
+    end
+    return max.(ν_next, 0.0)
+end
 
 """
     analysis(ν, M, Q; N=100, tol=1e-10, compute_condition=false,
