@@ -70,11 +70,11 @@ function _geodesic_sinkhorn(G::MarkovGraph, ρA, ρB; N::Int=10, cost=nothing, e
     return GeodesicSolution(W2, ρ, nanE, nanE[:, 1], nan, nan, :converged, time() - t0)
 end
 
-function _geodesic_shooting(G::MarkovGraph, ρA, ρB; nsteps::Int=150, kwargs...)
+function _geodesic_shooting(G::MarkovGraph, ρA, ρB; nsteps::Int=150, mean::AdmissibleMean=GeometricMean(), kwargs...)
     t0 = time()
-    r = log_map(G, ρA, ρB; nsteps=nsteps, kwargs...)
-    ρ_path, φ_path = integrate_hamiltonian(G, ρA, r.φ0; nsteps=nsteps)
-    m = reduce(hcat, (metric_tensor(G, ρ_path[:, t]) .* graph_gradient(G, φ_path[:, t]) for t in 1:nsteps))
+    r = log_map(G, ρA, ρB; nsteps=nsteps, mean=mean, kwargs...)
+    ρ_path, φ_path = integrate_hamiltonian(G, ρA, r.φ0; nsteps=nsteps, mean=mean)
+    m = reduce(hcat, (metric_tensor(G, ρ_path[:, t], mean) .* graph_gradient(G, φ_path[:, t]) for t in 1:nsteps))
     # W2-gradient convention for the endpoint potentials, matching the SOCP's duals.
     φ0 = -2 .* r.φ0
     φ1 =  2 .* φ_path[:, end]

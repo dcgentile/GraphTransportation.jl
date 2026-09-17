@@ -3,10 +3,12 @@ The Hamiltonian ODE system underlying the exponential/logarithmic maps. Valid on
 for **strictly positive** densities (`ρ_floor`-guarded); see `log_map_mollified` for
 the boundary-case fallback and `geodesic_socp` for the general case.
 
-State is `(ρ, φ) ∈ Rⁿ × Rⁿ`. Uses the geometric mean `θ(s,t) = √(st)` throughout,
-matching the SOCP formulation (`geodesic_socp`, `barycenter_socp`). Other admissible
-means (logarithmic, harmonic, arithmetic; see `geomean`/`logmean`) are a stated future
-goal for both formulations and are not yet configurable here.
+State is `(ρ, φ) ∈ Rⁿ × Rⁿ`. Every function takes `mean::AdmissibleMean` (default
+`GeometricMean()`), which selects the mobility `θ` and its derivative `∂₁θ`; use the
+same `mean` on the SOCP side (`QuadLogMean` for the logarithmic mean there) when
+cross-validating. Under the arithmetic mean the mobility does not vanish at an empty
+node, so the flow can legitimately drive a density through zero and hit the positivity
+floor; prefer `method=:socp` for that mean near the boundary.
 
 Scope and scaling. Everything here requires strictly positive densities: `log_map`
 and `analyze_shooting` throw on non-interior data rather than mollifying it; the
@@ -49,42 +51,43 @@ approximation (`log_map_mollified`) instead.
 ρ_floor(G::MarkovGraph; rtol::Float64=1e-6) = rtol * minimum(G.π)
 
 """
-    hamiltonian(G::MarkovGraph, ρ, φ) -> Float64
+    hamiltonian(G::MarkovGraph, ρ, φ; mean=GeometricMean()) -> Float64
 
 `H(ρ,φ) = ½ Σ_e θ(ρ_x,ρ_y) (∇φ)_e² κ_e`. Requires `ρ` strictly positive (see `ρ_floor`).
 """
-function hamiltonian(G::MarkovGraph, ρ::AbstractVector, φ::AbstractVector)
+function hamiltonian(G::MarkovGraph, ρ::AbstractVector, φ::AbstractVector; mean::AdmissibleMean=GeometricMean())
     ∇φ = graph_gradient(G, φ)
-    θ = [sqrt(ρ[x] * ρ[y]) for (x, y) in G.E]
+    θ = [mean(ρ[x], ρ[y]) for (x, y) in G.E]
     return 0.5 * sum(G.κ .* θ .* ∇φ .^ 2)
 end
 
 """
-    hamiltonian_flow(G::MarkovGraph, ρ, φ) -> (ρ̇, φ̇)
+    hamiltonian_flow(G::MarkovGraph, ρ, φ; mean=GeometricMean()) -> (ρ̇, φ̇)
 
 Equations of motion:
 
     ρ̇(x) = Σ_y θ(ρ(x),ρ(y)) (φ(x)-φ(y)) Q(x,y)  =  -div(θ(ρ)∘∇φ)(x)
-    φ̇(x) = -½ Σ_y ∂₁θ(ρ(x),ρ(y)) (φ(x)-φ(y))² Q(x,y),   ∂₁θ_geo(s,t) = ½√(t/s)
+    φ̇(x) = -½ Σ_y ∂₁θ(ρ(x),ρ(y)) (φ(x)-φ(y))² Q(x,y)
 
-Requires `ρ` strictly positive (see `ρ_floor`); `∂₁θ_geo` divides by `ρ(x)`.
+with `θ = mean` and `∂₁θ = partial_s(mean, ·, ·)` (for the geometric mean `½√(t/s)`,
+which divides by `ρ(x)`; hence the positivity floor). Requires `ρ` strictly positive.
 """
-function hamiltonian_flow(G::MarkovGraph, ρ::AbstractVector, φ::AbstractVector)
+function hamiltonian_flow(G::MarkovGraph, ρ::AbstractVector, φ::AbstractVector; mean::AdmissibleMean=GeometricMean())
     ∇φ = graph_gradient(G, φ)
-    θ = [sqrt(ρ[x] * ρ[y]) for (x, y) in G.E]
+    θ = [mean(ρ[x], ρ[y]) for (x, y) in G.E]
     ρ̇ = .-graph_divergence(G, θ .* ∇φ)
 
     φ̇ = zeros(promote_type(eltype(ρ), eltype(φ)), G.n)
     for (e, (x, y)) in enumerate(G.E)
         Δφ² = ∇φ[e]^2
-        φ̇[x] -= 0.5 * (0.5 * sqrt(ρ[y] / ρ[x])) * Δφ² * G.Q[x, y]
-        φ̇[y] -= 0.5 * (0.5 * sqrt(ρ[x] / ρ[y])) * Δφ² * G.Q[y, x]
+        φ̇[x] -= 0.5 * partial_s(mean, ρ[x], ρ[y]) * Δφ² * G.Q[x, y]
+        φ̇[y] -= 0.5 * partial_s(mean, ρ[y], ρ[x]) * Δφ² * G.Q[y, x]
     end
     return ρ̇, φ̇
 end
 
 """
-    integrate_hamiltonian(G::MarkovGraph, ρ0, φ0; nsteps=150, T=1.0, floor_rtol=1e-6)
+    integrate_hamiltonian(G::MarkovGraph, ρ0, φ0; nsteps=150, T=1.0, floor_rtol=1e-6, mean=GeometricMean())
         -> (ρ_path, φ_path)
 
 Integrate the Hamiltonian flow forward from `(ρ0, φ0)` over `[0, T]` using
@@ -98,7 +101,8 @@ and throwing `PositivityFloorError`, which callers should catch and act on (fall
 to `geodesic_socp` or mollify).
 """
 function integrate_hamiltonian(G::MarkovGraph, ρ0::AbstractVector, φ0::AbstractVector;
-                                nsteps::Int=150, T::Float64=1.0, floor_rtol::Float64=1e-6)
+                                nsteps::Int=150, T::Float64=1.0, floor_rtol::Float64=1e-6,
+                                mean::AdmissibleMean=GeometricMean())
     floor_val = ρ_floor(G; rtol=floor_rtol)
     @assert minimum(ρ0) > floor_val "ρ0 violates the positivity floor (shooting requires strictly positive densities)"
 
@@ -112,18 +116,18 @@ function integrate_hamiltonian(G::MarkovGraph, ρ0::AbstractVector, φ0::Abstrac
     h = T / nsteps
     ρ, φ = convert(Vector{T_el}, ρ0), convert(Vector{T_el}, φ0)
     for i in 1:nsteps
-        ρ, φ = _advance_interval(G, ρ, φ, h, floor_val, 4)
+        ρ, φ = _advance_interval(G, ρ, φ, h, floor_val, 4, mean)
         ρ_path[:, i+1] = ρ
         φ_path[:, i+1] = φ
     end
     return ρ_path, φ_path
 end
 
-function _rk4_step(G::MarkovGraph, ρ, φ, h)
-    k1ρ, k1φ = hamiltonian_flow(G, ρ, φ)
-    k2ρ, k2φ = hamiltonian_flow(G, ρ .+ (h/2) .* k1ρ, φ .+ (h/2) .* k1φ)
-    k3ρ, k3φ = hamiltonian_flow(G, ρ .+ (h/2) .* k2ρ, φ .+ (h/2) .* k2φ)
-    k4ρ, k4φ = hamiltonian_flow(G, ρ .+ h .* k3ρ, φ .+ h .* k3φ)
+function _rk4_step(G::MarkovGraph, ρ, φ, h, mean)
+    k1ρ, k1φ = hamiltonian_flow(G, ρ, φ; mean=mean)
+    k2ρ, k2φ = hamiltonian_flow(G, ρ .+ (h/2) .* k1ρ, φ .+ (h/2) .* k1φ; mean=mean)
+    k3ρ, k3φ = hamiltonian_flow(G, ρ .+ (h/2) .* k2ρ, φ .+ (h/2) .* k2φ; mean=mean)
+    k4ρ, k4φ = hamiltonian_flow(G, ρ .+ h .* k3ρ, φ .+ h .* k3φ; mean=mean)
     ρ_next = ρ .+ (h/6) .* (k1ρ .+ 2 .* k2ρ .+ 2 .* k3ρ .+ k4ρ)
     φ_next = φ .+ (h/6) .* (k1φ .+ 2 .* k2φ .+ 2 .* k3φ .+ k4φ)
     return ρ_next, φ_next
@@ -134,7 +138,7 @@ end
 # without changing the *total* elapsed time - unlike naively retrying with a smaller h
 # and accepting a shorter advance, which would silently desync the integrator's clock
 # from the nsteps*h = T the caller expects.
-function _advance_interval(G::MarkovGraph, ρ, φ, Δt, floor_val, depth)
+function _advance_interval(G::MarkovGraph, ρ, φ, Δt, floor_val, depth, mean)
     # An RK4 stage evaluates hamiltonian_flow at *intermediate* proposed states
     # (ρ + (Δt/2)k1, etc.), which can dip below the floor - and hence hit sqrt of a
     # negative θ argument - even when the accepted output of the step would not have.
@@ -142,7 +146,7 @@ function _advance_interval(G::MarkovGraph, ρ, φ, Δt, floor_val, depth)
     # out-of-range ρ_next we could check post-hoc, so it needs to trigger the same
     # bisection as an explicit floor violation.
     ρ_next, φ_next = try
-        _rk4_step(G, ρ, φ, Δt)
+        _rk4_step(G, ρ, φ, Δt, mean)
     catch err
         err isa DomainError || rethrow()
         (fill(convert(eltype(ρ), -Inf), length(ρ)), φ)
@@ -151,6 +155,6 @@ function _advance_interval(G::MarkovGraph, ρ, φ, Δt, floor_val, depth)
     depth <= 0 && throw(PositivityFloorError("Hamiltonian integration hit the positivity floor after repeated step " *
                                              "halving; fall back to geodesic_socp (exact, handles boundary data) or " *
                                              "log_map_mollified (approximate) for this instance."))
-    ρ_mid, φ_mid = _advance_interval(G, ρ, φ, Δt / 2, floor_val, depth - 1)
-    return _advance_interval(G, ρ_mid, φ_mid, Δt / 2, floor_val, depth - 1)
+    ρ_mid, φ_mid = _advance_interval(G, ρ, φ, Δt / 2, floor_val, depth - 1, mean)
+    return _advance_interval(G, ρ_mid, φ_mid, Δt / 2, floor_val, depth - 1, mean)
 end
