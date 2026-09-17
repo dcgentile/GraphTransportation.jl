@@ -21,7 +21,7 @@ Returns:
   potential-based analysis (`analyze_socp`) checks.
 
 References with `λ[i] == 0` are dropped entirely rather than solved with a zero
-weight. `λ` must be a probability vector (`λ .>= 0`, `sum(λ) ≈ 1`).
+weight. The mobility is `G.mean`, as in `geodesic_socp`. `λ` must be a probability vector (`λ .>= 0`, `sum(λ) ≈ 1`).
 """
 function barycenter_socp(G::MarkovGraph, refs::Vector{<:AbstractVector}, λ::AbstractVector;
                           N::Int=10, optimizer=Clarabel.Optimizer, silent::Bool=true)

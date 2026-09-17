@@ -20,6 +20,13 @@ Fields:
 - `D::SparseMatrixCSC{Float64,Int}`: `n × |E|` incidence matrix with `D*m == graph_divergence(G, m)`
   for any edge field `m`, cached at construction so repeated divergences (e.g. one per SOCP
   time step) don't rebuild it. `D[x,e] = -Q[x,y]`, `D[y,e] = Q[y,x]` for edge `e = (x,y)`.
+- `mean::AdmissibleMean`: the mobility `θ(s, t)` of the transport metric on this graph
+  (`GeometricMean()` by default; see `AdmissibleMean`). The mean is part of the geometry,
+  like the graph itself, so it lives here rather than as a per-call option: every
+  geodesic, barycenter and analysis computed from the same `MarkovGraph` uses the same
+  metric, and a target synthesized on one graph is analysed with the mean it was made with.
+  Chambolle-Pock supports only the geometric mean; the SOCP needs `QuadLogMean` rather than
+  `LogarithmicMean`; the shooting maps accept all of them.
 """
 struct MarkovGraph
     n::Int
@@ -28,17 +35,24 @@ struct MarkovGraph
     Q::SparseMatrixCSC{Float64,Int}
     κ::Vector{Float64}
     D::SparseMatrixCSC{Float64,Int}
+    mean::AdmissibleMean
 end
 
 """
-    MarkovGraph(Q, π; rtol=1e-12) -> MarkovGraph
+    MarkovGraph(Q, π; rtol=1e-12, mean=GeometricMean()) -> MarkovGraph
 
 Construct a `MarkovGraph` from a transition matrix `Q` and stationary distribution
 `π`. Fixes an arbitrary orientation for each undirected edge (the one with `i < j`
 in the upper triangle of `Q`) and verifies reversibility `Q[x,y]π[x] == Q[y,x]π[y]`
-to tolerance `rtol` (relative to `max(Q[x,y]π[x], Q[y,x]π[y])`).
+to tolerance `rtol` (relative to `max(Q[x,y]π[x], Q[y,x]π[y])`). `mean` selects the
+transport metric's mobility (see the `mean` field).
+
+    MarkovGraph(G::MarkovGraph; mean) -> MarkovGraph
+
+The same graph with a different mean (shares the cached matrices).
 """
-function MarkovGraph(Q::AbstractMatrix, π::AbstractVector; rtol::Float64=1e-12)
+function MarkovGraph(Q::AbstractMatrix, π::AbstractVector; rtol::Float64=1e-12,
+                     mean::AdmissibleMean=GeometricMean())
     n = size(Q, 1)
     @assert size(Q, 2) == n
     @assert length(π) == n
@@ -64,8 +78,10 @@ function MarkovGraph(Q::AbstractMatrix, π::AbstractVector; rtol::Float64=1e-12)
     end
     D = sparse(D_I, D_J, D_V, n, length(E))
 
-    return MarkovGraph(n, E, collect(Float64, π), Qs, κ, D)
+    return MarkovGraph(n, E, collect(Float64, π), Qs, κ, D, mean)
 end
+
+MarkovGraph(G::MarkovGraph; mean::AdmissibleMean) = MarkovGraph(G.n, G.E, G.π, G.Q, G.κ, G.D, mean)
 
 """
     graph_gradient(G::MarkovGraph, φ::AbstractVector) -> Vector{Float64}
@@ -95,15 +111,15 @@ function graph_divergence(G::MarkovGraph, m::AbstractVector)
 end
 
 """
-    metric_tensor(G::MarkovGraph, ρ::AbstractVector, mean=geomean) -> Vector{Float64}
+    metric_tensor(G::MarkovGraph, ρ::AbstractVector, mean=G.mean) -> Vector{Float64}
 
 Compact-edge-vector counterpart of the dense [`metric_tensor`](@ref): `θ[e] = mean(ρ[x], ρ[y])`
-for the oriented edge `e = (x, y)`. `mean` is any callable `(s, t) -> θ`, e.g. the
-function `geomean` (default) or an `AdmissibleMean` such as `HarmonicMean()`. Does
-**not** include the edge weight `κ`; the Riemannian inner product of two potential
-gradients at `ρ` is `⟨∇φ, ∇ψ⟩_ρ = Σ_e κ[e] θ[e] (∇φ)[e] (∇ψ)[e]`.
+for the oriented edge `e = (x, y)`, with `mean` defaulting to the graph's own
+`G.mean` (any callable `(s, t) -> θ` can be passed explicitly). Does **not** include the
+edge weight `κ`; the Riemannian inner product of two potential gradients at `ρ` is
+`⟨∇φ, ∇ψ⟩_ρ = Σ_e κ[e] θ[e] (∇φ)[e] (∇ψ)[e]`.
 """
-function metric_tensor(G::MarkovGraph, ρ::AbstractVector, mean=geomean)
+function metric_tensor(G::MarkovGraph, ρ::AbstractVector, mean=G.mean)
     @assert length(ρ) == G.n
     return [mean(ρ[x], ρ[y]) for (x, y) in G.E]
 end

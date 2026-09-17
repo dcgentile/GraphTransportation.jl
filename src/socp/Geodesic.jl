@@ -35,6 +35,45 @@ struct GeodesicSolution
 end
 
 """
+    _mean_cone!(model, θ::AdmissibleMean, ρ̄x, ρ̄y, ϑ)
+
+Add the constraint `ϑ ≤ θ(ρ̄x, ρ̄y)` (the hypograph of the mean) in conic form:
+- `GeometricMean`: `[ρ̄x, ρ̄y, √2 ϑ] ∈ RSOC`, i.e. `ϑ² ≤ ρ̄x ρ̄y`.
+- `ArithmeticMean`: a linear row.
+- `HarmonicMean`: `ϑ ≤ 2st/(s+t)`. Multiply by `s+t > 0`: `(s+t)ϑ ≤ 2st`. Use the identity
+  `4st = (s+t)² − (s−t)²`, i.e. `2st = ((s+t)² − (s−t)²)/2`, so the inequality becomes
+  `2(s+t)ϑ ≤ (s+t)² − (s−t)²`, i.e. `(s−t)² ≤ (s+t)(s+t−2ϑ)` with `s+t−2ϑ ≥ 0`. That is a
+  rotated second-order cone `x·y ≥ z²` with `x = s+t`, `y = s+t−2ϑ`, `z = s−t`. JuMP's
+  `RotatedSecondOrderCone` is `2·x·y ≥ ‖z‖²`, so `z` is scaled by `√2` to cancel the 2:
+  `[s+t, s+t−2ϑ, √2 (s−t)]`. (The same `√2` scaling is why the geometric cone carries
+  `√2 ϑ`.) Verified against `2st/(s+t)` in the tests.
+- `QuadLogMean`: `K` power cones `[ρ̄x, ρ̄y, ϑ_k] ∈ PowerCone(α_k)` (`ρ̄x^{α_k} ρ̄y^{1−α_k} ≥ ϑ_k`)
+  and the linear row `ϑ ≤ Σ_k w_k ϑ_k`.
+`LogarithmicMean` has no finite conic representation; pass a `QuadLogMean` instead.
+Every form was gated against the generalized two-node closed form
+`W = (1/√2)∫ θ(1−r,1+r)^{−1/2} dr` in the tests.
+"""
+function _mean_cone!(model, ::GeometricMean, ρ̄x, ρ̄y, ϑ)
+    @constraint(model, [ρ̄x, ρ̄y, sqrt(2) * ϑ] in RotatedSecondOrderCone())
+end
+function _mean_cone!(model, ::ArithmeticMean, ρ̄x, ρ̄y, ϑ)
+    @constraint(model, ϑ <= (ρ̄x + ρ̄y) / 2)
+end
+function _mean_cone!(model, ::HarmonicMean, ρ̄x, ρ̄y, ϑ)
+    @constraint(model, [ρ̄x + ρ̄y, ρ̄x + ρ̄y - 2 * ϑ, sqrt(2) * (ρ̄x - ρ̄y)] in RotatedSecondOrderCone())
+end
+function _mean_cone!(model, θ::QuadLogMean, ρ̄x, ρ̄y, ϑ)
+    K = length(θ.α)
+    ϑk = @variable(model, [1:K], lower_bound = 0)
+    for k in 1:K
+        @constraint(model, [ρ̄x, ρ̄y, ϑk[k]] in MOI.PowerCone(θ.α[k]))
+    end
+    @constraint(model, ϑ <= sum(θ.w[k] * ϑk[k] for k in 1:K))
+end
+_mean_cone!(model, ::LogarithmicMean, ρ̄x, ρ̄y, ϑ) =
+    throw(ArgumentError("LogarithmicMean has no conic representation; use QuadLogMean(K) in the SOCP (K=8 is accurate to 1e-10)"))
+
+"""
     _geodesic_block!(model, G, N, h, left, right; base_name="") -> (; ρ, m, ϑ, w, c_left, c_right, c_cont)
 
 Add one geodesic's worth of variables and constraints to `model`:
@@ -44,6 +83,7 @@ boundary densities and may each be either a plain vector (as in `geodesic_socp`)
 themselves JuMP variables/expressions (as in `barycenter_socp`, where `right` is the
 shared barycenter variable `ν`) — `@constraint(model, ρ[:, k] .== x)` accepts either.
 Does not set an objective; callers combine one or more blocks' `w` fields into theirs.
+The mobility `θ` is `G.mean` (see `_mean_cone!`).
 
 Also returns the constraint references whose duals carry the potentials:
 - `c_left`, `c_right`: the `n` endpoint constraints `ρ[:,1] .== left` and
@@ -77,12 +117,12 @@ function _geodesic_block!(model, G::MarkovGraph, N::Int, h::Float64,
         @constraint(model, (ρ[:, t+1] .- ρ[:, t]) ./ h .+ divm .== 0)
     end
 
-    # mean cone (rotated SOC): ϑ_{e,t}² ≤ ρ̄_{x,t} ρ̄_{y,t}
+    # mean cone: ϑ_{e,t} ≤ θ(ρ̄_{x,t}, ρ̄_{y,t})   (form depends on the mean, see _mean_cone!)
     # action epigraph (rotated SOC): m_{e,t}² ≤ ϑ_{e,t} w_{e,t}
     for t in 1:N, (e, (x, y)) in enumerate(G.E)
         ρ̄x = (ρ[x, t] + ρ[x, t+1]) / 2
         ρ̄y = (ρ[y, t] + ρ[y, t+1]) / 2
-        @constraint(model, [ρ̄x, ρ̄y, sqrt(2) * ϑ[e, t]] in RotatedSecondOrderCone())
+        _mean_cone!(model, G.mean, ρ̄x, ρ̄y, ϑ[e, t])
         @constraint(model, [ϑ[e, t], w[e, t], sqrt(2) * m[e, t]] in RotatedSecondOrderCone())
     end
 
@@ -111,11 +151,11 @@ single second-order-cone program, rather than via the
 Chambolle-Pock primal-dual iteration (`discrete_transport`). Returns the squared
 distance `W2 = ‖ρA - ρB‖_𝒲²`; the metric distance is `sqrt(W2)`.
 
-Uses the geometric mean `θ(s,t) = √(st)`. Supporting the other admissible means
-(logarithmic, harmonic, arithmetic; the dense `metric_tensor` already takes a `mean`)
-is a stated future goal; it is not yet configurable here, since the mean-cone
-constraint `ϑ² ≤ ρ̄ₓρ̄ᵧ` is specific to the geometric mean and each alternative needs
-its own conic representation.
+The mobility `θ` is the graph's `G.mean`: `GeometricMean()` (default), `ArithmeticMean()`,
+`HarmonicMean()` or `QuadLogMean(K)` (the logarithmic mean by Gauss–Legendre quadrature,
+`K` power cones per edge and time step; a graph built with `LogarithmicMean()` has no
+conic form and errors here, use `MarkovGraph(G; mean=QuadLogMean(8))`). See `_mean_cone!`
+for the conic representations and `AdmissibleMean` for the theory.
 
 `N` is the number of time-discretization intervals (`h = 1/N`); the returned `ρ` has
 `N+1` columns and `m` has `N` columns. `optimizer` is any solver JuMP can dispatch to

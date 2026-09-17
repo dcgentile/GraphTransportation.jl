@@ -26,6 +26,9 @@ the resulting tangent vectors at `target`, and solving the simplex QP
   At coarse `N` this mismatch can be large (tens of percent recovery error at `N=2` on
   irregular graphs). Kept for comparison experiments only.
 
+The mobility for both the geodesic solves and the Gram-matrix weighting is `G.mean`;
+recovery is exact for a target synthesized on the same graph (same mean).
+
 `refs` is a vector of reference probability densities on `G`. Returns the recovered
 weight vector `λ̂` (from `Convex.jl`/SCS on the small `p × p` Gram matrix), or
 `(λ̂, A)` if `return_system=true`.
@@ -50,7 +53,7 @@ function analyze_socp(G::MarkovGraph, target::AbstractVector, refs::Vector{<:Abs
             end
             m_dense
         end
-        g = metric_tensor(target)
+        g = metric_tensor(target, G.mean)
     end
 
     return solve_barycentric_coordinates_qp(tangent_vectors, g;
