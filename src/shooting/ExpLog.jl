@@ -71,14 +71,13 @@ function exp_map(G::MarkovGraph, ν::AbstractVector, tangent::AbstractVector;
                  t::Float64=1.0, nsteps::Int=150, kind::Symbol=:auto, floor_rtol::Float64=1e-6)
     n, nE = G.n, length(G.E)
     if kind == :auto
-        if length(tangent) == n && n != nE
-            kind = :potential
-        elseif length(tangent) == nE && n != nE
-            kind = :momentum
+        L = length(tangent)
+        if L != n && L != nE
+            throw(ArgumentError("tangent has length $L; expected n=$n (potential) or |E|=$nE (momentum)"))
         elseif n == nE
             throw(ArgumentError("n == |E| == $n, so the kind of `tangent` cannot be inferred; pass kind=:potential or kind=:momentum"))
         else
-            throw(ArgumentError("tangent has length $(length(tangent)); expected n=$n (potential) or |E|=$nE (momentum)"))
+            kind = L == n ? :potential : :momentum
         end
     end
     φ0 = if kind == :potential
@@ -127,7 +126,8 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
                  floor_rtol::Float64=1e-6, verbose::Bool=false)
     n = G.n
     floor_val = ρ_floor(G; rtol=floor_rtol)
-    @assert minimum(ν) > floor_val && minimum(target) > floor_val "log_map requires strictly positive endpoints (see ρ_floor)"
+    @assert minimum(ν) > floor_val && minimum(target) > floor_val "log_map requires strictly positive endpoints (see ρ_floor); " *
+        "for boundary-supported data use geodesic_socp (exact) or log_map_mollified (approximate)"
     @assert abs(dot(ν, G.π) - 1) < 1e-8 && abs(dot(target, G.π) - 1) < 1e-8 "endpoints must be probability densities"
 
     sqrtπ = sqrt.(G.π)
@@ -154,7 +154,7 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
         F = try
             shoot(z)
         catch err
-            err isa ErrorException || rethrow()
+            err isa PositivityFloorError || rethrow()
             k == 12 && error("log_map: no admissible initial potential found (endpoints too far apart for shooting); " *
                              "fall back to geodesic_socp or mollify the endpoints (spec §3.5).")
             z ./= 2
@@ -179,7 +179,7 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
             F_try = try
                 shoot(z_try)
             catch err
-                err isa ErrorException || rethrow()
+                err isa PositivityFloorError || rethrow()
                 nothing
             end
             if F_try !== nothing && resnorm(F_try) ≤ (1 - 1e-4 * α) * r
@@ -189,8 +189,10 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
             end
             α /= 2
         end
-        accepted || error("log_map: line search failed at iteration $(iters + 1) (residual $r); " *
-                          "the target may be too far from ν for single shooting, or the geodesic leaves the positive cone.")
+        accepted || error("log_map: line search failed at iteration $(iters + 1) (residual $r). " *
+                          "Near the positivity floor the integrator's step bisection makes the residual piecewise-smooth " *
+                          "in φ0, so Newton can stall at the scale of those jumps; otherwise the target may be too far " *
+                          "from ν for single shooting. Fall back to geodesic_socp or mollify (spec §3.5).")
         iters += 1
         verbose && @info "log_map" iter=iters residual=r step=α
     end
@@ -264,7 +266,9 @@ function log_map_mollified(G::MarkovGraph, ν::AbstractVector, target::AbstractV
         r_ε = try
             log_map(G, mollify(ν, ε), mollify(target, ε); φ0_init=(r === nothing ? nothing : r.φ0), tol=tol, kwargs...)
         catch err
-            err isa ErrorException || rethrow()
+            # log_map's own failures are ErrorExceptions; a floor violation raised while
+            # ForwardDiff evaluates the Jacobian escapes log_map as PositivityFloorError.
+            err isa Union{ErrorException,PositivityFloorError} || rethrow()
             @warn "log_map_mollified: shooting failed at ε=$ε, skipping this level" exception=err.msg
             continue
         end

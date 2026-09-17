@@ -38,6 +38,7 @@ hamiltonian
 hamiltonian_flow
 integrate_hamiltonian
 ρ_floor
+PositivityFloorError
 weighted_laplacian
 solve_weighted_laplacian
 momentum_to_potential

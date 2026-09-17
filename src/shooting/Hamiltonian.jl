@@ -15,6 +15,19 @@ which is what lets `ρ̇` reuse `graph_divergence`/`graph_gradient` directly.
 """
 
 """
+    PositivityFloorError <: Exception
+
+Thrown by `integrate_hamiltonian` when a trajectory would drive some density below
+`ρ_floor` even after repeated step bisection. `log_map` catches exactly this type (and
+nothing broader) to damp its initial guess and shorten line-search steps; any other
+exception from the flow propagates.
+"""
+struct PositivityFloorError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, e::PositivityFloorError) = print(io, "PositivityFloorError: ", e.msg)
+
+"""
     ρ_floor(G::MarkovGraph; rtol=1e-6) -> Float64
 
 Minimum density Module 3's ODE machinery will tolerate: `rtol` relative to `min(π)`,
@@ -71,8 +84,8 @@ as `n × (nsteps+1)` matrices.
 
 Positivity guard: if any density in the proposed next step would fall below
 `ρ_floor(G; rtol=floor_rtol)`, the step is halved (up to 4 times) before giving up
-and erroring — per `spec.txt`'s guidance to fall back to `geodesic_socp` on
-persistent violation, which callers should catch and act on.
+and throwing `PositivityFloorError` — per `spec.txt`'s guidance to fall back to
+`geodesic_socp` on persistent violation, which callers should catch and act on.
 """
 function integrate_hamiltonian(G::MarkovGraph, ρ0::AbstractVector, φ0::AbstractVector;
                                 nsteps::Int=150, T::Float64=1.0, floor_rtol::Float64=1e-6)
@@ -125,8 +138,9 @@ function _advance_interval(G::MarkovGraph, ρ, φ, Δt, floor_val, depth)
         (fill(convert(eltype(ρ), -Inf), length(ρ)), φ)
     end
     minimum(ρ_next) > floor_val && return ρ_next, φ_next
-    depth <= 0 && error("Hamiltonian integration hit the positivity floor after repeated step " *
-                         "halving; fall back to geodesic_socp for this instance.")
+    depth <= 0 && throw(PositivityFloorError("Hamiltonian integration hit the positivity floor after repeated step " *
+                                             "halving; fall back to geodesic_socp (exact, handles boundary data) or " *
+                                             "log_map_mollified (approximate) for this instance."))
     ρ_mid, φ_mid = _advance_interval(G, ρ, φ, Δt / 2, floor_val, depth - 1)
     return _advance_interval(G, ρ_mid, φ_mid, Δt / 2, floor_val, depth - 1)
 end
