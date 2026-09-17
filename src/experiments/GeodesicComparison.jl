@@ -3,7 +3,7 @@ using LinearAlgebra, SparseArrays, Statistics
 using ProgressMeter 
 using JLD2 
 using GraphTransportation
-include("../CommonGraphs.jl")
+include("../core/CommonGraphs.jl")
 
 function generate_barycenters(grid_size, n_steps;
                               h=0.5, maxiters=1000, tol=1e-9,

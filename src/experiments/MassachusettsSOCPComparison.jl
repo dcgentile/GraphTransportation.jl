@@ -19,7 +19,7 @@
 #
 # Run from src/experiments/ with --project=.
 
-include("../CommonGraphs.jl")
+include("../core/CommonGraphs.jl")
 include("./ExperimentUtils.jl")
 using GraphTransportation
 using LaTeXStrings

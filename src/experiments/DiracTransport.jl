@@ -1,7 +1,7 @@
 using LinearAlgebra, SparseArrays
 using GraphTransportation
-include("../MarkovChains.jl")
-include("../CommonGraphs.jl")
+include("../core/MarkovChains.jl")
+include("../core/CommonGraphs.jl")
 
 ## Two Points
 """

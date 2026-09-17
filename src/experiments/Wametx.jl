@@ -6,7 +6,7 @@ using SparseArrays
 using LinearAlgebra
 using JLD2, DelimitedFiles
 using GraphTransportation
-include("../CommonGraphs.jl")
+include("../core/CommonGraphs.jl")
 
 function wametx_barycenter(;N_steps=16, tol=1e-8)
     Qusa, sstate = load_usa_mc()

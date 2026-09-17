@@ -4,7 +4,7 @@ using LinearAlgebra, SparseArrays, Statistics
 using ProgressMeter 
 using JLD2, DelimitedFiles
 using GraphTransportation
-include("../CommonGraphs.jl")
+include("../core/CommonGraphs.jl")
 
 
 """
