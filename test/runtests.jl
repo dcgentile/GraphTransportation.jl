@@ -950,6 +950,40 @@ end
     end
 end
 
+@testset "accept_descent_step: noise-scale negatives are not overshoots" begin
+    # The WGD step-halving loop used to reject any ν_next with a strictly negative
+    # entry. Solver noise in the Chambolle-Pock momenta can put an entry at ~-1e-11
+    # when the true value is 0, and halving cannot fix noise of that size, so the loop
+    # would exhaust its retries and error spuriously on near-boundary barycenters.
+    π = [0.25, 0.25, 0.5]
+    ν = [1.0, 0.0, 1.5]              # ⟨ν, π⟩ = 1, one entry exactly at the boundary
+    h = 0.1
+
+    # Mass-preserving direction (⟨d, π⟩ = 0) whose step ν - h·d puts node 2 at -1e-11:
+    # noise scale, not an overshoot.
+    d_noise = [-4e-10, 1e-10, 1.5e-10]
+    @test abs(dot(d_noise, π)) < 1e-20
+    ν_next = GraphTransportation.accept_descent_step(ν, d_noise, h, π)
+    @test minimum(ν_next) == 0.0                    # clamped, not rejected
+    @test ν_next ≈ ν .- h .* d_noise atol=1e-10     # full step accepted, no halving
+    @test abs(dot(ν_next, π) - 1) < 1e-8
+
+    # Genuine overshoot from an interior point: full step drives node 2 to -0.4; three
+    # halvings (h/8) bring it to 0.1 - 0.0625 = 0.0375 ≥ 0.
+    ν_int = [1.0, 0.1, 1.45]                        # ⟨ν_int, π⟩ = 1
+    d_big = [10.0, 5.0, -7.5]                       # ⟨d_big, π⟩ = 0
+    @test abs(dot(d_big, π)) < 1e-12
+    ν_next = GraphTransportation.accept_descent_step(ν_int, d_big, h, π)
+    @test ν_next ≈ ν_int .- (h / 8) .* d_big
+    @test abs(dot(ν_next, π) - 1) < 1e-8
+
+    # From a node at exactly zero, an outward direction cannot be rescued by halving
+    # (every step size goes negative): still an error, as before.
+    @test_throws ErrorException GraphTransportation.accept_descent_step(ν, d_big, h, π)
+    # Mass violation that halving cannot repair (⟨d, π⟩ ≠ 0) still errors.
+    @test_throws ErrorException GraphTransportation.accept_descent_step(ν, [1.0, 1.0, 1.0], h, π)
+end
+
 @testset "project_IJeq" begin
     ρ      = [1/3  2/3  1;  1/3  1/6  0;  1/3  1/6  0]
     q      = [1/2  3/4  1;  1/2  1/4  0;  0    0    0]
