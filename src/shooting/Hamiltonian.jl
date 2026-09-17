@@ -7,6 +7,16 @@ exponential/logarithmic maps. Valid only for **strictly positive** densities
 State is `(ρ, φ) ∈ Rⁿ × Rⁿ`. Uses the geometric mean `θ(s,t) = √(st)` throughout,
 matching Modules 0-2; this is not configurable.
 
+Scope and scaling. Everything here requires strictly positive densities: `log_map`
+and `analyze_shooting` throw on non-interior data rather than mollifying it; the
+opt-in approximate route is `log_map_mollified`, and `geodesic_socp` is the exact
+reference for boundary-supported measures. The module is written for graphs of at
+most a few hundred nodes: `log_map`'s cost is dominated by the ForwardDiff Jacobian
+of the flow map (about `n/12` full RK4 integrations per Newton step, so roughly
+`O(n²·nsteps·|E|)` per solve), not by the dense weighted-Laplacian solve used for
+initialization. A Jacobian-free Newton–Krylov variant is the natural next step if
+larger graphs are needed.
+
 The equations of motion below are Hamilton's equations for the `⟨·,·⟩_π`-weighted
 pairing (`ρ̇(z) = (1/π(z)) ∂H/∂φ(z)`, `φ̇(z) = -(1/π(z)) ∂H/∂ρ(z)`), re-derived here
 by direct differentiation of `H` rather than taken on faith from `spec.txt` — they
