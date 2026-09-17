@@ -675,6 +675,238 @@ end
     @test λ̂2' * A2 * λ̂2 ≤ 1e-6 * maximum(diag(A2))
 end
 
+@testset "Hamiltonian shooting: conservation laws (Module 3, spec §3.1)" begin
+    # The three invariants spec.txt calls out as the Module 3 gating tests: mass
+    # conservation, H conservation, and 2H == the squared discrete transport distance
+    # between the flow's own endpoints (cross-checked against the independently
+    # validated geodesic_socp) - i.e. the Hamiltonian flow really does trace a genuine
+    # geodesic, not just some curve that happens to conserve H by construction.
+    graphs = [triangle_markov_chain(), weighted_hypercube_markov_chain()]
+
+    rng = MersenneTwister(1)
+    for (Q, π) in graphs
+        G = MarkovGraph(Q, π)
+        for _ in 1:3
+            ρ0 = (rand(rng, G.n) .+ 0.5); ρ0 ./= dot(ρ0, π)
+            # Small scale: an arbitrary large random φ0 can drive some node's density
+            # through zero within [0,1] (a real feature of this geometry's boundary
+            # behavior, not a bug - see spec.txt §3.5's mollification fallback) even
+            # though ρ0 itself is safely interior. A genuine log_map-derived φ0 would
+            # be commensurately small for a nearby target; this mimics that regime
+            # without yet having exp_map/log_map built.
+            φ0 = 0.1 .* randn(rng, G.n)
+            φ0 .-= dot(φ0, π) .* ones(G.n)  # gauge: ⟨φ,1⟩_π = 0
+
+            H0 = hamiltonian(G, ρ0, φ0)
+            ρ_path, φ_path = integrate_hamiltonian(G, ρ0, φ0; nsteps=200, T=1.0)
+
+            @test dot(ρ_path[:, end], π) ≈ 1.0 atol=1e-10  # mass conservation
+
+            Hs = [hamiltonian(G, ρ_path[:, i], φ_path[:, i]) for i in 1:size(ρ_path, 2)]
+            @test maximum(abs.(Hs .- H0)) < 1e-4  # H conservation (RK4 truncation error)
+
+            # 2H vs geodesic_socp.W2 between the flow's own endpoints. Unlike the
+            # larger-magnitude §1.3.1/§1.3.2 gates, φ0's small scale (see above) makes
+            # 2H itself small (~0.01-0.04), so the residual here is dominated by
+            # Clarabel's own solver-tolerance noise floor rather than a shrinking O(h)
+            # truncation error - that floor doesn't shrink with N, so we check absolute
+            # magnitude rather than requiring monotonic improvement across N.
+            ρ_end = ρ_path[:, end]
+            for N in (20, 100)
+                W2 = geodesic_socp(G, ρ0, ρ_end; N=N).W2
+                @test abs(2 * H0 - W2) < 1e-4
+            end
+        end
+    end
+end
+
+@testset "Hamiltonian shooting vs two-node closed form (Module 3, spec §3.1)" begin
+    # Stronger, fully independent check than the geodesic_socp cross-check above: the
+    # same closed-form two-node quadrature used to gate geodesic_socp in spec §1.3.1
+    # (rho(r) = [1-r,1+r], W(rho(s),rho(t)) = (1/sqrt(2)) int_s^t (1-r^2)^(-1/4) dr).
+    # On this graph the gauge-fixed potential reduces to a scalar φ = (c0,-c0), so we
+    # can pick c0 directly (no log_map/shooting needed yet) and check that sqrt(2H0)
+    # matches the quadrature distance between rho0 and wherever the flow actually
+    # lands - no SOCP time-discretization error to hide behind here, unlike the
+    # (already tight) check above.
+    G = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5])
+    W_ref(a, b) = quadgk(r -> (1 - r^2)^(-1/4), a, b)[1] / sqrt(2)
+
+    r0 = -0.6
+    ρ0 = [1 - r0, 1 + r0]
+
+    for (c0, atol) in ((0.1, 1e-9), (0.3, 1e-8))
+        φ0 = [c0, -c0]
+        ρ_path, _ = integrate_hamiltonian(G, ρ0, φ0; nsteps=400, T=1.0)
+        r_end = 1 - ρ_path[1, end]
+
+        W_flow = sqrt(2 * hamiltonian(G, ρ0, φ0))
+        W_quad = abs(W_ref(r0, r_end))
+        @test W_flow ≈ W_quad atol=atol
+    end
+
+    # c0 large enough to drive r past the boundary -1 within [0,1]: the positivity
+    # floor guard should catch this as an error, not silently return garbage or crash
+    # with an uncaught DomainError.
+    @test_throws ErrorException integrate_hamiltonian(G, ρ0, [0.6, -0.6]; nsteps=400, T=1.0)
+end
+
+@testset "exp_map / weighted Laplacian (Module 3, spec §3.2)" begin
+    rng = MersenneTwister(2)
+    Q, π = weighted_hypercube_markov_chain()
+    G = MarkovGraph(Q, π)
+    ν = rand(rng, G.n) .+ 0.5; ν ./= dot(ν, π)
+    φ = 0.1 .* randn(rng, G.n); φ .-= dot(φ, π)
+
+    @testset "π∘ρ̇ == L_θ(ν) φ" begin
+        ρ̇, _ = hamiltonian_flow(G, ν, φ)
+        @test weighted_laplacian(G, ν) * φ ≈ π .* ρ̇ rtol=1e-12
+        @test weighted_laplacian(G, ν) * ones(G.n) ≈ zeros(G.n) atol=1e-14
+    end
+
+    @testset "momentum_to_potential inverts m = θ(ν)∘∇φ" begin
+        m = metric_tensor(G, ν) .* graph_gradient(G, φ)
+        φ_rec = momentum_to_potential(G, ν, m)
+        @test φ_rec ≈ φ rtol=1e-10
+        @test abs(dot(φ_rec, π)) < 1e-12   # gauge
+    end
+
+    @testset "exp_map agrees with integrate_hamiltonian for both tangent kinds" begin
+        ρ_path, _ = integrate_hamiltonian(G, ν, φ; nsteps=100, T=1.0)
+        m = metric_tensor(G, ν) .* graph_gradient(G, φ)
+        @test exp_map(G, ν, φ; nsteps=100) ≈ ρ_path[:, end] rtol=1e-12
+        @test exp_map(G, ν, φ .+ 3.0; nsteps=100) ≈ ρ_path[:, end] rtol=1e-12   # gauge-invariant
+        @test exp_map(G, ν, m; nsteps=100) ≈ ρ_path[:, end] rtol=1e-8
+        @test exp_map(G, ν, φ; nsteps=100, t=0.5) ≈ ρ_path[:, 51] rtol=1e-10
+        @test dot(exp_map(G, ν, φ; nsteps=100), π) ≈ 1.0 atol=1e-10
+    end
+
+    @testset "kind inference refuses the ambiguous n == |E| case" begin
+        Q3, π3 = triangle_markov_chain()
+        G3 = MarkovGraph(Q3, π3)
+        ν3 = [1.2, 0.9, 0.9]; ν3 ./= dot(ν3, π3)
+        φ3 = [0.05, -0.02, -0.03]
+        @test_throws ArgumentError exp_map(G3, ν3, φ3)
+        @test exp_map(G3, ν3, φ3; kind=:potential) ≈ integrate_hamiltonian(G3, ν3, φ3 .- dot(φ3, π3); nsteps=150)[1][:, end]
+        @test_throws ArgumentError exp_map(G, ν, ones(5))
+    end
+end
+
+@testset "log_map by shooting (Module 3, spec §3.3)" begin
+    rng = MersenneTwister(4)
+
+    @testset "round trip, W2 and m0 vs geodesic_socp, Newton counts" begin
+        for (Q, π) in (weighted_hypercube_markov_chain(), grid_markov_chain(5))
+            G = MarkovGraph(Q, π)
+            for _ in 1:3
+                ν = rand(rng, G.n) .+ 0.5; ν ./= dot(ν, π)
+                μ = rand(rng, G.n) .+ 0.5; μ ./= dot(μ, π)
+                r = log_map(G, ν, μ)
+                @test r.iters ≤ 8                                  # spec: 3-8 cold
+                @test norm((exp_map(G, ν, r.φ0) .- μ) .* sqrt.(π)) < 1e-6   # spec (i)
+                @test norm((exp_map(G, ν, r.m0) .- μ) .* sqrt.(π)) < 1e-6   # via the momentum too
+                @test abs(dot(r.φ0, π)) < 1e-12                    # gauge
+                @test log_map(G, ν, μ; φ0_init=r.φ0).iters == 0    # warm start
+
+                # (ii)/(iii): m0 and W2 vs Module 1, O(h) in the SOCP's h=1/N
+                prev = Inf
+                for N in (10, 40, 160)
+                    sol = geodesic_socp(G, ν, μ; N=N)
+                    m_err = norm(r.m0 .- sol.m0) / norm(sol.m0)
+                    @test m_err < 5.0 / N
+                    @test m_err < prev + 1e-6
+                    @test abs(r.W2 - sol.W2) < 1.0 / N
+                    prev = m_err
+                end
+                # The SOCP's endpoint potential is the gradient of W2, and the flow's φ0
+                # is the Hamiltonian velocity potential: φ_socp ≈ -2 φ0 (continuum limit).
+                sol = geodesic_socp(G, ν, μ; N=160)
+                @test graph_gradient(G, sol.φ0) ≈ -2 .* graph_gradient(G, r.φ0) rtol=0.05
+            end
+        end
+    end
+
+    @testset "two-node closed form" begin
+        G = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5])
+        W_ref(a, b) = quadgk(r -> (1 - r^2)^(-1/4), a, b)[1] / sqrt(2)
+        s, t = -0.6, 0.7
+        r = log_map(G, [1 - s, 1 + s], [1 - t, 1 + t]; nsteps=400)
+        @test sqrt(r.W2) ≈ W_ref(s, t) atol=1e-8
+    end
+
+    @testset "far-apart concentrated endpoints (damped initialization)" begin
+        # The linearized initial guess overshoots through the positivity floor here; the
+        # damped initialization must recover and Newton must still converge.
+        Q, π = grid_markov_chain(5)
+        G = MarkovGraph(Q, π)
+        A = Q .> 0
+        conc(c) = (m = ones(G.n); m[c] *= 10; for j in 1:G.n; A[c, j] && (m[j] *= 10); end; m ./ dot(m, π))
+        ν, μ = conc(1), conc(25)
+        r = log_map(G, ν, μ)
+        @test r.residual < 1e-9
+        @test norm((exp_map(G, ν, r.φ0) .- μ) .* sqrt.(π)) < 1e-6
+        @test abs(r.W2 - geodesic_socp(G, ν, μ; N=100).W2) < 2e-2
+    end
+
+    @testset "guards" begin
+        Q, π = triangle_markov_chain()
+        G = MarkovGraph(Q, π)
+        @test_throws AssertionError log_map(G, [1.0, 1.0, 1.0], [0.0, 1.5, 1.5])   # zero entry
+        @test_throws AssertionError log_map(G, [1.0, 1.0, 1.0], [2.0, 1.0, 1.0])   # not a density
+    end
+end
+
+@testset "analyze_shooting (Module 4 :shooting backend, spec §4)" begin
+    Q, π = weighted_hypercube_markov_chain()
+    G = MarkovGraph(Q, π)
+    rng = MersenneTwister(6)
+    refs = [(v = rand(rng, G.n) .+ 0.3; v ./= dot(v, π)) for _ in 1:3]
+    λ_true = [0.5, 0.3, 0.2]
+
+    # Synthesized by the SOCP at fine N: the shooting backend checks stationarity in a
+    # different discretization, so expect O(1/N) agreement, not solver tolerance.
+    ν, _, _ = barycenter_socp(G, refs, λ_true; N=80)
+    λ̂ = vec(analyze_shooting(G, ν, refs))
+    @test λ̂ ≈ λ_true atol=1e-2
+    @test sum(λ̂) ≈ 1.0 atol=1e-6
+
+    # Same point, same reference potentials from the two backends: at fine N the SOCP's
+    # endpoint duals and the flow's φ0 give the same Gram matrix up to the factor (-2)²
+    # and O(h), so the two backends must agree closely with each other.
+    λ_socp = vec(analyze_socp(G, ν, refs; N=80))
+    @test λ̂ ≈ λ_socp atol=1e-2
+
+    # Warm starts are accepted and don't change the answer.
+    inits = [log_map(G, ν, r).φ0 for r in refs]
+    @test vec(analyze_shooting(G, ν, refs; φ0_inits=inits)) ≈ λ̂ atol=1e-8
+end
+
+@testset "log_map_mollified (Module 3.5 boundary fallback)" begin
+    # Target supported on two columns of a 5x5 grid (zero elsewhere): shooting cannot
+    # run directly, so mollify and extrapolate. geodesic_socp handles the boundary case
+    # natively and is the reference. Both the extrapolated and the raw smallest-ε
+    # distance should be within a percent of it (the fallback is approximate by design).
+    Q, π = grid_markov_chain(5)
+    G = MarkovGraph(Q, π)
+    rng = MersenneTwister(7)
+    ν = rand(rng, G.n) .+ 0.5; ν ./= dot(ν, π)
+    tgt = zeros(G.n)
+    for i in 1:G.n
+        mod(i - 1, 5) < 2 && (tgt[i] = 1.0 + rand(rng))
+    end
+    tgt ./= dot(tgt, π)
+    @test_throws AssertionError log_map(G, ν, tgt)
+
+    W_ref = sqrt(geodesic_socp(G, ν, tgt; N=400).W2)
+    r = log_map_mollified(G, ν, tgt)
+    @test r.approximate
+    @test length(r.Ws) ≥ 2                    # a stiff level may be skipped (seen on Julia 1.10)
+    @test issorted(r.Ws)                       # W increases as ε → 0 (less smoothing)
+    @test abs(r.W - W_ref) / W_ref < 1e-2
+    @test abs(r.Ws[end] - W_ref) / W_ref < 5e-3
+    @test r.W2 ≈ r.W^2
+end
+
 @testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
     # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
     # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here

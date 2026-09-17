@@ -39,8 +39,8 @@ function analyze_socp(G::MarkovGraph, target::AbstractVector, refs::Vector{<:Abs
     geodesics = [geodesic_socp(G, target, ref; N=N, optimizer=optimizer) for ref in refs]
 
     if convention == :potential
-        tangent_vectors = [graph_gradient(G, geo.φ0) for geo in geodesics]
-        g = G.κ .* metric_tensor(G, target)
+        return potential_gram_qp(G, target, [geo.φ0 for geo in geodesics];
+                                 compute_condition=compute_condition, return_system=return_system)
     else
         tangent_vectors = map(geodesics) do geo
             m_dense = zeros(G.n, G.n)
@@ -53,6 +53,23 @@ function analyze_socp(G::MarkovGraph, target::AbstractVector, refs::Vector{<:Abs
         g = metric_tensor(target)
     end
 
+    return solve_barycentric_coordinates_qp(tangent_vectors, g;
+                                             compute_condition=compute_condition, return_system=return_system)
+end
+
+"""
+    potential_gram_qp(G, target, potentials; compute_condition=false, return_system=false) -> λ̂ (or (λ̂, A))
+
+Module 4 steps 2-3, shared by the `:socp` and `:shooting` backends: given one potential
+`φ_i` per reference (the geodesic from `target` to `ref_i`, in any sign/scale convention
+common to all `i`), assemble spec.txt's Gram matrix
+`A_ij = Σ_e κ_e θ(target)_e (∇φ_i)_e (∇φ_j)_e` and solve `min_{λ∈Δ} λᵀAλ` via
+`solve_barycentric_coordinates_qp`.
+"""
+function potential_gram_qp(G::MarkovGraph, target::AbstractVector, potentials;
+                           compute_condition::Bool=false, return_system::Bool=false)
+    tangent_vectors = [graph_gradient(G, φ) for φ in potentials]
+    g = G.κ .* metric_tensor(G, target)
     return solve_barycentric_coordinates_qp(tangent_vectors, g;
                                              compute_condition=compute_condition, return_system=return_system)
 end
