@@ -1066,7 +1066,18 @@ end
         # optimality certificate, with both objectives evaluated by the same geodesic solver
         J_at(ν) = sum(λ[i] * geodesic(G, refs[i], ν; N=10).W2 for i in 1:3)
         @test J_at(ν_cp) ≥ J_at(ν) - 1e-6
-        @test_throws ArgumentError barycenter(G, refs, λ; method=:shooting)
+        # :shooting barycenter — Riemannian descent with exact-in-time geodesics — agrees
+        # with the SOCP optimum (certified) at the SOCP's O(1/N), and for the geometric mean
+        # the SOCP evaluates it as no better than its own optimum
+        ν_sh, J_sh, info_sh = barycenter(G, refs, λ; method=:shooting, tol=1e-6)
+        @test info_sh.iters < 200 && info_sh.grad_hist[end] < 1e-6
+        @test issorted(info_sh.J_hist; rev=true)                     # monotone descent
+        ν_fine, J_fine, _ = barycenter(G, refs, λ; N=80)
+        @test norm((ν_sh .- ν_fine) .* sqrt.(π)) < 5e-3
+        @test abs(J_sh - J_fine) / J_fine < 5e-3
+        @test J_at(ν_sh) ≥ J_at(ν) - 1e-6
+        @test vec(analysis(G, ν_sh, refs; method=:shooting)) ≈ λ atol=1e-3   # exact in its own convention
+        @test_throws ArgumentError barycenter(G, refs, λ; method=:sinkhorn_descent)
     end
 end
 
