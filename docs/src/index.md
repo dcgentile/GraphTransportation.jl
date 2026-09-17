@@ -81,6 +81,42 @@ barycentric coordinates (`analysis`) with respect to three reference measures
 
 ![Barycentric coding model on the USA graph](assets/bcm.png)
 
+## Admissible means
+
+The transport metric depends on a choice of *mobility* `θ(s, t)`, an admissible mean
+(symmetric, 1-homogeneous, concave; see `AdmissibleMean`). It is part of the geometry,
+so it is set on the graph: `MarkovGraph(Q, π; mean=HarmonicMean())`, or
+`MarkovGraph(G; mean=QuadLogMean(8))` to re-equip an existing graph. Every geodesic,
+barycenter and analysis computed from that graph then uses the same metric, which is
+what keeps synthesis and analysis consistent.
+
+| mean | `θ(s, t)` | notes |
+|---|---|---|
+| `GeometricMean()` (default) | `√(st)` | Erbar et al. 2020's computational choice |
+| `ArithmeticMean()` | `(s+t)/2` | the only one with `θ(0, t) ≠ 0`: mass can leave an empty node, so paths may reach the boundary; prefer `method=:socp` there |
+| `HarmonicMean()` | `2st/(s+t)` | smallest of the four, so its distances are the largest |
+| `LogarithmicMean()` | `(s−t)/(ln s − ln t)` | the mean for which the heat flow is the entropy gradient flow (Maas 2011); no conic form, so `method=:shooting` |
+| `QuadLogMean(K)` | Gauss–Legendre approximation of the logarithmic mean | the SOCP's representation of it, `K` power cones per edge and time step; `K=8` is accurate to 1e-10 |
+
+For all `s, t > 0`: harmonic ≤ geometric ≤ logarithmic ≤ arithmetic, so transport is
+cheapest under the arithmetic mean and most expensive under the harmonic one. `method=:socp`
+and `method=:shooting` honor every mean (the SOCP needs `QuadLogMean` for the
+logarithmic one); `method=:chambolle_pock` supports only the geometric mean and errors
+otherwise.
+
+The figure shows the equal-weight barycenter of the same three reference measures on
+the USA graph under the geometric, harmonic and logarithmic means, computed by
+`barycenter(G, refs, λ; method=:shooting)` (`src/experiments/MeansComparison.jl`; 12 to
+18 descent iterations and about a minute per mean). The panels are ordered by the
+variance `J = Σᵢ λᵢ W²(νᵢ, ν)`, which orders exactly as the means do. The barycenters
+differ modestly, by 0.05 to 0.14 in the π-weighted norm, with the logarithmic mean
+concentrating mass the most and the harmonic mean spreading it the most. The joint SOCP
+reproduces the geometric and harmonic barycenters at N=32 in a few seconds each, but its
+quadrature-log program stalls in Clarabel for N ≥ 8 on this graph (reported as an error
+rather than a stale iterate), which is what the shooting barycenter is for.
+
+![Barycenters under three admissible means](assets/means_comparison.png)
+
 ## API reference
 
 See the [Examples](examples.md) page for runnable experiment scripts, and the
