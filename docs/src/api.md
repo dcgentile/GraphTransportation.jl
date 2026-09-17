@@ -9,7 +9,9 @@ GraphTransportation
 ## Unified API
 
 One function per task; `method=:socp` (default), `:shooting` or `:chambolle_pock`
-selects the algorithm. Keywords are forwarded to the chosen implementation.
+selects the algorithm, and `barycenter` also accepts `method=:sinkhorn` (an entropic
+barycenter for a ground cost, a different object; see its docstring). Keywords are
+forwarded to the chosen implementation.
 
 ```@docs
 geodesic
@@ -57,6 +59,8 @@ action
 ```@docs
 sinkhorn_barycenter
 simplex_regression
+ground_cost
+graph_diameter
 ```
 
 ## Graph constructors

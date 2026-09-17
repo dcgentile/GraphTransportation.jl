@@ -4,7 +4,7 @@
 # defined and tested but are not exported.
 
 const GEODESIC_METHODS   = (:socp, :shooting, :chambolle_pock)
-const BARYCENTER_METHODS = (:socp, :chambolle_pock)
+const BARYCENTER_METHODS = (:socp, :chambolle_pock, :sinkhorn)
 const ANALYSIS_METHODS   = (:socp, :shooting, :chambolle_pock)
 
 _check_method(method, allowed, what) =
@@ -90,6 +90,15 @@ densities on `G`) with weights `λ`, i.e. the minimizer of `J(ν) = Σᵢ λᵢ 
   are the descent's per-iteration statistics. Keywords: `h`, `maxiters`, `tol`,
   `geodesic_tol`, `geodesic_steps`, `verbose`, and the rest of that method's options.
   `J` is evaluated afterwards with Chambolle-Pock geodesics at the same settings.
+- `:sinkhorn`: the **entropically regularized Wasserstein barycenter for a ground cost**
+  (Benamou et al. 2015; Bonneel, Peyré & Cuturi 2016; `sinkhorn_barycenter`). This is a
+  different object from the discrete transport barycenter of the other methods: it depends
+  on the choice of `cost` (see `ground_cost`) and on `epsilon`, and even for a single
+  reference it returns a blurred copy of that reference. Both `cost` and `epsilon` are
+  required keywords; `iters` (default 256) is the Sinkhorn budget. `J = Σᵢ λᵢ ⟨cost, Pᵢ⟩`
+  over the entropic plans `Pᵢ` (no entropy term) and is not comparable with the `J` of the
+  other methods; `info = (; cost, epsilon, iters, marginal_errors)`. `refs` are densities
+  with respect to `π` as elsewhere (converted to probability vectors internally).
 
 Returns the barycenter `ν`, the objective value `J` at `ν`, and the method-specific
 `info` named tuple.
@@ -100,6 +109,8 @@ function barycenter(G::MarkovGraph, refs::Vector{<:AbstractVector}, λ::Abstract
     if method == :socp
         ν, J, geodesics = barycenter_socp(G, refs, λ; kwargs...)
         return ν, J, (; geodesics)
+    elseif method == :sinkhorn
+        return _barycenter_sinkhorn(G, refs, λ; kwargs...)
     end
     kw = Dict{Symbol,Any}(kwargs)
     geodesic_steps = get(kw, :geodesic_steps, 100)
@@ -137,4 +148,18 @@ function analysis(G::MarkovGraph, target::AbstractVector, refs::Vector{<:Abstrac
     method == :socp     && return analyze_socp(G, target, refs; kwargs...)
     method == :shooting && return analyze_shooting(G, target, refs; kwargs...)
     return analysis(target, reduce(hcat, refs), Matrix(G.Q); kwargs...)
+end
+
+function _barycenter_sinkhorn(G::MarkovGraph, refs, λ; cost=nothing, epsilon=nothing, iters::Int=256)
+    cost    === nothing && throw(ArgumentError("barycenter(method=:sinkhorn) requires cost= (see ground_cost)"))
+    epsilon === nothing && throw(ArgumentError("barycenter(method=:sinkhorn) requires epsilon="))
+    size(cost) == (G.n, G.n) || throw(ArgumentError("cost must be $(G.n)×$(G.n)"))
+    μ = reduce(hcat, (r .* G.π for r in refs))              # densities -> probability vectors
+    p = sinkhorn_barycenter(λ, μ, nothing, cost, epsilon; iters=iters)
+    K = regularize_cost(cost, epsilon)
+    active = findall(>(0), λ)
+    plans = [_sinkhorn_plan(K, μ[:, i], p; iters=iters) for i in active]
+    J = sum(λ[i] * dot(cost, P) for (i, P) in zip(active, plans))
+    marginal_errors = [norm(vec(sum(P, dims=2)) .- μ[:, i], 1) for (i, P) in zip(active, plans)]
+    return p ./ G.π, J, (; cost, epsilon, iters, marginal_errors)
 end

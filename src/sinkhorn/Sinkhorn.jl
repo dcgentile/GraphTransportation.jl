@@ -213,3 +213,71 @@ function simplex_regression(measures, target, cost, epsilon; iters=256,
     result = Optim.optimize(f, g!, α0, Optim.LBFGS(), optim_options)
     return logarithmic_change_of_variable(Optim.minimizer(result))
 end
+
+
+"""
+    graph_diameter(G::MarkovGraph) -> Int
+
+Largest BFS hop count between any two nodes, treating the edges of `G` as unweighted.
+"""
+graph_diameter(G::MarkovGraph) = round(Int, maximum(_bfs_hops(G)))
+
+function _bfs_hops(G::MarkovGraph)
+    n = G.n
+    nbrs = [Int[] for _ in 1:n]
+    for (x, y) in G.E; push!(nbrs[x], y); push!(nbrs[y], x); end
+    D = fill(Inf, n, n)
+    for s in 1:n
+        D[s, s] = 0.0; queue = [s]; head = 1
+        while head <= length(queue)
+            u = queue[head]; head += 1
+            for v in nbrs[u]
+                if D[s, v] == Inf; D[s, v] = D[s, u] + 1; push!(queue, v); end
+            end
+        end
+    end
+    return D
+end
+
+"""
+    ground_cost(G::MarkovGraph, rule::Symbol; t=graph_diameter(G), normalize=true) -> Matrix{Float64}
+
+A ground cost matrix on the nodes of `G` for the entropic (Sinkhorn) barycenter,
+`barycenter(...; method=:sinkhorn)`:
+
+- `:shortest_path`: squared BFS hop count (edges of `G` unweighted).
+- `:diffusion`: squared diffusion distance at time `t` under the chain `G.Q`,
+  `D_t(x,y)² = Σ_z (Qᵗ[x,z] − Qᵗ[y,z])² / π(z)`. `t` defaults to the graph diameter so no
+  pair has zero distance. This uses the chain `G.Q` itself, which coincides with the random
+  walk on the adjacency only for unweighted chains.
+
+With `normalize=true` (default) the matrix is divided by its maximum so entries lie in
+`[0, 1]`, which keeps the kernel `exp(-cost/epsilon)` from underflowing at the usual
+`epsilon`. Throws if the graph is disconnected.
+"""
+function ground_cost(G::MarkovGraph, rule::Symbol; t::Int=graph_diameter(G), normalize::Bool=true)
+    C = if rule == :shortest_path
+        _bfs_hops(G) .^ 2
+    elseif rule == :diffusion
+        Qt = Matrix(G.Q)^t
+        D = zeros(G.n, G.n)
+        for i in 1:G.n, j in i+1:G.n
+            D[i, j] = D[j, i] = sum(((Qt[i, :] .- Qt[j, :]) .^ 2) ./ G.π)
+        end
+        D
+    else
+        throw(ArgumentError("ground_cost: rule must be :shortest_path or :diffusion, got :$rule"))
+    end
+    all(isfinite, C) || throw(ArgumentError("ground_cost: graph is disconnected"))
+    return normalize ? C ./ maximum(C) : C
+end
+
+# Two-marginal Sinkhorn transport plan between probability vectors μ and ν for kernel K;
+# used to evaluate the entropic objective of a Sinkhorn barycenter.
+function _sinkhorn_plan(K, μ, ν; iters=256)
+    u = ones(length(μ)); v = ones(length(ν))
+    for _ in 1:iters
+        u = μ ./ (K * v); v = ν ./ (K' * u)
+    end
+    return Diagonal(u) * K * Diagonal(v)
+end

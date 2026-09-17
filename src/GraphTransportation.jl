@@ -76,8 +76,8 @@ export geodesic, transport_cost, barycenter, analysis, GeodesicSolution
 # Chambolle-Pock (reference implementation); discrete_transport is not exported
 export action
 
-# Sinkhorn
-export sinkhorn_barycenter, simplex_regression
+# Sinkhorn (entropic, ground-cost based; also barycenter(...; method=:sinkhorn))
+export sinkhorn_barycenter, simplex_regression, ground_cost, graph_diameter
 
 # Markov chain constructors
 export markov_chain_from_edge_list, markov_chain_from_adjacency_matrix

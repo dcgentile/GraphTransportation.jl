@@ -1123,6 +1123,33 @@ end
     end
 end
 
+@testset "barycenter(method=:sinkhorn) and ground_cost" begin
+    G = MarkovGraph(grid_markov_chain(3)...)
+    C = ground_cost(G, :shortest_path)
+    @test C ≈ C' && all(iszero, diag(C))
+    @test C[1, 9] == 1.0 && C[1, 2] == 1 / 16          # corner-to-corner (4 hops)², adjacent 1²/4²
+    @test graph_diameter(G) == 4
+    Cd = ground_cost(G, :diffusion)
+    @test Cd ≈ Cd' && all(iszero, diag(Cd)) && maximum(Cd) == 1.0 && all(isfinite, Cd)
+    @test minimum(Cd[i, j] for i in 1:9, j in 1:9 if i != j) > 0
+    @test_throws ArgumentError ground_cost(G, :euclidean)
+
+    refs = [[3.0, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 3.0]]
+    refs = [r ./ dot(r, G.π) for r in refs]
+    λ = [0.5, 0.5]; ε = 0.05
+    ν, J, info = barycenter(G, refs, λ; method=:sinkhorn, cost=C, epsilon=ε)
+    # equivalence pin: the wrapper is exactly the old call under the density/probability conversion
+    @test ν .* G.π ≈ sinkhorn_barycenter(λ, reduce(hcat, (r .* G.π for r in refs)), nothing, C, ε)
+    @test dot(ν, G.π) ≈ 1.0 atol=1e-10
+    @test all(ν .≥ 0)
+    @test J ≥ 0 && all(info.marginal_errors .< 1e-8)
+    @test info.epsilon == ε && info.cost === C
+    @test_throws ArgumentError barycenter(G, refs, λ; method=:sinkhorn, epsilon=ε)
+    @test_throws ArgumentError barycenter(G, refs, λ; method=:sinkhorn, cost=C)
+    @test_throws ArgumentError geodesic(G, refs[1], refs[2]; method=:sinkhorn)
+    @test_throws ArgumentError analysis(G, ν, refs; method=:sinkhorn)
+end
+
 @testset "project_IJeq" begin
     ρ      = [1/3  2/3  1;  1/3  1/6  0;  1/3  1/6  0]
     q      = [1/2  3/4  1;  1/2  1/4  0;  0    0    0]
