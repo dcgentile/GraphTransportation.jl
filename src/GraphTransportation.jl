@@ -36,13 +36,13 @@ include("GraphCalculus.jl")
 include("MarkovChains.jl")
 include("CommonGraphs.jl")
 
-# include SOCP formulation primitives (Module 0, spec.txt)
+# include SOCP formulation primitives
 include("socp/MarkovGraph.jl")
 include("socp/Geodesic.jl")
 include("socp/Barycenter.jl")
 include("socp/Analysis.jl")
 
-# include Hamiltonian shooting primitives (Module 3, spec.txt)
+# include Hamiltonian shooting primitives (exp/log maps)
 include("shooting/Hamiltonian.jl")
 include("shooting/ExpLog.jl")
 
@@ -86,13 +86,13 @@ export grid_markov_chain, ma_house_markov_chain
 export graph_gradient, add_graph_gradient!, graph_divergence, graph_divergence!
 export laplacian_from_transition, metric_tensor, avg_operator, finite_difference_operator
 
-# SOCP formulation primitives (Module 0-2, 4:socp, spec.txt)
+# SOCP formulation: graph primitives, geodesics, barycenters, analysis
 export MarkovGraph
 export geodesic_socp, GeodesicSolution
 export barycenter_socp
 export analyze_socp
 
-# Hamiltonian shooting primitives (Module 3, spec.txt)
+# Hamiltonian shooting: exp/log maps and the :shooting analysis backend
 export hamiltonian, hamiltonian_flow, integrate_hamiltonian, ρ_floor, PositivityFloorError
 export weighted_laplacian, solve_weighted_laplacian, momentum_to_potential, exp_map, log_map, log_map_mollified, analyze_shooting
 

@@ -4,8 +4,8 @@
 
 Compute the discrete transport barycenter of reference measures `refs` (a vector of
 probability densities on `G`, one per reference) with weights `λ` as a single joint
-second-order-cone program (Module 2, `spec.txt`), rather than by intrinsic gradient
-descent (`barycenter`). Replicates Module 1's geodesic SOCP block (`_geodesic_block!`)
+second-order-cone program, rather than by intrinsic gradient
+descent (`barycenter`). Replicates the geodesic SOCP block (`_geodesic_block!`)
 once per reference with `λ[i] > 0`, sharing a single free right endpoint `ν` across
 all of them.
 

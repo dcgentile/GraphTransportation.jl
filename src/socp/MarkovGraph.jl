@@ -1,7 +1,7 @@
 """
     MarkovGraph
 
-Module 0 primitive for the SOCP formulation (see `spec.txt`).
+Graph primitive for the SOCP formulation.
 
 Stores an undirected graph together with a reversible Markov chain on it, using a
 per-edge (rather than per-node-pair-matrix) representation: momenta, potential

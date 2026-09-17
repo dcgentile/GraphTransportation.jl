@@ -1,10 +1,10 @@
-# bench_logexp.jl  (spec.txt Module 5.3)
+# bench_logexp.jl
 #
-# Module 3 round-trip errors and Newton iteration histograms for log_map/exp_map,
+# exp/log-map round-trip errors and Newton iteration histograms for log_map/exp_map,
 # plus wall-clock and W2 agreement against geodesic_socp, on
 #   - the 5x5 grid (25 nodes) and the 10x10 grid (100 nodes), random interior pairs
 #   - the MA house graph (160 nodes), random interior pairs
-# Also reports warm-started iteration counts (spec §3.4: shoot to a perturbed target
+# Also reports warm-started iteration counts (shoot to a perturbed target
 # starting from the previous φ0).
 #
 # Run from src/experiments/ with --project=.

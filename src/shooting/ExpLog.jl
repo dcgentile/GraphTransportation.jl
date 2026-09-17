@@ -54,7 +54,7 @@ end
 """
     exp_map(G::MarkovGraph, ν, tangent; t=1.0, nsteps=150, kind=:auto, floor_rtol=1e-6) -> ρ_end
 
-Module 3.2: the Riemannian exponential map at `ν`. Integrates the Hamiltonian flow
+The Riemannian exponential map at `ν`. Integrates the Hamiltonian flow
 (`integrate_hamiltonian`) from `(ν, φ0)` for time `t` and returns the endpoint density.
 
 `tangent` is either a potential `φ0 ∈ Rⁿ` (`kind=:potential`) or a momentum
@@ -105,17 +105,16 @@ end
     log_map(G::MarkovGraph, ν, target; φ0_init=nothing, tol=1e-9, maxiters=50, nsteps=150,
             floor_rtol=1e-6, verbose=false) -> (; φ0, m0, W2, iters, residual)
 
-Module 3.3: the Riemannian logarithm at `ν`, by single shooting. Solves
+The Riemannian logarithm at `ν`, by single shooting. Solves
 `F(φ0) := ρ(1; ν, φ0) − target = 0` with a damped Newton iteration over the mean-zero
 potentials (`n − 1` unknowns, the gauge `⟨φ0, 1⟩_π = 0` and the mass constraint each
 removing one dimension), with the Jacobian computed by `ForwardDiff` through
 `integrate_hamiltonian` and a backtracking line search on `‖F‖_π`.
 
 Initialization is the linearized geodesic `L_θ(ν) φ0 = π ∘ (target − ν)`, exact to first
-order in `target − ν` (spec §3.3), unless `φ0_init` (a potential) is given, e.g. from a
-previous solve at a nearby base point. This is the mechanism for spec §3.4's warm
-start; the (base, target)-keyed cache itself is not implemented, callers keep their
-own `φ0`. Cold starts on interior data take 2–4 Newton iterations; the initial guess
+order in `target − ν`, unless `φ0_init` (a potential) is given, e.g. from a
+previous solve at a nearby base point. This is the warm-start mechanism; no (base, target)-keyed cache is kept, callers
+hold their own `φ0`. Cold starts on interior data take 2–4 Newton iterations; the initial guess
 is damped by halving if it overshoots the positivity floor (far-apart concentrated
 endpoints, ~9 iterations).
 
@@ -123,13 +122,13 @@ Near the positivity floor the integrator's step bisection makes the residual
 piecewise-smooth in `φ0` (ForwardDiff differentiates whichever branch the trajectory
 took), so Newton can stall at the scale of those jumps; this is the failure mode for
 strongly mollified boundary data (`ε ≲ 1e-4`) and is reported as a line-search
-failure. Multiple shooting (spec §3.3) is not implemented.
+failure. Multiple shooting is not implemented.
 
 Returns the potential `φ0`, the momentum `m0 = θ(ν) ∘ ∇φ0`, the squared distance
 `W2 = 2H(ν, φ0)`, the Newton iteration count, and the final residual `‖F‖_π`. Errors if
 the iteration has not reached `tol` after `maxiters` steps, or if the shooting
 trajectory persistently hits the positivity floor (fall back to `geodesic_socp`, or
-mollify, spec §3.5). Requires `ν` and `target` strictly positive (see `ρ_floor`).
+mollify with `log_map_mollified`). Requires `ν` and `target` strictly positive (see `ρ_floor`).
 """
 function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
                  φ0_init=nothing, tol::Float64=1e-9, maxiters::Int=50, nsteps::Int=150,
@@ -166,7 +165,7 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
         catch err
             err isa PositivityFloorError || rethrow()
             k == 12 && error("log_map: no admissible initial potential found (endpoints too far apart for shooting); " *
-                             "fall back to geodesic_socp or mollify the endpoints (spec §3.5).")
+                             "fall back to geodesic_socp or mollify the endpoints (log_map_mollified).")
             z ./= 2
             nothing
         end
@@ -176,7 +175,7 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
     iters = 0
     while r > tol
         iters ≥ maxiters && error("log_map: Newton did not converge in $maxiters iterations (residual $r > tol $tol); " *
-                                  "fall back to geodesic_socp or mollify the endpoints (spec §3.5).")
+                                  "fall back to geodesic_socp or mollify the endpoints (log_map_mollified).")
         J = ForwardDiff.jacobian(F_reduced, z)
         δ = -(J \ F[1:n-1])
 
@@ -202,7 +201,7 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
         accepted || error("log_map: line search failed at iteration $(iters + 1) (residual $r). " *
                           "Near the positivity floor the integrator's step bisection makes the residual piecewise-smooth " *
                           "in φ0, so Newton can stall at the scale of those jumps; otherwise the target may be too far " *
-                          "from ν for single shooting. Fall back to geodesic_socp or mollify (spec §3.5).")
+                          "from ν for single shooting. Fall back to geodesic_socp or mollify (log_map_mollified).")
         iters += 1
         verbose && @info "log_map" iter=iters residual=r step=α
     end
@@ -217,7 +216,7 @@ end
     analyze_shooting(G::MarkovGraph, target, refs; nsteps=150, tol=1e-9, φ0_inits=nothing,
                      compute_condition=false, return_system=false) -> λ̂ (or (λ̂, A))
 
-Module 4's `:shooting` backend: like `analyze_socp`, but each reference's potential
+The `:shooting` analysis backend: like `analyze_socp`, but each reference's potential
 comes from `log_map(G, target, ref)` (the Hamiltonian velocity potential `φ0` at
 `target`) instead of the geodesic SOCP's endpoint dual. The Gram matrix and simplex QP
 are shared with `analyze_socp` (internal helper `potential_gram_qp`). Requires strictly
@@ -225,13 +224,13 @@ positive `target` and `refs`; a failure on any one reference propagates (there i
 per-reference fallback to the SOCP), and the same weighted Laplacian is refactored
 once per reference, which is negligible next to the Newton solves.
 
-`φ0_inits`, if given, is a vector of warm-start potentials, one per reference (spec §3.4).
+`φ0_inits`, if given, is a vector of warm-start potentials, one per reference.
 
 Note that this checks stationarity in the Hamiltonian flow's (RK4, `nsteps`)
 discretization, which differs from both `barycenter_socp`'s and the Chambolle-Pock
 descent's. A barycenter synthesized by either of those is therefore recovered only to
 `O(h)` in *that* method's time step, not to solver tolerance — see
-`SOCP_ANALYSIS_SPEC.md` §8 for why synthesis and analysis conventions must match.
+the `analyze_socp` docstring for why synthesis and analysis conventions must match.
 """
 function analyze_shooting(G::MarkovGraph, target::AbstractVector, refs::Vector{<:AbstractVector};
                           nsteps::Int=150, tol::Float64=1e-9, φ0_inits=nothing,
@@ -248,7 +247,7 @@ end
     log_map_mollified(G::MarkovGraph, ν, target; εs=(1e-2, 1e-3, 1e-4), tol=1e-7, kwargs...)
         -> (; W2, W, φ0, m0, fit, εs, Ws, approximate=true)
 
-Module 3.5: `log_map` for endpoints with zero or near-zero entries, where shooting
+`log_map` for endpoints with zero or near-zero entries, where shooting
 cannot be run directly. Both endpoints are mollified toward the uniform density,
 `ρ_ε = (1−ε)ρ + ε·𝟙` (still a probability density), `log_map` is run for each `ε` in
 `εs` (warm-starting each from the previous, coarser `ε`), and the distance is

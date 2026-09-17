@@ -1,7 +1,7 @@
 """
     GeodesicSolution
 
-Result of solving Module 1's geodesic SOCP (`geodesic_socp`). Note the naming
+Result of solving the geodesic SOCP (`geodesic_socp`). Note the naming
 convention: `W2` is the **squared** discrete transport distance; the metric
 itself is `sqrt(W2)`.
 
@@ -37,7 +37,7 @@ end
 """
     _geodesic_block!(model, G, N, h, left, right; base_name="") -> (; ρ, m, ϑ, w, c_left, c_right, c_cont)
 
-Add one geodesic's worth of variables and constraints (Module 1.1) to `model`:
+Add one geodesic's worth of variables and constraints to `model`:
 density/momentum/mean/action variables, the discrete continuity equation, and the
 mean-cone and action-epigraph RSOC constraints. `left` and `right` fix the two
 boundary densities and may each be either a plain vector (as in `geodesic_socp`) or
@@ -107,11 +107,15 @@ end
     geodesic_socp(G::MarkovGraph, ρA, ρB; N=10, optimizer=Clarabel.Optimizer, silent=true) -> GeodesicSolution
 
 Compute the discrete transport geodesic between densities `ρA` and `ρB` on `G` as a
-single second-order-cone program (Module 1, `spec.txt`), rather than via the
+single second-order-cone program, rather than via the
 Chambolle-Pock primal-dual iteration (`discrete_transport`). Returns the squared
 distance `W2 = ‖ρA - ρB‖_𝒲²`; the metric distance is `sqrt(W2)`.
 
-Uses the geometric mean `θ(s,t) = √(st)` (see `spec.txt`); this is not configurable.
+Uses the geometric mean `θ(s,t) = √(st)`. Supporting the other admissible means
+(logarithmic, harmonic, arithmetic; the dense `metric_tensor` already takes a `mean`)
+is a stated future goal; it is not yet configurable here, since the mean-cone
+constraint `ϑ² ≤ ρ̄ₓρ̄ᵧ` is specific to the geometric mean and each alternative needs
+its own conic representation.
 
 `N` is the number of time-discretization intervals (`h = 1/N`); the returned `ρ` has
 `N+1` columns and `m` has `N` columns. `optimizer` is any solver JuMP can dispatch to

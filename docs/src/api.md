@@ -31,7 +31,7 @@ barycenter_socp
 analyze_socp
 ```
 
-## Hamiltonian shooting (Module 3)
+## Hamiltonian shooting (exp/log maps)
 
 ```@docs
 hamiltonian

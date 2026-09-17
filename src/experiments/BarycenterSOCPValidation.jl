@@ -6,7 +6,7 @@ using Printf
 include("./ExperimentUtils.jl")
 
 """
-Module 2 validation (spec.txt §2.3.2/§2.3.3): compare `barycenter_socp` against the
+Validation of the joint barycenter SOCP: compare `barycenter_socp` against the
 existing intrinsic-descent `barycenter` on the hypercube (weighted & unweighted) and
 the 7x7 (49-node) grid, reporting:
   - ‖ν*_descent - ν*_SOCP‖_π and wall-clock ratio
