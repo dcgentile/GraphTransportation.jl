@@ -23,8 +23,8 @@ the resulting tangent vectors at `target`, and solving the simplex QP
   (`m0 = -(1/2h) θ(ρ̄_{1/2}) ∇ψ_{1/2}`, with the midpoint density and the half-step
   potential), so it is only an `O(h)` proxy for the endpoint potential, and
   `Σᵢ λᵢ m0ᵢ ≈ 0` is *not* the stationarity condition the SOCP barycenter satisfies.
-  At coarse `N` this mismatch is large (27.6% recovery error on the MA house graph at
-  `N=2`). Kept for comparison experiments only.
+  At coarse `N` this mismatch can be large (tens of percent recovery error at `N=2` on
+  irregular graphs). Kept for comparison experiments only.
 
 `refs` is a vector of reference probability densities on `G`. Returns the recovered
 weight vector `λ̂` (from `Convex.jl`/SCS on the small `p × p` Gram matrix), or

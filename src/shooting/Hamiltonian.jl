@@ -4,7 +4,9 @@ for **strictly positive** densities (`ρ_floor`-guarded); see `log_map_mollified
 the boundary-case fallback and `geodesic_socp` for the general case.
 
 State is `(ρ, φ) ∈ Rⁿ × Rⁿ`. Uses the geometric mean `θ(s,t) = √(st)` throughout,
-matching Modules 0-2; this is not configurable.
+matching the SOCP formulation (`geodesic_socp`, `barycenter_socp`). Other admissible
+means (logarithmic, harmonic, arithmetic; see `geomean`/`logmean`) are a stated future
+goal for both formulations and are not yet configurable here.
 
 Scope and scaling. Everything here requires strictly positive densities: `log_map`
 and `analyze_shooting` throw on non-interior data rather than mollifying it; the

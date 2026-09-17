@@ -12,11 +12,10 @@
 #     certificate J_socp <= J_descent
 #   - the descent scheme's loss curve (WGD variance trace across iterations),
 #     with J_socp drawn as a horizontal reference line
-#   - relative error between the recovered coordinates (analysis vs
-#     analyze_socp) against the true λ, and between each other. The SOCP side
-#     is analyzed with the endpoint-potential Gram matrix (analyze_socp's
-#     default); the cached momentum-based result
-#     (rc_socp_momentum, 27.6% error) is kept for the figure label.
+#   - relative error between the recovered coordinates (analysis for the descent
+#     barycenter, analyze_socp for the SOCP one) against the true λ, and between
+#     each other. Why the two recovery pipelines are not interchangeable between
+#     methods is a separate question: see SynthesisAnalysisMismatch.jl.
 #
 # Run from src/experiments/ with --project=.
 
@@ -71,10 +70,10 @@ if isfile(CACHE)
     d = load(CACHE)
     bar_descent = d["bar_descent"]; diffs = d["diffs"]; variances = d["variances"]
     ν_socp = d["ν_socp"]; J_socp = d["J_socp"]
-    rc_descent = d["rc_descent"]; rc_socp_momentum = d["rc_socp"]
+    rc_descent = d["rc_descent"]
     t_descent = d["t_descent"]; t_socp = d["t_socp"]
-    # The cache predates the potential-based analysis; re-analyze ν_socp (cheap)
-    # rather than resynthesizing anything.
+    # Re-analyze ν_socp (cheap) rather than trusting the cached value, which may
+    # predate the current analyze_socp default; nothing is resynthesized.
     G = MarkovGraph(Q_unw, u_unw)
     refs = [M[:, i] for i in 1:n_measures]
     rc_socp = vec(analyze_socp(G, ν_socp, refs; N=N))
@@ -90,11 +89,10 @@ else
     t_socp = @elapsed (ν_socp, J_socp, geos_socp) = barycenter_socp(G, refs, λ; N=N)
 
     println("Recovering barycentric coordinates (analysis vs analyze_socp) ...")
-    rc_descent      = vec(analysis(bar_descent, M, Q_unw; N=N, tol=geo_tol))
-    rc_socp         = vec(analyze_socp(G, ν_socp, refs; N=N))
-    rc_socp_momentum = vec(analyze_socp(G, ν_socp, refs; N=N, convention=:momentum))
+    rc_descent = vec(analysis(bar_descent, M, Q_unw; N=N, tol=geo_tol))
+    rc_socp    = vec(analyze_socp(G, ν_socp, refs; N=N))
 
-    @save CACHE bar_descent diffs variances ν_socp J_socp rc_descent rc_socp=rc_socp_momentum t_descent t_socp
+    @save CACHE bar_descent diffs variances ν_socp J_socp rc_descent rc_socp t_descent t_socp
 end
 
 G = MarkovGraph(Q_unw, u_unw)
@@ -108,7 +106,6 @@ wgd_iters = something(findlast(!=(0.0), variances), length(variances))
 
 rc_err_descent = norm(λ .- rc_descent) / norm(λ)
 rc_err_socp    = norm(λ .- rc_socp) / norm(λ)
-rc_err_socp_mom = norm(λ .- rc_socp_momentum) / norm(λ)
 rc_diff        = norm(rc_descent .- rc_socp) / norm(rc_descent)
 
 println("== MA house: descent vs SOCP ==")
@@ -119,8 +116,7 @@ println("== MA house: descent vs SOCP ==")
 println("  -- coordinate recovery --")
 println("    true λ:              ", λ)
 @printf("    recovered (descent): %s   rel. err %.4e\n", round.(rc_descent; sigdigits=4), rc_err_descent)
-@printf("    recovered (SOCP):    %s   rel. err %.4e   (momentum-based Gram: %s, rel. err %.4e)\n",
-        round.(rc_socp; sigdigits=4), rc_err_socp, round.(rc_socp_momentum; sigdigits=4), rc_err_socp_mom)
+@printf("    recovered (SOCP):    %s   rel. err %.4e\n", round.(rc_socp; sigdigits=4), rc_err_socp)
 @printf("    ‖rc_descent - rc_socp‖ / ‖rc_descent‖ = %.4e\n", rc_diff)
 
 # --- Geographic positions from shapefile centroids (same as MassachusettsBarycenter.jl) ---
@@ -176,9 +172,9 @@ Label(fig[0, :],
                 discrepancy, J_descent, J_socp, certificate_ok),
       fontsize=15, tellwidth=false)
 Label(fig[4, :],
-      @sprintf("coordinate recovery — true λ=%s | descent: %s (rel.err %.4e) | SOCP: %s (rel.err %.4e; momentum-based Gram: %.4e) | ‖Δrc‖/‖rc_descent‖=%.4e",
+      @sprintf("coordinate recovery — true λ=%s | descent: %s (rel.err %.4e) | SOCP: %s (rel.err %.4e) | ‖Δrc‖/‖rc_descent‖=%.4e",
                 round.(λ; sigdigits=4), round.(rc_descent; sigdigits=4), rc_err_descent,
-                round.(rc_socp; sigdigits=4), rc_err_socp, rc_err_socp_mom, rc_diff),
+                round.(rc_socp; sigdigits=4), rc_err_socp, rc_diff),
       fontsize=12, tellwidth=false)
 
 save("ma_house_socp_comparison.pdf", fig)

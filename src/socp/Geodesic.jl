@@ -111,7 +111,11 @@ single second-order-cone program, rather than via the
 Chambolle-Pock primal-dual iteration (`discrete_transport`). Returns the squared
 distance `W2 = ‖ρA - ρB‖_𝒲²`; the metric distance is `sqrt(W2)`.
 
-Uses the geometric mean `θ(s,t) = √(st)`; this is not configurable.
+Uses the geometric mean `θ(s,t) = √(st)`. Supporting the other admissible means
+(logarithmic, harmonic, arithmetic; the dense `metric_tensor` already takes a `mean`)
+is a stated future goal; it is not yet configurable here, since the mean-cone
+constraint `ϑ² ≤ ρ̄ₓρ̄ᵧ` is specific to the geometric mean and each alternative needs
+its own conic representation.
 
 `N` is the number of time-discretization intervals (`h = 1/N`); the returned `ρ` has
 `N+1` columns and `m` has `N` columns. `optimizer` is any solver JuMP can dispatch to

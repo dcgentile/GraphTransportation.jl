@@ -1,14 +1,25 @@
-# MassachusettsSOCPNativeAnalysis.jl
+# SynthesisAnalysisMismatch.jl
 #
-# Re-analyze the cached MA house SOCP
-# barycenter (ν_socp from MassachusettsSOCPComparison.jl, N=2) with the
-# potential-based ("native") Gram matrix, and compare against the momentum-based
-# Gram matrix that produced the 27.6% recovery error. Also reports the
-# residual-ratio diagnostic λᵀAλ / λ̂ᵀAλ̂ for both conventions and both target
-# points (ν_socp and bar_descent).
+# Why the synthesis and analysis pipelines are not interchangeable between methods.
 #
-# Nothing is resynthesized: ν_socp and bar_descent are reloaded from
-# ma_house_socp_comparison.jld2 (bar_descent alone took ~58 min).
+# A barycenter is a stationary point of Σᵢ λᵢ W²(ν, refᵢ) *in the discretization that
+# produced it*. Analyzing it (recovering λ from a Gram matrix of tangent vectors at ν)
+# only recovers the true λ to solver tolerance when the analysis checks stationarity
+# in that same convention; otherwise it recovers λ only to the discretization error.
+# This script makes that visible on the MA house graph by crossing two target
+# points with two Gram-matrix conventions and two time resolutions:
+#   targets:     ν_socp (from barycenter_socp, N=2) and bar_descent (from the
+#                Chambolle-Pock descent, N=2), reloaded from
+#                ma_house_socp_comparison.jld2 (bar_descent alone took ~58 min)
+#   conventions: analyze_socp with convention=:potential (endpoint-potential Gram,
+#                the SOCP's own stationarity) and convention=:momentum (initial
+#                momentum, the descent's stationarity)
+#   N:           2 (matching synthesis) and 10 (mismatched)
+# Expected pattern: each target is recovered essentially exactly by the convention
+# and N it was synthesized in, and only approximately by the other; refining N
+# shrinks but does not remove the mismatch. The residual-ratio diagnostic
+# λᵀAλ / λ̂ᵀAλ̂ (≈ 1 when the true λ is already the QP minimizer) is reported for each
+# cell.
 #
 # Run from src/experiments/ with --project=.
 
@@ -34,7 +45,7 @@ rc_descent_cached = d["rc_descent"]; rc_socp_cached = d["rc_socp"]
 relerr(x) = norm(λ .- x) / norm(λ)
 condA(A) = (e = abs.(eigvals(A)); maximum(e) / minimum(e))
 
-println("cached (momentum-based) recovery, for reference:")
+println("cached recovery values (each from its own synthesis convention), for reference:")
 @printf("  descent point via analysis():     %s  rel.err %.4f\n", round.(rc_descent_cached; digits=4), relerr(rc_descent_cached))
 @printf("  ν_socp via analyze_socp (old):    %s  rel.err %.4f\n", round.(rc_socp_cached; digits=4), relerr(rc_socp_cached))
 println()
@@ -59,5 +70,5 @@ for (name, target) in (("ν_socp", ν_socp), ("bar_descent", bar_descent)),
             maximum(diag(Amat)), condA(Amat), t)
 end
 
-@save "ma_house_socp_native_analysis.jld2" results
-println("Saved ma_house_socp_native_analysis.jld2")
+@save "synthesis_analysis_mismatch.jld2" results
+println("Saved synthesis_analysis_mismatch.jld2")
