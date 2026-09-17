@@ -9,8 +9,9 @@ GraphTransportation
 ## Unified API
 
 One function per task; `method=:socp` (default), `:shooting` or `:chambolle_pock`
-selects the algorithm, and `barycenter` also accepts `method=:sinkhorn` (an entropic
-barycenter for a ground cost, a different object; see its docstring). Keywords are
+selects the algorithm. All of `geodesic`, `transport_cost`, `barycenter` and `analysis`
+also accept `method=:sinkhorn` (entropic transport for a ground cost, a different object;
+`cost` and `epsilon` are required; see each docstring). Keywords are
 forwarded to the chosen implementation.
 
 ```@docs

@@ -3,9 +3,9 @@
 # `barycenter_socp`, `analyze_socp`, `analyze_shooting`, `discrete_transport`, ...) stay
 # defined and tested but are not exported.
 
-const GEODESIC_METHODS   = (:socp, :shooting, :chambolle_pock)
+const GEODESIC_METHODS   = (:socp, :shooting, :chambolle_pock, :sinkhorn)
 const BARYCENTER_METHODS = (:socp, :chambolle_pock, :sinkhorn)
-const ANALYSIS_METHODS   = (:socp, :shooting, :chambolle_pock)
+const ANALYSIS_METHODS   = (:socp, :shooting, :chambolle_pock, :sinkhorn)
 
 _check_method(method, allowed, what) =
     method in allowed || throw(ArgumentError("$what: method must be one of $(allowed), got :$method"))
@@ -25,6 +25,14 @@ The discrete transport geodesic between densities `ρA` and `ρB` on `G`, by one
 - `:chambolle_pock`: the paper's Galerkin-discretised primal-dual iteration
   (`discrete_transport`). Reference implementation; slowest. Keywords: `N`, `tol`,
   `maxiters`, `σ`, `τ`.
+- `:sinkhorn`: the **entropic displacement interpolation for a ground cost**: the path
+  is the entropic barycenter of the two endpoints at weights `(1−t, t)` for
+  `t = 0, 1/N, …, 1` (the two-reference special case of `barycenter(...; method=:sinkhorn)`),
+  a different object from the discrete transport geodesic. Requires `cost` (see
+  `ground_cost`) and `epsilon`; keywords `N` (default 10) and `iters` (Sinkhorn budget,
+  default 256). `W2` is the entropic transport cost `⟨cost, P⟩` of the plan between the
+  endpoints (no entropy term). The path's end columns are the *blurred* endpoints the
+  Sinkhorn barycenter returns, not `ρA`/`ρB` exactly; `m`, `φ0`, `φ1` are `NaN`-filled.
 
 All methods return a `GeodesicSolution`. Its `W2` is the squared distance; `ρ` is the
 `n × (steps+1)` density path and `m` the `|E| × steps` momentum path. The endpoint
@@ -43,7 +51,23 @@ function geodesic(G::MarkovGraph, ρA::AbstractVector, ρB::AbstractVector; meth
     _check_method(method, GEODESIC_METHODS, "geodesic")
     method == :socp     && return geodesic_socp(G, ρA, ρB; kwargs...)
     method == :shooting && return _geodesic_shooting(G, ρA, ρB; kwargs...)
+    method == :sinkhorn && return _geodesic_sinkhorn(G, ρA, ρB; kwargs...)
     return _geodesic_chambolle_pock(G, ρA, ρB; kwargs...)
+end
+
+function _geodesic_sinkhorn(G::MarkovGraph, ρA, ρB; N::Int=10, cost=nothing, epsilon=nothing, iters::Int=256)
+    t0 = time()
+    cost    === nothing && throw(ArgumentError("geodesic(method=:sinkhorn) requires cost= (see ground_cost)"))
+    epsilon === nothing && throw(ArgumentError("geodesic(method=:sinkhorn) requires epsilon="))
+    ρ = zeros(G.n, N + 1)
+    for (k, t) in enumerate(range(0.0, 1.0, length=N + 1))
+        ρ[:, k] = _barycenter_sinkhorn(G, [ρA, ρB], [1 - t, t]; cost=cost, epsilon=epsilon, iters=iters)[1]
+    end
+    K = regularize_cost(cost, epsilon)
+    P = _sinkhorn_plan(K, ρA .* G.π, ρB .* G.π; iters=iters)
+    W2 = dot(cost, P)
+    nanE = fill(NaN, length(G.E), N); nan = fill(NaN, G.n)
+    return GeodesicSolution(W2, ρ, nanE, nanE[:, 1], nan, nan, :converged, time() - t0)
 end
 
 function _geodesic_shooting(G::MarkovGraph, ρA, ρB; nsteps::Int=150, kwargs...)
@@ -135,8 +159,18 @@ their tangent vectors at `target`, and solve `min_{λ∈Δ} λᵀAλ`. The geode
   Keywords: `nsteps`, `tol`, `φ0_inits`.
 - `:chambolle_pock`: the paper's `analysis(ν, M, Q)` — initial momenta from
   `discrete_transport`. Keywords: `N`, `tol`.
+- `:sinkhorn`: **Wasserstein barycentric coordinates for a ground cost** (Bonneel, Peyré
+  & Cuturi 2016; `simplex_regression`): L-BFGS over the simplex on
+  `½‖P(λ) − target‖²`, with `P(λ)` the entropic barycenter of `refs`, differentiated
+  through the Sinkhorn iterations. Not a Gram-matrix method, so `return_system` and
+  `compute_condition` are not supported (an error, not silently ignored). Requires
+  `cost` and `epsilon`; keywords `iters` (Sinkhorn budget, default 256) and `α0`
+  (initial pre-softmax point, default `0`, i.e. uniform weights). The result depends on
+  `cost` and `epsilon`, and recovers exactly the weights of a barycenter synthesized by
+  `barycenter(...; method=:sinkhorn)` with the same `cost`, `epsilon` and `iters`.
 
-Common keywords: `compute_condition`, `return_system` (also return the Gram matrix `A`).
+Common keywords (Gram-matrix methods): `compute_condition`, `return_system` (also return
+the Gram matrix `A`).
 
 A barycenter is recovered to solver tolerance only by the method (and time
 resolution) that synthesized it; other methods recover it to their discretization error,
@@ -147,7 +181,18 @@ function analysis(G::MarkovGraph, target::AbstractVector, refs::Vector{<:Abstrac
     _check_method(method, ANALYSIS_METHODS, "analysis")
     method == :socp     && return analyze_socp(G, target, refs; kwargs...)
     method == :shooting && return analyze_shooting(G, target, refs; kwargs...)
+    method == :sinkhorn && return _analysis_sinkhorn(G, target, refs; kwargs...)
     return analysis(target, reduce(hcat, refs), Matrix(G.Q); kwargs...)
+end
+
+function _analysis_sinkhorn(G::MarkovGraph, target, refs; cost=nothing, epsilon=nothing, iters::Int=256,
+                            α0=zeros(length(refs)), compute_condition::Bool=false, return_system::Bool=false)
+    cost    === nothing && throw(ArgumentError("analysis(method=:sinkhorn) requires cost= (see ground_cost)"))
+    epsilon === nothing && throw(ArgumentError("analysis(method=:sinkhorn) requires epsilon="))
+    (compute_condition || return_system) &&
+        throw(ArgumentError("analysis(method=:sinkhorn) is not a Gram-matrix method; compute_condition/return_system are not available"))
+    μ = reduce(hcat, (r .* G.π for r in refs))
+    return simplex_regression(μ, target .* G.π, cost, epsilon; iters=iters, α0=α0)
 end
 
 function _barycenter_sinkhorn(G::MarkovGraph, refs, λ; cost=nothing, epsilon=nothing, iters::Int=256)

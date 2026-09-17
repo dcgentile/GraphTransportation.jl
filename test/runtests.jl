@@ -1043,7 +1043,8 @@ end
         @test graph_gradient(G, g_sh.φ1) ≈ graph_gradient(G, g_fine.φ1) rtol=0.05
         @test transport_cost(G, ρA, ρB; N=40) ≈ sqrt(g_socp.W2)
         @test transport_cost(G, ρA, ρB; method=:shooting) ≈ sqrt(g_sh.W2)
-        @test_throws ArgumentError geodesic(G, ρA, ρB; method=:sinkhorn)
+        @test_throws ArgumentError geodesic(G, ρA, ρB; method=:entropic)     # unknown method
+        @test_throws ArgumentError geodesic(G, ρA, ρB; method=:sinkhorn)      # cost/epsilon required
     end
 
     @testset "barycenter and analysis dispatch" begin
@@ -1146,8 +1147,33 @@ end
     @test info.epsilon == ε && info.cost === C
     @test_throws ArgumentError barycenter(G, refs, λ; method=:sinkhorn, epsilon=ε)
     @test_throws ArgumentError barycenter(G, refs, λ; method=:sinkhorn, cost=C)
-    @test_throws ArgumentError geodesic(G, refs[1], refs[2]; method=:sinkhorn)
-    @test_throws ArgumentError analysis(G, ν, refs; method=:sinkhorn)
+
+    @testset "geodesic(method=:sinkhorn): entropic displacement interpolation" begin
+        g = geodesic(G, refs[1], refs[2]; method=:sinkhorn, cost=C, epsilon=ε, N=4)
+        @test g isa GeodesicSolution && size(g.ρ) == (G.n, 5)
+        @test all(abs(dot(g.ρ[:, k], G.π) - 1) < 1e-10 for k in 1:5)
+        @test all(g.ρ .≥ 0) && all(isnan, g.m) && all(isnan, g.φ0)
+        @test g.W2 ≥ 0 && g.W2 ≈ dot(C, GraphTransportation._sinkhorn_plan(GraphTransportation.regularize_cost(C, ε), refs[1] .* G.π, refs[2] .* G.π))
+        # the t=0 / t=1 columns are the Sinkhorn barycenters with weights (1,0) / (0,1)
+        @test g.ρ[:, 1] ≈ barycenter(G, refs, [1.0, 0.0]; method=:sinkhorn, cost=C, epsilon=ε)[1]
+        @test g.ρ[:, 5] ≈ barycenter(G, refs, [0.0, 1.0]; method=:sinkhorn, cost=C, epsilon=ε)[1]
+        # time reversal: swapping the endpoints reverses the path
+        g_rev = geodesic(G, refs[2], refs[1]; method=:sinkhorn, cost=C, epsilon=ε, N=4)
+        @test g_rev.ρ ≈ g.ρ[:, end:-1:1] rtol=1e-8
+        @test transport_cost(G, refs[1], refs[2]; method=:sinkhorn, cost=C, epsilon=ε) ≈ sqrt(g.W2)
+        @test_throws ArgumentError geodesic(G, refs[1], refs[2]; method=:sinkhorn, epsilon=ε)
+    end
+
+    @testset "analysis(method=:sinkhorn): recovers the synthesis weights" begin
+        refs3 = [refs[1], refs[2], (v = [0.5, 0.5, 0.5, 0.5, 3.0, 0.5, 0.5, 0.5, 0.5]; v ./ dot(v, G.π))]
+        λ3 = [0.5, 0.3, 0.2]
+        ν3, _, _ = barycenter(G, refs3, λ3; method=:sinkhorn, cost=C, epsilon=ε)
+        λ̂ = analysis(G, ν3, refs3; method=:sinkhorn, cost=C, epsilon=ε)
+        @test sum(λ̂) ≈ 1.0 atol=1e-10
+        @test λ̂ ≈ λ3 atol=1e-3
+        @test_throws ArgumentError analysis(G, ν3, refs3; method=:sinkhorn, cost=C)
+        @test_throws ArgumentError analysis(G, ν3, refs3; method=:sinkhorn, cost=C, epsilon=ε, return_system=true)
+    end
 end
 
 @testset "project_IJeq" begin
