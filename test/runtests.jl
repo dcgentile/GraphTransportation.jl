@@ -6,6 +6,7 @@ using LinearAlgebra
 using Random
 using JuMP, Clarabel
 using QuadGK
+using ForwardDiff
 
 include("inclusion_helpers.jl")
 
@@ -1173,6 +1174,71 @@ end
         @test λ̂ ≈ λ3 atol=1e-3
         @test_throws ArgumentError analysis(G, ν3, refs3; method=:sinkhorn, cost=C)
         @test_throws ArgumentError analysis(G, ν3, refs3; method=:sinkhorn, cost=C, epsilon=ε, return_system=true)
+    end
+end
+
+@testset "Admissible means (types, derivatives, admissibility)" begin
+    means = (GeometricMean(), ArithmeticMean(), HarmonicMean(), LogarithmicMean(), QuadLogMean(8))
+    rng = MersenneTwister(12)
+    pts = [(rand(rng) * 3 + 0.05, rand(rng) * 3 + 0.05) for _ in 1:50]
+
+    @testset "$(θ)" for θ in means
+        for (s, t) in pts
+            @test θ(s, t) ≈ θ(t, s)                                   # symmetric
+            @test θ(2.5s, 2.5t) ≈ 2.5 * θ(s, t)                        # 1-homogeneous
+            @test θ(s, t) > 0
+            @test θ(s, t) ≤ (s + t) / 2 + 1e-12                        # ≤ arithmetic
+            # concavity (midpoint inequality) against a second random point
+            (s2, t2) = pts[mod1(hash((s, t)) % 50 + 1, 50)]
+            @test θ((s + s2) / 2, (t + t2) / 2) ≥ (θ(s, t) + θ(s2, t2)) / 2 - 1e-12
+            # ∂₁θ against ForwardDiff
+            @test partial_s(θ, s, t) ≈ ForwardDiff.derivative(u -> θ(u, t), s) rtol=1e-10
+            @test partial_t(θ, s, t) ≈ ForwardDiff.derivative(u -> θ(s, u), t) rtol=1e-10
+        end
+        @test θ(1.7, 1.7) ≈ 1.7
+        @test partial_s(θ, 1.7, 1.7) ≈ 0.5 atol=1e-12                # symmetric ⇒ ∂₁θ(s,s) = 1/2
+    end
+
+    @testset "ordering harmonic ≤ geometric ≤ logarithmic ≤ arithmetic" begin
+        for (s, t) in pts
+            @test HarmonicMean()(s, t) ≤ GeometricMean()(s, t) + 1e-12
+            @test GeometricMean()(s, t) ≤ LogarithmicMean()(s, t) + 1e-12
+            @test LogarithmicMean()(s, t) ≤ ArithmeticMean()(s, t) + 1e-12
+        end
+        @test GeometricMean()(2.0, 8.0) == 4.0 && HarmonicMean()(2.0, 8.0) == 3.2 && ArithmeticMean()(2.0, 8.0) == 5.0
+        @test LogarithmicMean()(1.0, ℯ) ≈ ℯ - 1
+    end
+
+    @testset "logarithmic mean: series branch is continuous with the closed form" begin
+        Λ = LogarithmicMean()
+        exact(s, t) = (s - t) / (log(s) - log(t))
+        for δ in (3e-3, 2e-3, 5e-4, 5e-5, 1e-6, -2e-3, -5e-4)   # straddle the 1e-3 switch
+            @test Λ(1.0 + δ, 1.0) ≈ exact(1.0 + δ, 1.0) rtol=1e-13
+            @test partial_s(Λ, 1.0 + δ, 1.0) ≈ ForwardDiff.derivative(u -> exact(u, 1.0), 1.0 + δ) rtol=1e-9
+        end
+        @test Λ(3.0, 3.0) == 3.0 && partial_s(Λ, 3.0, 3.0) == 0.5
+    end
+
+    @testset "QuadLogMean(K) converges to the logarithmic mean" begin
+        Λ = LogarithmicMean()
+        worst(K) = maximum(abs(QuadLogMean(K)(r, 1.0) - Λ(r, 1.0)) / Λ(r, 1.0) for r in (1.5, 3, 10, 30, 100, 1000))
+        @test worst(4) < 1e-3 && worst(6) < 1e-6 && worst(8) < 1e-9 && worst(12) < 1e-13
+        @test worst(4) > worst(6) > worst(8) > worst(12)
+        q = QuadLogMean(8)
+        @test sum(q.w) ≈ 1.0 && q.α ≈ 1 .- reverse(q.α)                # symmetric rule ⇒ symmetric mean
+        @test_throws ArgumentError QuadLogMean(0)
+    end
+
+    @testset "metric_tensor accepts an AdmissibleMean" begin
+        Q, π = triangle_markov_chain()
+        G = MarkovGraph(Q, π)
+        ρ = [1.5, 0.8, 0.7]
+        for θ in means
+            edge = metric_tensor(G, ρ, θ)
+            dense = metric_tensor(ρ, θ)
+            @test edge ≈ [dense[x, y] for (x, y) in G.E]
+        end
+        @test metric_tensor(G, ρ, GeometricMean()) ≈ metric_tensor(G, ρ)     # default is geometric
     end
 end
 
