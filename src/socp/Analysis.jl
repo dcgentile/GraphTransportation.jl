@@ -1,7 +1,6 @@
 """
     analyze_socp(G, target, refs; N=10, optimizer=Clarabel.Optimizer,
-                 convention=:potential, mean=GeometricMean(),
-                 compute_condition=false, return_system=false)
+                 convention=:potential, compute_condition=false, return_system=false)
         -> λ̂ (or (λ̂, A))
 
 The `:socp` analysis backend: recover the barycentric coordinates of
@@ -27,8 +26,8 @@ the resulting tangent vectors at `target`, and solving the simplex QP
   At coarse `N` this mismatch can be large (tens of percent recovery error at `N=2` on
   irregular graphs). Kept for comparison experiments only.
 
-`mean` selects the mobility, for both the geodesic solves and the Gram-matrix weighting;
-it must be the mean the target was synthesized with for the recovery to be exact.
+The mobility for both the geodesic solves and the Gram-matrix weighting is `G.mean`;
+recovery is exact for a target synthesized on the same graph (same mean).
 
 `refs` is a vector of reference probability densities on `G`. Returns the recovered
 weight vector `λ̂` (from `Convex.jl`/SCS on the small `p × p` Gram matrix), or
@@ -36,15 +35,14 @@ weight vector `λ̂` (from `Convex.jl`/SCS on the small `p × p` Gram matrix), o
 """
 function analyze_socp(G::MarkovGraph, target::AbstractVector, refs::Vector{<:AbstractVector};
                        N::Int=10, optimizer=Clarabel.Optimizer, convention::Symbol=:potential,
-                       mean::AdmissibleMean=GeometricMean(),
                        compute_condition::Bool=false, return_system::Bool=false)
     convention in (:potential, :momentum) ||
         throw(ArgumentError("convention must be :potential or :momentum, got $convention"))
 
-    geodesics = [geodesic_socp(G, target, ref; N=N, optimizer=optimizer, mean=mean) for ref in refs]
+    geodesics = [geodesic_socp(G, target, ref; N=N, optimizer=optimizer) for ref in refs]
 
     if convention == :potential
-        return potential_gram_qp(G, target, [geo.φ0 for geo in geodesics]; mean=mean,
+        return potential_gram_qp(G, target, [geo.φ0 for geo in geodesics];
                                  compute_condition=compute_condition, return_system=return_system)
     else
         tangent_vectors = map(geodesics) do geo
@@ -55,7 +53,7 @@ function analyze_socp(G::MarkovGraph, target::AbstractVector, refs::Vector{<:Abs
             end
             m_dense
         end
-        g = metric_tensor(target, mean)
+        g = metric_tensor(target, G.mean)
     end
 
     return solve_barycentric_coordinates_qp(tangent_vectors, g;

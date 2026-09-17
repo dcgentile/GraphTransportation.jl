@@ -74,7 +74,7 @@ _mean_cone!(model, ::LogarithmicMean, ρ̄x, ρ̄y, ϑ) =
     throw(ArgumentError("LogarithmicMean has no conic representation; use QuadLogMean(K) in the SOCP (K=8 is accurate to 1e-10)"))
 
 """
-    _geodesic_block!(model, G, N, h, left, right; base_name="", mean=GeometricMean()) -> (; ρ, m, ϑ, w, c_left, c_right, c_cont)
+    _geodesic_block!(model, G, N, h, left, right; base_name="") -> (; ρ, m, ϑ, w, c_left, c_right, c_cont)
 
 Add one geodesic's worth of variables and constraints to `model`:
 density/momentum/mean/action variables, the discrete continuity equation, and the
@@ -83,7 +83,7 @@ boundary densities and may each be either a plain vector (as in `geodesic_socp`)
 themselves JuMP variables/expressions (as in `barycenter_socp`, where `right` is the
 shared barycenter variable `ν`) — `@constraint(model, ρ[:, k] .== x)` accepts either.
 Does not set an objective; callers combine one or more blocks' `w` fields into theirs.
-`mean` selects the mobility `θ` (see `_mean_cone!`).
+The mobility `θ` is `G.mean` (see `_mean_cone!`).
 
 Also returns the constraint references whose duals carry the potentials:
 - `c_left`, `c_right`: the `n` endpoint constraints `ρ[:,1] .== left` and
@@ -99,8 +99,7 @@ Also returns the constraint references whose duals carry the potentials:
   ratio look non-constant). Not needed by any caller today; exposed for testing.
 """
 function _geodesic_block!(model, G::MarkovGraph, N::Int, h::Float64,
-                           left::AbstractVector, right::AbstractVector; base_name::String="",
-                           mean::AdmissibleMean=GeometricMean())
+                           left::AbstractVector, right::AbstractVector; base_name::String="")
     n = G.n
     nE = length(G.E)
 
@@ -123,7 +122,7 @@ function _geodesic_block!(model, G::MarkovGraph, N::Int, h::Float64,
     for t in 1:N, (e, (x, y)) in enumerate(G.E)
         ρ̄x = (ρ[x, t] + ρ[x, t+1]) / 2
         ρ̄y = (ρ[y, t] + ρ[y, t+1]) / 2
-        _mean_cone!(model, mean, ρ̄x, ρ̄y, ϑ[e, t])
+        _mean_cone!(model, G.mean, ρ̄x, ρ̄y, ϑ[e, t])
         @constraint(model, [ϑ[e, t], w[e, t], sqrt(2) * m[e, t]] in RotatedSecondOrderCone())
     end
 
@@ -145,31 +144,31 @@ function _endpoint_potentials(G::MarkovGraph, blk; weight::Float64=1.0)
 end
 
 """
-    geodesic_socp(G::MarkovGraph, ρA, ρB; N=10, optimizer=Clarabel.Optimizer, silent=true, mean=GeometricMean()) -> GeodesicSolution
+    geodesic_socp(G::MarkovGraph, ρA, ρB; N=10, optimizer=Clarabel.Optimizer, silent=true) -> GeodesicSolution
 
 Compute the discrete transport geodesic between densities `ρA` and `ρB` on `G` as a
 single second-order-cone program, rather than via the
 Chambolle-Pock primal-dual iteration (`discrete_transport`). Returns the squared
 distance `W2 = ‖ρA - ρB‖_𝒲²`; the metric distance is `sqrt(W2)`.
 
-`mean` selects the mobility `θ`: `GeometricMean()` (default), `ArithmeticMean()`,
+The mobility `θ` is the graph's `G.mean`: `GeometricMean()` (default), `ArithmeticMean()`,
 `HarmonicMean()` or `QuadLogMean(K)` (the logarithmic mean by Gauss–Legendre quadrature,
-`K` power cones per edge and time step; `LogarithmicMean()` itself has no conic form).
-See `_mean_cone!` for the conic representations and `AdmissibleMean` for the theory.
+`K` power cones per edge and time step; a graph built with `LogarithmicMean()` has no
+conic form and errors here, use `MarkovGraph(G; mean=QuadLogMean(8))`). See `_mean_cone!`
+for the conic representations and `AdmissibleMean` for the theory.
 
 `N` is the number of time-discretization intervals (`h = 1/N`); the returned `ρ` has
 `N+1` columns and `m` has `N` columns. `optimizer` is any solver JuMP can dispatch to
 that supports rotated second-order cone constraints (Clarabel by default).
 """
 function geodesic_socp(G::MarkovGraph, ρA::AbstractVector, ρB::AbstractVector;
-                        N::Int=10, optimizer=Clarabel.Optimizer, silent::Bool=true,
-                        mean::AdmissibleMean=GeometricMean())
+                        N::Int=10, optimizer=Clarabel.Optimizer, silent::Bool=true)
     h = 1.0 / N
 
     model = Model(optimizer)
     silent && set_silent(model)
 
-    blk = _geodesic_block!(model, G, N, h, ρA, ρB; mean=mean)
+    blk = _geodesic_block!(model, G, N, h, ρA, ρB)
     @objective(model, Min, h * sum(G.κ[e] * blk.w[e, t] for t in 1:N, e in 1:length(G.E)))
 
     optimize!(model)
