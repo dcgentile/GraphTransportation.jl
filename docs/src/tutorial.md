@@ -45,6 +45,12 @@ The path conserves mass at every time step:
 maximum(abs, [dot(geo.ρ[:, k], π) for k in 1:size(geo.ρ, 2)] .- 1)
 ```
 
+Mass moves from one corner to the other along the grid, spreading through the middle
+on the way (masses `ρ ∘ π` at five times along the path; figure from
+`src/experiments/TutorialFigures.jl`):
+
+![The geodesic from ρA to ρB at five times](assets/tutorial_geodesic.png)
+
 The SOCP's time discretization error vanishes with `N` (the bound is `O(1/N)`).
 Hamiltonian shooting is exact in time (it integrates the geodesic ODE), so it serves as
 the reference here, and the SOCP values approach it from above:
@@ -86,6 +92,8 @@ recovered to solver tolerance by the **same method and resolution** that synthes
 λ̂ = vec(analysis(G, ν, refs; N=10))
 round.(λ̂; digits=6)
 ```
+
+![The three references and their barycenter](assets/tutorial_barycenter.png)
 
 For a density that is not a barycenter of the references, `analysis` still returns the
 weights of the closest tangent-space combination; the Gram matrix `A` is available with
