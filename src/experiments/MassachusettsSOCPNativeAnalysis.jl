@@ -1,6 +1,6 @@
 # MassachusettsSOCPNativeAnalysis.jl
 #
-# SOCP_ANALYSIS_SPEC.md Experiments 2 + 3: re-analyze the cached MA house SOCP
+# Re-analyze the cached MA house SOCP
 # barycenter (ν_socp from MassachusettsSOCPComparison.jl, N=2) with the
 # potential-based ("native") Gram matrix, and compare against the momentum-based
 # Gram matrix that produced the 27.6% recovery error. Also reports the

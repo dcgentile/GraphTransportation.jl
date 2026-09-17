@@ -1,7 +1,7 @@
 # MassachusettsSOCPComparison.jl
 #
 # Compare the fixed-step (correct) intrinsic-descent barycenter against the
-# provably-optimal SOCP barycenter (Module 2, spec.txt) on the MA house graph,
+# provably-optimal SOCP barycenter (`barycenter_socp`) on the MA house graph,
 # using the same reference measures/weights as MassachusettsBarycenter.jl so
 # this is directly relatable to that paper figure. This is descent vs SOCP.
 #
@@ -15,7 +15,7 @@
 #   - relative error between the recovered coordinates (analysis vs
 #     analyze_socp) against the true λ, and between each other. The SOCP side
 #     is analyzed with the endpoint-potential Gram matrix (analyze_socp's
-#     default since SOCP_ANALYSIS_SPEC.md); the cached momentum-based result
+#     default); the cached momentum-based result
 #     (rc_socp_momentum, 27.6% error) is kept for the figure label.
 #
 # Run from src/experiments/ with --project=.

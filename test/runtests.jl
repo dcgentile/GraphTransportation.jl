@@ -324,7 +324,7 @@ end
     end
 end
 
-@testset "MarkovGraph / graph_gradient / graph_divergence (SOCP Module 0)" begin
+@testset "MarkovGraph / graph_gradient / graph_divergence" begin
     graphs = [cube_markov_chain(), weighted_hypercube_markov_chain(), triangle_markov_chain()]
 
     @testset "adjoint identity ⟨φ, div m⟩_π = -⟨∇φ, m⟩_Q" begin
@@ -408,7 +408,7 @@ end
     end
 end
 
-@testset "geodesic_socp vs two-node closed form (SOCP Module 1, spec §1.3.1)" begin
+@testset "geodesic_socp vs two-node closed form" begin
     # Two-node graph, θ = geometric mean. Parameterize densities w.r.t. π=[0.5,0.5]
     # by r ∈ (-1,1): ρ(r) = [1-r, 1+r]. The closed-form distance is
     #   W(ρ(s), ρ(t)) = (1/√2) ∫_s^t (1-r²)^{-1/4} dr
@@ -468,8 +468,8 @@ end
     end
 end
 
-@testset "geodesic_socp endpoint potentials: dual sign/scale calibration (SOCP Module 4 prerequisite)" begin
-    # SOCP_ANALYSIS_SPEC.md §5.3/§6.1: before building anything on JuMP's duals,
+@testset "geodesic_socp endpoint potentials: dual sign/scale calibration" begin
+    # Before building anything on JuMP's duals,
     # pin down their sign and scale. `φ0`/`φ1` are defined as the gradient of W2 with
     # respect to each endpoint density in the π-weighted pairing, so they must match
     # (a) a central finite difference of `geodesic_socp`'s own W2 (tight — same
@@ -499,7 +499,7 @@ end
 
     # The continuity-equation duals ψ_t are the half-step potentials and relate to the
     # momenta through the interval *midpoint* density: m_t = -(1/2h) θ(ρ̄_t) ∇(ψ_t/π).
-    # This is the `θ(ρ̄)∘∇φ = m` calibration spec.txt asks for; it is exact (to solver
+    # This is the `θ(ρ̄)∘∇φ = m` calibration; it is exact (to solver
     # tolerance) only with ρ̄_t, which is why reading φ off these duals and pairing it
     # with θ(ρ0) looked "not a clean constant" in an earlier attempt.
     Q, π = triangle_markov_chain()
@@ -519,11 +519,11 @@ end
     end
 end
 
-@testset "barycenter_socp endpoint potentials and KKT stationarity (SOCP Module 4 prerequisite)" begin
+@testset "barycenter_socp endpoint potentials and KKT stationarity" begin
     # The per-block potentials returned by barycenter_socp (with the λ[i] weighting
     # divided out) must be the same as an independent geodesic_socp solve's, and the
     # joint program's stationarity in ν is exactly Σᵢ λᵢ φ1ᵢ = const on supp(ν)
-    # (SOCP_ANALYSIS_SPEC.md §4.4). Potentials are only defined up to an additive
+    # Potentials are only defined up to an additive
     # constant, so compare gradients.
     Q, π = triangle_markov_chain()
     G = MarkovGraph(Q, π)
@@ -543,9 +543,9 @@ end
     @test maximum(abs, graph_gradient(G, stationarity)) < 1e-6 * scale
 end
 
-@testset "geodesic_socp vs Chambolle-Pock (SOCP Module 1, spec §1.3.2)" begin
+@testset "geodesic_socp vs Chambolle-Pock" begin
     # Cross-validate against the incumbent Chambolle-Pock solver on the 3-cycle,
-    # 4-cycle, and 3x3 grid (Erbar Figs. 5-6 configurations). Unlike the exact §1.3.1
+    # 4-cycle, and 3x3 grid (Erbar Figs. 5-6 configurations). Unlike the exact two-node
     # two-node case, there's no closed form here, so - as with the Chambolle-Pock step-size
     # regression test above - we check convergence to a common value as N grows rather
     # than a fixed tolerance at small N, since both solvers carry their own O(h) time-
@@ -585,11 +585,11 @@ end
     end
 end
 
-@testset "barycenter_socp vs geodesic_socp: p=2 sanity (SOCP Module 2, spec §2.3.1)" begin
+@testset "barycenter_socp vs geodesic_socp: p=2 sanity" begin
     # Bary({ν0,ν1}, (1-t,t)) must equal the geodesic point ν(t): with weights summing
     # to 1 over exactly two references, the barycenter SOCP and the geodesic SOCP solve
     # (mathematically) the same joint problem, so at grid times t=k/N they should agree
-    # at solver tolerance - much tighter than the ~1e-3 relative errors spec.txt reports
+    # at solver tolerance - much tighter than ~1e-3 relative error
     # for the intrinsic-descent comparison (Figs. 9-10), since both are now convex solves.
     # Clarabel's achieved precision varies with the LAPACK/BLAS shipped by the Julia
     # version (observed max error ~1.3e-4 on 1.11/1.12/pre vs ~1.5e-3 on 1.10), so the
@@ -639,9 +639,9 @@ end
     end
 end
 
-@testset "analyze_socp: recovers barycentric coordinates (SOCP Module 4, spec §4)" begin
-    # spec.txt's own validation for Module 4: synthesize a barycenter with Module 2,
-    # then recover its coordinates with Module 4 and check they match the synthesis
+@testset "analyze_socp: recovers barycentric coordinates" begin
+    # Synthesize a barycenter with barycenter_socp,
+    # then recover its coordinates with analyze_socp and check they match the synthesis
     # weights. Also cross-check against the existing (dissertation-validated)
     # Chambolle-Pock-based `analysis`, since analyze_socp reuses its exact Gram/QP
     # formulation (see solve_barycentric_coordinates_qp) - the two should agree
@@ -663,10 +663,10 @@ end
     @test λ_cp ≈ λ_true atol=1e-2
     @test λ_socp ≈ λ_cp atol=1e-2
 
-    # The point of the potential convention (SOCP_ANALYSIS_SPEC.md §4): recovery does
+    # The point of the potential convention: recovery does
     # not depend on N being fine. Re-synthesize and analyze at N=2, where the momentum
     # proxy is worst, and require the true λ to already be the QP's minimizer
-    # (residual ratio λᵀAλ / λ̂ᵀAλ̂ ≈ 1, spec §2.3's diagnostic).
+    # (residual ratio λᵀAλ / λ̂ᵀAλ̂ ≈ 1).
     ν2, _, _ = barycenter_socp(G, refs, λ_true; N=2)
     λ̂2, A2 = analyze_socp(G, ν2, refs; N=2, return_system=true)
     λ̂2 = vec(λ̂2)
@@ -675,8 +675,8 @@ end
     @test λ̂2' * A2 * λ̂2 ≤ 1e-6 * maximum(diag(A2))
 end
 
-@testset "Hamiltonian shooting: conservation laws (Module 3, spec §3.1)" begin
-    # The three invariants spec.txt calls out as the Module 3 gating tests: mass
+@testset "Hamiltonian shooting: conservation laws" begin
+    # The three invariants that gate the Hamiltonian flow: mass
     # conservation, H conservation, and 2H == the squared discrete transport distance
     # between the flow's own endpoints (cross-checked against the independently
     # validated geodesic_socp) - i.e. the Hamiltonian flow really does trace a genuine
@@ -690,7 +690,7 @@ end
             ρ0 = (rand(rng, G.n) .+ 0.5); ρ0 ./= dot(ρ0, π)
             # Small scale: an arbitrary large random φ0 can drive some node's density
             # through zero within [0,1] (a real feature of this geometry's boundary
-            # behavior, not a bug - see spec.txt §3.5's mollification fallback) even
+            # behavior, not a bug - see log_map_mollified) even
             # though ρ0 itself is safely interior. A genuine log_map-derived φ0 would
             # be commensurately small for a nearby target; this mimics that regime
             # without yet having exp_map/log_map built.
@@ -706,7 +706,7 @@ end
             @test maximum(abs.(Hs .- H0)) < 1e-4  # H conservation (RK4 truncation error)
 
             # 2H vs geodesic_socp.W2 between the flow's own endpoints. Unlike the
-            # larger-magnitude §1.3.1/§1.3.2 gates, φ0's small scale (see above) makes
+            # larger-magnitude geodesic_socp gates above, φ0's small scale (see above) makes
             # 2H itself small (~0.01-0.04), so the residual here is dominated by
             # Clarabel's own solver-tolerance noise floor rather than a shrinking O(h)
             # truncation error - that floor doesn't shrink with N, so we check absolute
@@ -720,9 +720,9 @@ end
     end
 end
 
-@testset "Hamiltonian shooting vs two-node closed form (Module 3, spec §3.1)" begin
+@testset "Hamiltonian shooting vs two-node closed form" begin
     # Stronger, fully independent check than the geodesic_socp cross-check above: the
-    # same closed-form two-node quadrature used to gate geodesic_socp in spec §1.3.1
+    # same closed-form two-node quadrature used to gate geodesic_socp above
     # (rho(r) = [1-r,1+r], W(rho(s),rho(t)) = (1/sqrt(2)) int_s^t (1-r^2)^(-1/4) dr).
     # On this graph the gauge-fixed potential reduces to a scalar φ = (c0,-c0), so we
     # can pick c0 directly (no log_map/shooting needed yet) and check that sqrt(2H0)
@@ -751,7 +751,7 @@ end
     @test_throws PositivityFloorError integrate_hamiltonian(G, ρ0, [0.6, -0.6]; nsteps=400, T=1.0)
 end
 
-@testset "exp_map / weighted Laplacian (Module 3, spec §3.2)" begin
+@testset "exp_map / weighted Laplacian" begin
     rng = MersenneTwister(2)
     Q, π = weighted_hypercube_markov_chain()
     G = MarkovGraph(Q, π)
@@ -792,7 +792,7 @@ end
     end
 end
 
-@testset "log_map by shooting (Module 3, spec §3.3)" begin
+@testset "log_map by shooting" begin
     rng = MersenneTwister(4)
 
     @testset "round trip, W2 and m0 vs geodesic_socp, Newton counts" begin
@@ -811,7 +811,7 @@ end
                 μ2 = 0.98 .* μ .+ 0.02 .* ones(G.n)
                 @test log_map(G, ν, μ2; φ0_init=r.φ0).iters ≤ log_map(G, ν, μ2).iters
 
-                # (ii)/(iii): m0 and W2 vs Module 1, O(h) in the SOCP's h=1/N
+                # m0 and W2 vs geodesic_socp, O(h) in the SOCP's h=1/N
                 prev = Inf
                 for N in (10, 40, 160)
                     sol = geodesic_socp(G, ν, μ; N=N)
@@ -824,7 +824,7 @@ end
                 # The SOCP's endpoint potential is the gradient of W2, and the flow's φ0
                 # is the Hamiltonian velocity potential: φ_socp ≈ -2 φ0 (continuum limit).
                 # This (and the signed m0 comparison above) is what pins the flow's global
-                # sign: the Module 3.1 conservation tests pass equally for the time-reversed
+                # sign: the conservation-law tests pass equally for the time-reversed
                 # flow, and the two-node closed-form checks take absolute values.
                 sol = geodesic_socp(G, ν, μ; N=160)
                 @test graph_gradient(G, sol.φ0) ≈ -2 .* graph_gradient(G, r.φ0) rtol=0.05
@@ -884,7 +884,7 @@ end
     @test A ≈ A' rtol=1e-12
 end
 
-@testset "analyze_shooting (Module 4 :shooting backend, spec §4)" begin
+@testset "analyze_shooting (:shooting analysis backend)" begin
     Q, π = weighted_hypercube_markov_chain()
     G = MarkovGraph(Q, π)
     rng = MersenneTwister(6)
@@ -923,7 +923,7 @@ end
     @test vec(analyze_shooting(G, ν, refs; φ0_inits=inits)) ≈ λ̂ atol=1e-8
 end
 
-@testset "log_map_mollified (Module 3.5 boundary fallback)" begin
+@testset "log_map_mollified (boundary fallback)" begin
     # Target supported on two columns of a 5x5 grid (zero elsewhere): shooting cannot
     # run directly, so mollify and extrapolate. geodesic_socp handles the boundary case
     # natively and is the reference. Both the extrapolated and the raw smallest-ε
@@ -954,7 +954,7 @@ end
     # convex; every term here (the K-cone / continuity-equation / J_Eq indicators, the
     # homogeneous-degree-1 edge action) is not, and applying it anyway converged to a
     # biased value on every graph with more than 2 nodes. The routine is now fixed-step
-    # only; this test ties it to the independently validated geodesic_socp (§1.3.1) so a
+    # only; this test ties it to the independently validated geodesic_socp so a
     # regression of that kind cannot come back unnoticed.
     Q, π = triangle_markov_chain()
     G = MarkovGraph(Q, π)
@@ -967,7 +967,7 @@ end
         W2_socp = geodesic_socp(G, μ, ν; N=N).W2
         W2_cp = action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20))
         err = abs(W2_cp - W2_socp) / W2_socp
-        @test err < 2.0 / N          # O(h), same pattern as §1.3.1
+        @test err < 2.0 / N          # O(h), same pattern as the two-node gate
         @test err < prev_err + 1e-9  # should not grow with N
         prev_err = err
     end

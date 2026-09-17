@@ -3,15 +3,15 @@
                  convention=:potential, compute_condition=false, return_system=false)
         -> λ̂ (or (λ̂, A))
 
-Module 4's `:socp` backend (`spec.txt`): recover the barycentric coordinates of
+The `:socp` analysis backend: recover the barycentric coordinates of
 `target` with respect to `refs` by solving, for each reference, the geodesic SOCP
-from `target` to it (`geodesic_socp`, Module 1), building a `p × p` Gram matrix of
+from `target` to it (`geodesic_socp`), building a `p × p` Gram matrix of
 the resulting tangent vectors at `target`, and solving the simplex QP
 `min_{λ∈Δ} λᵀAλ` shared with the existing `analysis` (`solve_barycentric_coordinates_qp`).
 
 `convention` selects which tangent-vector representation the Gram matrix is built from:
 
-- `:potential` (default): spec.txt's own formula,
+- `:potential` (default): the Riemannian Gram matrix at `target`,
   `A_ij = Σ_e κ_e θ(target)_e (∇φ_i)_e (∇φ_j)_e`, with `φ_i` the endpoint potential
   `GeodesicSolution.φ0` — the exact gradient of `𝒲_h²(target, ref_i)` with respect to
   `target`. Since a `barycenter_socp` solution is, by its KKT conditions, exactly a
@@ -24,7 +24,7 @@ the resulting tangent vectors at `target`, and solving the simplex QP
   potential), so it is only an `O(h)` proxy for the endpoint potential, and
   `Σᵢ λᵢ m0ᵢ ≈ 0` is *not* the stationarity condition the SOCP barycenter satisfies.
   At coarse `N` this mismatch is large (27.6% recovery error on the MA house graph at
-  `N=2`, see `SOCP_ANALYSIS_SPEC.md`). Kept for comparison experiments only.
+  `N=2`). Kept for comparison experiments only.
 
 `refs` is a vector of reference probability densities on `G`. Returns the recovered
 weight vector `λ̂` (from `Convex.jl`/SCS on the small `p × p` Gram matrix), or
@@ -60,9 +60,9 @@ end
 """
     potential_gram_qp(G, target, potentials; compute_condition=false, return_system=false) -> λ̂ (or (λ̂, A))
 
-Module 4 steps 2-3, shared by the `:socp` and `:shooting` backends: given one potential
+Gram matrix and simplex QP, shared by the `:socp` and `:shooting` backends: given one potential
 `φ_i` per reference (the geodesic from `target` to `ref_i`, in any sign/scale convention
-common to all `i`), assemble spec.txt's Gram matrix
+common to all `i`), assemble the Gram matrix
 `A_ij = Σ_e κ_e θ(target)_e (∇φ_i)_e (∇φ_j)_e` and solve `min_{λ∈Δ} λᵀAλ` via
 `solve_barycentric_coordinates_qp`.
 """

@@ -1,11 +1,11 @@
 # SOCPNativeResweep.jl
 #
-# SOCP_ANALYSIS_SPEC.md Experiments 4 + 5: rerun the SOCPGridConsistency.jl (24
+# Rerun the SOCPGridConsistency.jl (24
 # cells: k×k grids, k=5..10, N∈{2,5,10,20}) and SOCPProximityStudy.jl (32 cells:
 # k∈{7,10}, reference-pair separation d, N∈{2,5,10,20}) round-trip sweeps, but
 # analyze every synthesized barycenter with BOTH Gram-matrix conventions:
 #   :momentum  — the original analyze_socp (borrowed from CP's analysis())
-#   :potential — the native, endpoint-potential Gram matrix (spec.txt's formula)
+#   :potential — the native, endpoint-potential Gram matrix (the Riemannian inner product)
 # Same deterministic references/λ as the two original scripts. Barycenters are
 # stored in the cache this time so future re-analyses need no resynthesis.
 #
