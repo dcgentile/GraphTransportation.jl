@@ -1068,6 +1068,61 @@ end
     end
 end
 
+@testset "Sinkhorn barycentric coordinates (Bonneel, Peyré & Cuturi 2016)" begin
+    # Small instance: 3x3 grid, shortest-path-squared cost normalized to [0,1].
+    Q, π = grid_markov_chain(3); n = 9
+    A = Q .> 0
+    D = fill(Inf, n, n); for i in 1:n; D[i, i] = 0.0; end
+    for i in 1:n, j in 1:n; A[i, j] && (D[i, j] = 1.0); end
+    for k in 1:n, i in 1:n, j in 1:n; D[i, j] = min(D[i, j], D[i, k] + D[k, j]); end
+    cost = (D .^ 2) ./ maximum(D .^ 2)
+    rng = MersenneTwister(1)
+    M = rand(rng, n, 3) .+ 0.2; M ./= sum(M, dims=1)
+    q = rand(rng, n) .+ 0.2; q ./= sum(q)
+    ε = 0.1
+    λ = [0.5, 0.3, 0.2]
+    SK = GraphTransportation
+
+    @testset "barycenter is a probability vector; permutation-equivariant" begin
+        p = sinkhorn_barycenter(λ, M, nothing, cost, ε; iters=64)
+        @test sum(p) ≈ 1.0 atol=1e-10
+        @test all(p .> 0)
+        p2 = sinkhorn_barycenter(λ[[2, 1, 3]], M[:, [2, 1, 3]], nothing, cost, ε; iters=64)
+        @test p2 ≈ p rtol=1e-12
+    end
+
+    # Algorithm 1's gradient w = ∇_λ E_L against central finite differences of the same
+    # finite-L objective (the paper's own check, Fig. 5), at a small L where the reverse
+    # loop's bounds matter (an off-by-one gave the wrong sign at L=2) and at convergence.
+    @testset "∇_λ E_L matches finite differences" begin
+        E(λv, L) = SK.sqeuc_loss(SK.sinkhorn_differentiate(λv, M, q, cost, ε, L)[1], q)
+        h = 1e-6
+        for L in (3, 6, 60)
+            fd = [(E(λ .+ h .* (1:3 .== i), L) - E(λ .- h .* (1:3 .== i), L)) / (2h) for i in 1:3]
+            _, w = SK.sinkhorn_differentiate(λ, M, q, cost, ε, L)
+            @test w ≈ fd rtol=1e-6
+        end
+    end
+
+    # The regression variable is α with λ = softmax(α); the gradient handed to L-BFGS
+    # must include the softmax Jacobian (it did not, and was ~28x off).
+    @testset "∇_α E matches finite differences through the softmax" begin
+        α = [0.2, -0.1, 0.3]
+        Eα(a) = SK.barycentric_loss(a, M, q, cost, ε; iters=40)
+        h = 1e-6
+        fd = [(Eα(α .+ h .* (1:3 .== i)) - Eα(α .- h .* (1:3 .== i))) / (2h) for i in 1:3]
+        @test SK.loss_gradient(α, M, cost, q, ε; iters=40) ≈ fd rtol=1e-6
+        @test abs(sum(SK.loss_gradient(α, M, cost, q, ε; iters=40))) < 1e-12   # tangent to the simplex
+    end
+
+    @testset "simplex_regression recovers the synthesis weights" begin
+        target = sinkhorn_barycenter(λ, M, nothing, cost, ε; iters=256)
+        λ̂ = simplex_regression(M, target, cost, ε; iters=256)
+        @test sum(λ̂) ≈ 1.0 atol=1e-10
+        @test λ̂ ≈ λ atol=1e-3
+    end
+end
+
 @testset "project_IJeq" begin
     ρ      = [1/3  2/3  1;  1/3  1/6  0;  1/3  1/6  0]
     q      = [1/2  3/4  1;  1/2  1/4  0;  0    0    0]
