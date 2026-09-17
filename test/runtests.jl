@@ -1413,3 +1413,31 @@ end
     @test isapprox(q_pr, answer)
     @test is_in_JEq(ρ_pr, q_pr)
 end
+
+@testset "Logarithmic mean: the heat flow is the entropy gradient flow (Maas 2011)" begin
+    # For θ the logarithmic mean, θ(s,t)(log t − log s) = t − s, so the velocity field of
+    # the potential −log ρ is exactly the heat flow ρ̇ = (Q − I)ρ, and the entropy
+    # Ent(ρ) = Σ π ρ log ρ dissipates along the heat flow at the Fisher information
+    # 2H(ρ, log ρ). This is what makes the heat flow the W-gradient flow of the entropy
+    # (Maas 2011); it characterizes the logarithmic mean, so the other means must fail it.
+    # Exercises the mean plumbing, the sign conventions of the flow and the adjoint identity.
+    Q, π = grid_markov_chain(4)
+    rng = MersenneTwister(3); ρ = rand(rng, 16) .+ 0.3; ρ ./= dot(ρ, π)
+    heat = (Matrix(Q) - I) * ρ
+    ent(ρ) = sum(π .* ρ .* log.(ρ))
+    dEdt = dot(π .* (log.(ρ) .+ 1), heat)                       # chain rule along the heat flow
+    t = 1e-5                                                       # sanity: finite difference along the semigroup
+    @test abs((ent(exp(t * (Matrix(Q) - I)) * ρ) - ent(ρ)) / t - dEdt) < 1e-3
+    for θ in (LogarithmicMean(), QuadLogMean(8))
+        G = MarkovGraph(Q, π; mean=θ)
+        ρ̇, _ = hamiltonian_flow(G, ρ, -log.(ρ))
+        @test norm(ρ̇ - heat) < 1e-12
+        @test abs(dEdt + 2 * hamiltonian(G, ρ, log.(ρ))) < 1e-12
+    end
+    for θ in (GeometricMean(), ArithmeticMean(), HarmonicMean())
+        G = MarkovGraph(Q, π; mean=θ)
+        ρ̇, _ = hamiltonian_flow(G, ρ, -log.(ρ))
+        @test norm(ρ̇ - heat) > 1e-2
+        @test abs(dEdt + 2 * hamiltonian(G, ρ, log.(ρ))) > 1e-3
+    end
+end
