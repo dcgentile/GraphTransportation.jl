@@ -112,7 +112,7 @@ end
         end
     end
 
-    # y = 0, x > 0: unique minimiser of distance is q = 0, so projects to (0, 0)
+    # y = 0, x > 0: unique minimizer of distance is q = 0, so projects to (0, 0)
     @testset "y=0 projects to origin" begin
         for x in [0.1, 1.0, 5.0]
             p, q = proj(x, 0.0)

@@ -22,7 +22,7 @@ The discrete transport geodesic between densities `ρA` and `ρB` on `G`, by one
   integrated to produce the path. Exact in time, fastest, but requires strictly positive
   endpoints (`PositivityFloorError`/assertion otherwise). Keywords: `nsteps`, `tol`,
   `maxiters`, `φ0_init`.
-- `:chambolle_pock`: the paper's Galerkin-discretised primal-dual iteration
+- `:chambolle_pock`: the paper's Galerkin-discretized primal-dual iteration
   (`discrete_transport`). Reference implementation; slowest. Keywords: `N`, `tol`,
   `maxiters`, `σ`, `τ`.
 - `:sinkhorn`: the **entropic displacement interpolation for a ground cost**: the path
@@ -35,7 +35,7 @@ The discrete transport geodesic between densities `ρA` and `ρB` on `G`, by one
   Sinkhorn barycenter returns, not `ρA`/`ρB` exactly; `m`, `φ0`, `φ1` are `NaN`-filled.
 
 The transport metric's mean is the graph's `G.mean` (see `MarkovGraph`): `:socp` and
-`:shooting` honour every `AdmissibleMean` (the SOCP needs `QuadLogMean` for the logarithmic
+`:shooting` honor every `AdmissibleMean` (the SOCP needs `QuadLogMean` for the logarithmic
 mean), `:chambolle_pock` supports only `GeometricMean()` and errors otherwise, and
 `:sinkhorn`'s geometry is its ground cost, so it ignores the mean.
 

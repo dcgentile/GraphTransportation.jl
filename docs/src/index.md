@@ -20,7 +20,7 @@ Given a graph encoded as a Markov transition matrix `Q` with stationary distribu
   simplex-regression-based coordinate recovery
 
 Every function takes `method=:socp` (default), `:shooting`, or `:chambolle_pock`. The
-last is the paper's Galerkin-discretised Chambolle-Pock solver with gradient-descent
+last is the paper's Galerkin-discretized Chambolle-Pock solver with gradient-descent
 barycenters, kept as the reference implementation; the SOCP and shooting paths are the
 recommended tools: orders of magnitude faster, with certified optimality for
 barycenters and coordinate recovery that is exact at the synthesis resolution.
