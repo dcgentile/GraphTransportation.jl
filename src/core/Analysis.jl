@@ -11,7 +11,8 @@ assembles `A[i,j] = Σ_{x,y} tangent_vectors[i][x,y] * tangent_vectors[j][x,y] *
 and solves `min_{w≥0, Σw=1} w'Aw` via Convex.jl/SCS. Factored out of `analysis` so
 `analyze_socp` (which sources tangent vectors from `geodesic_socp` instead of
 `discrete_transport`) can reuse the exact same, already-validated Gram/QP formulation
-rather than re-deriving it.
+rather than re-deriving it. Returns `λ̂` as a `Vector` (or `(λ̂, A)` with
+`return_system=true`).
 """
 function solve_barycentric_coordinates_qp(tangent_vectors, g; compute_condition=false, return_system=false)
     p = length(tangent_vectors)
@@ -35,10 +36,10 @@ function solve_barycentric_coordinates_qp(tangent_vectors, g; compute_condition=
 
     Convex.solve!(problem, SCS.Optimizer)
     if return_system
-        return (x.value, A)
+        return (vec(x.value), A)
     end
 
-    x.value  # optimal solution
+    vec(x.value)  # optimal solution
 end
 
 """
