@@ -1070,7 +1070,7 @@ end
         # with the SOCP optimum (certified) at the SOCP's O(1/N), and for the geometric mean
         # the SOCP evaluates it as no better than its own optimum
         ν_sh, J_sh, info_sh = barycenter(G, refs, λ; method=:shooting, tol=1e-6)
-        @test info_sh.iters < 200 && info_sh.grad_hist[end] < 1e-6
+        @test info_sh.status == :converged && info_sh.grad_hist[end] < 1e-6
         @test issorted(info_sh.J_hist; rev=true)                     # monotone descent
         ν_fine, J_fine, _ = barycenter(G, refs, λ; N=80)
         @test norm((ν_sh .- ν_fine) .* sqrt.(π)) < 5e-3

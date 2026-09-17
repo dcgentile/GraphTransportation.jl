@@ -123,12 +123,20 @@ densities on `G`) with weights `λ`, i.e. the minimizer of `J(ν) = Σᵢ λᵢ 
   previous iteration), forms the descent direction `Σᵢ λᵢ φ0ᵢ` as a potential, and moves
   along the geodesic with `exp_map`. Requires strictly positive references and works with
   every `AdmissibleMean`, including the exact `LogarithmicMean`, which the SOCP cannot
-  represent. `info = (; iters, J_hist, grad_hist, h)`: the objective and the Riemannian
-  gradient norm per iteration and the final step size. Keywords: `h` (step, default 1,
-  halved on a positivity-floor hit or an objective increase beyond the log maps' noise,
-  doubled back toward its initial value after an accepted step), `maxiters` (200), `tol`
-  (gradient-norm stopping threshold, 1e-7), `nsteps` (integrator steps, 150), `init`
-  (starting density, default the λ-weighted average of the references), `verbose`.
+  represent. `info = (; iters, status, J_hist, grad_hist, h)`: the objective and the
+  Riemannian gradient norm per iteration (including the final point), the final step
+  size, and `status` — `:converged` (gradient norm below `tol`), `:stalled` (no step
+  decreases the objective by more than `ftol` relative: the descent has reached the
+  precision of the log maps), or `:maxiters` (warns). Keywords: `h` (step, default 1,
+  halved on a positivity-floor hit or an objective increase, doubled back toward its
+  initial value after an accepted step), `maxiters` (200), `tol` (gradient-norm
+  threshold, 1e-6), `ftol` (relative objective decrease below which the descent stops,
+  1e-12), `log_tol` (residual tolerance of the log maps, 1e-12; the objective's noise
+  is roughly the square of the potentials' error, so this must be well below `ftol`),
+  `nsteps` (integrator steps, 150), `init` (starting density, default the λ-weighted
+  average of the references), `verbose`. Steps are accepted only on a strict objective
+  decrease, so `J_hist` is monotone; a step's decrease is about `h‖g‖²`, so asking for
+  `tol` below `√(ftol·J)` typically ends as `:stalled` rather than `:converged`.
   First-order, so it converges linearly; the SOCP remains the certificate.
 - `:chambolle_pock`: the paper's intrinsic gradient descent with Chambolle-Pock
   geodesics (the `barycenter(M, weights, Q)` method). `info = (; norm_diffs, variances)`
@@ -234,8 +242,8 @@ function _barycenter_sinkhorn(G::MarkovGraph, refs, λ; cost=nothing, epsilon=no
     return p ./ G.π, J, (; cost, epsilon, iters, marginal_errors)
 end
 
-function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters::Int=200, tol::Float64=1e-7,
-                              nsteps::Int=150, init=nothing, verbose::Bool=false)
+function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters::Int=200, tol::Float64=1e-6,
+                              ftol::Float64=1e-12, nsteps::Int=150, log_tol::Float64=1e-12, init=nothing, verbose::Bool=false)
     active = findall(>(0), λ)
     ν = init === nothing ? sum(λ[i] .* refs[i] for i in active) : copy(init)
     ν = ν ./ dot(ν, G.π)
@@ -248,7 +256,7 @@ function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters
             r = nothing
             for init in (inits[i], nothing)
                 r = try
-                    log_map(G, ν, refs[i]; nsteps=nsteps, φ0_init=init)
+                    log_map(G, ν, refs[i]; nsteps=nsteps, tol=log_tol, φ0_init=init)
                 catch err
                     err isa Union{ErrorException,PositivityFloorError} || rethrow()
                     nothing
@@ -269,15 +277,16 @@ function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters
     iters = 0
     J = objective(rs)
     h0 = h
+    status = :maxiters
     for k in 1:maxiters
         g = sum(λ[i] .* rs[i].φ0 for i in active)          # Riemannian descent direction as a potential
         gnorm = sqrt(2 * hamiltonian(G, ν, g))              # its metric norm at ν
         push!(J_hist, J); push!(grad_hist, gnorm)
         verbose && @info "barycenter(:shooting)" iter=k J=J gradnorm=gnorm h=h
-        gnorm < tol && break
+        gnorm < tol && (status = :converged; break)
         # step along the geodesic; halve h on a floor hit, an unreachable reference, or an
         # objective increase. The candidate's log maps are kept for the next iteration.
-        accepted = false
+        accepted = false; decreased = false; unreachable = false
         for _ in 1:20
             candidate = try
                 exp_map(G, ν, h .* g; nsteps=nsteps)
@@ -285,10 +294,12 @@ function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters
                 err isa PositivityFloorError || rethrow()
                 nothing
             end
-            if candidate !== nothing && minimum(candidate) > 0
+            unreachable = candidate === nothing || minimum(candidate) ≤ 0
+            if !unreachable
                 rs_new = logmaps(candidate, Dict(i => rs[i].φ0 for i in active))
-                # accept unless J went up by more than the log maps' own noise (relative)
-                if rs_new !== nothing && objective(rs_new) ≤ J * (1 + 1e-9)
+                unreachable = rs_new === nothing
+                if !unreachable && objective(rs_new) < J
+                    decreased = J - objective(rs_new) > ftol * abs(J)
                     ν, rs, J = candidate, rs_new, objective(rs_new)
                     accepted = true
                     h = min(2h, h0)          # let the step recover after a halving
@@ -297,9 +308,17 @@ function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters
             end
             h /= 2
         end
-        accepted || error("barycenter(:shooting): no admissible step found at iteration $k (h=$h); the barycenter may touch the boundary — use method=:socp")
         iters = k
+        if !accepted
+            unreachable && error("barycenter(:shooting): no admissible step found at iteration $k (h=$h); the barycenter may touch the boundary — use method=:socp")
+            status = :stalled; break         # no step decreases J: at the log maps' precision
+        end
+        decreased || (status = :stalled; break)
     end
-    iters == maxiters && grad_hist[end] ≥ tol && @warn "barycenter(:shooting) reached maxiters=$maxiters with gradient norm $(grad_hist[end]) > tol=$tol"
-    return ν, J, (; iters, J_hist, grad_hist, h)
+    if status == :stalled && length(J_hist) == iters   # record the accepted final point
+        g = sum(λ[i] .* rs[i].φ0 for i in active)
+        push!(J_hist, J); push!(grad_hist, sqrt(2 * hamiltonian(G, ν, g)))
+    end
+    status == :maxiters && @warn "barycenter(:shooting) reached maxiters=$maxiters with gradient norm $(grad_hist[end]) > tol=$tol"
+    return ν, J, (; iters, status, J_hist, grad_hist, h)
 end
