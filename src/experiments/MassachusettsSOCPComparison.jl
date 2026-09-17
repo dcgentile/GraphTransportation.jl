@@ -3,8 +3,7 @@
 # Compare the fixed-step (correct) intrinsic-descent barycenter against the
 # provably-optimal SOCP barycenter (Module 2, spec.txt) on the MA house graph,
 # using the same reference measures/weights as MassachusettsBarycenter.jl so
-# this is directly relatable to that paper figure. No adaptive-step comparison
-# here (that's AdaptiveComparison.jl's job) — this is descent vs SOCP.
+# this is directly relatable to that paper figure. This is descent vs SOCP.
 #
 # Reports/plots:
 #   - the two barycenters side by side on the real MA geography, + |difference|
@@ -83,7 +82,7 @@ else
     println("Running descent barycenter (fixed-step CP, N=$N, tol=$tol, geo_tol=$geo_tol, maxiters=$maxiters) ...")
     t_descent = @elapsed (bar_descent, diffs, variances) = barycenter(M, λ, Q_unw;
         h=h, tol=tol, geodesic_tol=geo_tol, geodesic_steps=N, maxiters=maxiters,
-        geodesic_warmstart=true, return_stats=true, adaptive=false, verbose=true)
+        geodesic_warmstart=true, return_stats=true, verbose=true)
 
     println("Running SOCP barycenter ...")
     G = MarkovGraph(Q_unw, u_unw)
