@@ -1304,68 +1304,74 @@ end
 
 @testset "Hamiltonian shooting with each admissible mean" begin
     means = (GeometricMean(), ArithmeticMean(), HarmonicMean(), LogarithmicMean(), QuadLogMean(8))
-    socp_mean(θ) = θ isa LogarithmicMean ? QuadLogMean(8) : θ      # the SOCP needs a conic form
+    socp_graph(G) = G.mean isa LogarithmicMean ? MarkovGraph(G; mean=QuadLogMean(8)) : G   # the SOCP needs a conic form
 
     @testset "conservation laws and 2H vs the SOCP with the same mean" begin
         Q, π = weighted_hypercube_markov_chain()
-        G = MarkovGraph(Q, π)
+        G0 = MarkovGraph(Q, π)
         rng = MersenneTwister(3)
-        ν = rand(rng, G.n) .+ 0.5; ν ./= dot(ν, π)
-        μ = rand(rng, G.n) .+ 0.5; μ ./= dot(μ, π)
+        ν = rand(rng, G0.n) .+ 0.5; ν ./= dot(ν, π)
+        μ = rand(rng, G0.n) .+ 0.5; μ ./= dot(μ, π)
         for θ in means
-            sol = geodesic_socp(G, ν, μ; N=160, mean=socp_mean(θ))
+            G = MarkovGraph(G0; mean=θ)
+            sol = geodesic_socp(socp_graph(G), ν, μ; N=160)
             φ0 = -sol.φ0 ./ 2; φ0 .-= dot(φ0, π)           # SOCP endpoint dual -> flow potential
-            H0 = hamiltonian(G, ν, φ0; mean=θ)
-            ρ_path, φ_path = integrate_hamiltonian(G, ν, φ0; nsteps=200, mean=θ)
+            H0 = hamiltonian(G, ν, φ0)
+            ρ_path, φ_path = integrate_hamiltonian(G, ν, φ0; nsteps=200)
             @test dot(ρ_path[:, end], π) ≈ 1.0 atol=1e-10
-            Hs = [hamiltonian(G, ρ_path[:, i], φ_path[:, i]; mean=θ) for i in 1:201]
+            Hs = [hamiltonian(G, ρ_path[:, i], φ_path[:, i]) for i in 1:201]
             @test maximum(abs.(Hs .- H0)) < 1e-9
             @test abs(2H0 - sol.W2) / sol.W2 < 2e-4           # O(1/N) of the SOCP at N=160
             @test norm((ρ_path[:, end] .- μ) .* sqrt.(π)) < 1e-3
         end
         # LogarithmicMean (exact) and QuadLogMean(8) give the same flow
-        φ0 = -geodesic_socp(G, ν, μ; N=40, mean=QuadLogMean(8)).φ0 ./ 2
-        a, _ = integrate_hamiltonian(G, ν, φ0; nsteps=100, mean=LogarithmicMean())
-        b, _ = integrate_hamiltonian(G, ν, φ0; nsteps=100, mean=QuadLogMean(8))
+        φ0 = -geodesic_socp(MarkovGraph(G0; mean=QuadLogMean(8)), ν, μ; N=40).φ0 ./ 2
+        a, _ = integrate_hamiltonian(MarkovGraph(G0; mean=LogarithmicMean()), ν, φ0; nsteps=100)
+        b, _ = integrate_hamiltonian(MarkovGraph(G0; mean=QuadLogMean(8)), ν, φ0; nsteps=100)
         @test a ≈ b rtol=1e-8
     end
 
     @testset "two-node closed form via the flow: $(θ)" for θ in (GeometricMean(), ArithmeticMean(), HarmonicMean(), LogarithmicMean())
-        G = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5])
+        G = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5]; mean=θ)
         W_ref(a, b) = quadgk(r -> θ(1 - r, 1 + r)^(-1/2), a, b)[1] / sqrt(2)
         # φ0 = [-c, c] moves mass from the fuller node toward the emptier one, so the
         # path stays interior for every mean (the opposite sign drives the emptier node
         # to the floor under the arithmetic mean, whose mobility does not vanish there).
         r0 = -0.6; ρ0 = [1 - r0, 1 + r0]; φ0 = [-0.3, 0.3]
-        ρ_path, _ = integrate_hamiltonian(G, ρ0, φ0; nsteps=400, mean=θ)
+        ρ_path, _ = integrate_hamiltonian(G, ρ0, φ0; nsteps=400)
         r_end = 1 - ρ_path[1, end]
-        @test sqrt(2 * hamiltonian(G, ρ0, φ0; mean=θ)) ≈ abs(W_ref(r0, r_end)) atol=1e-8
+        @test sqrt(2 * hamiltonian(G, ρ0, φ0)) ≈ abs(W_ref(r0, r_end)) atol=1e-8
     end
 
     @testset "log_map / exp_map / analyze_shooting per mean" begin
         Q, π = grid_markov_chain(4)
-        G = MarkovGraph(Q, π)
+        G0 = MarkovGraph(Q, π)
         rng = MersenneTwister(5)
-        ν = rand(rng, G.n) .+ 0.5; ν ./= dot(ν, π)
-        μ = rand(rng, G.n) .+ 0.5; μ ./= dot(μ, π)
+        ν = rand(rng, G0.n) .+ 0.5; ν ./= dot(ν, π)
+        μ = rand(rng, G0.n) .+ 0.5; μ ./= dot(μ, π)
         for θ in means
-            r = log_map(G, ν, μ; mean=θ)
+            G = MarkovGraph(G0; mean=θ)
+            r = log_map(G, ν, μ)
             @test r.iters ≤ 8
-            @test norm((exp_map(G, ν, r.φ0; mean=θ) .- μ) .* sqrt.(π)) < 1e-6
-            @test norm((exp_map(G, ν, r.m0; mean=θ) .- μ) .* sqrt.(π)) < 1e-6   # momentum branch uses the mean's Laplacian
-            sol = geodesic_socp(G, ν, μ; N=80, mean=socp_mean(θ))
+            @test norm((exp_map(G, ν, r.φ0) .- μ) .* sqrt.(π)) < 1e-6
+            @test norm((exp_map(G, ν, r.m0) .- μ) .* sqrt.(π)) < 1e-6   # momentum branch uses the mean's Laplacian
+            sol = geodesic_socp(socp_graph(G), ν, μ; N=80)
             @test abs(r.W2 - sol.W2) / sol.W2 < 5e-3
             @test norm(r.m0 .- sol.m0) / norm(sol.m0) < 5e-2
         end
-        # unified API forwards the mean to the shooting adapter
-        g = geodesic(G, ν, μ; method=:shooting, mean=HarmonicMean())
-        @test g.W2 ≈ log_map(G, ν, μ; mean=HarmonicMean()).W2
-        @test g.W2 != geodesic(G, ν, μ; method=:shooting).W2
+        # the unified API reads the graph's mean; Chambolle-Pock supports only the geometric one
+        Gh = MarkovGraph(G0; mean=HarmonicMean())
+        g = geodesic(Gh, ν, μ; method=:shooting)
+        @test g.W2 ≈ log_map(Gh, ν, μ).W2
+        @test g.W2 != geodesic(G0, ν, μ; method=:shooting).W2
+        @test_throws ArgumentError geodesic(Gh, ν, μ; method=:chambolle_pock)
+        @test_throws ArgumentError barycenter(Gh, [ν, μ], [0.5, 0.5]; method=:chambolle_pock)
+        @test_throws ArgumentError analysis(Gh, ν, [ν, μ]; method=:chambolle_pock)
         # analysis round trip with a harmonic-mean barycenter
-        refs = [ν, μ, (v = rand(rng, G.n) .+ 0.5; v ./= dot(v, π))]
+        refs = [ν, μ, (v = rand(rng, G0.n) .+ 0.5; v ./= dot(v, π))]
         λ = [0.5, 0.3, 0.2]
-        ν_h, _, _ = barycenter_socp(G, refs, λ; N=40, mean=HarmonicMean())
-        @test vec(analyze_shooting(G, ν_h, refs; mean=HarmonicMean())) ≈ λ atol=2e-2
+        ν_h, _, _ = barycenter_socp(Gh, refs, λ; N=40)
+        @test vec(analyze_shooting(Gh, ν_h, refs)) ≈ λ atol=2e-2
     end
 end
 

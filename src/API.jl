@@ -34,6 +34,11 @@ The discrete transport geodesic between densities `ρA` and `ρB` on `G`, by one
   endpoints (no entropy term). The path's end columns are the *blurred* endpoints the
   Sinkhorn barycenter returns, not `ρA`/`ρB` exactly; `m`, `φ0`, `φ1` are `NaN`-filled.
 
+The transport metric's mean is the graph's `G.mean` (see `MarkovGraph`): `:socp` and
+`:shooting` honour every `AdmissibleMean` (the SOCP needs `QuadLogMean` for the logarithmic
+mean), `:chambolle_pock` supports only `GeometricMean()` and errors otherwise, and
+`:sinkhorn`'s geometry is its ground cost, so it ignores the mean.
+
 All methods return a `GeodesicSolution`. Its `W2` is the squared distance; `ρ` is the
 `n × (steps+1)` density path and `m` the `|E| × steps` momentum path. The endpoint
 potentials `φ0`, `φ1` are the gradients of `W2` with respect to each endpoint (the SOCP's
@@ -70,18 +75,22 @@ function _geodesic_sinkhorn(G::MarkovGraph, ρA, ρB; N::Int=10, cost=nothing, e
     return GeodesicSolution(W2, ρ, nanE, nanE[:, 1], nan, nan, :converged, time() - t0)
 end
 
-function _geodesic_shooting(G::MarkovGraph, ρA, ρB; nsteps::Int=150, mean::AdmissibleMean=GeometricMean(), kwargs...)
+function _geodesic_shooting(G::MarkovGraph, ρA, ρB; nsteps::Int=150, kwargs...)
     t0 = time()
-    r = log_map(G, ρA, ρB; nsteps=nsteps, mean=mean, kwargs...)
-    ρ_path, φ_path = integrate_hamiltonian(G, ρA, r.φ0; nsteps=nsteps, mean=mean)
-    m = reduce(hcat, (metric_tensor(G, ρ_path[:, t], mean) .* graph_gradient(G, φ_path[:, t]) for t in 1:nsteps))
+    r = log_map(G, ρA, ρB; nsteps=nsteps, kwargs...)
+    ρ_path, φ_path = integrate_hamiltonian(G, ρA, r.φ0; nsteps=nsteps)
+    m = reduce(hcat, (metric_tensor(G, ρ_path[:, t]) .* graph_gradient(G, φ_path[:, t]) for t in 1:nsteps))
     # W2-gradient convention for the endpoint potentials, matching the SOCP's duals.
     φ0 = -2 .* r.φ0
     φ1 =  2 .* φ_path[:, end]
     return GeodesicSolution(r.W2, ρ_path, m, m[:, 1], φ0, φ1, :converged, time() - t0)
 end
 
+_require_geometric(G::MarkovGraph, what) = G.mean isa GeometricMean ||
+    throw(ArgumentError("$what: method=:chambolle_pock supports only GeometricMean(); this graph has $(G.mean). Use method=:socp or :shooting."))
+
 function _geodesic_chambolle_pock(G::MarkovGraph, ρA, ρB; kwargs...)
+    _require_geometric(G, "geodesic")
     t0 = time()
     a = discrete_transport(Matrix(G.Q), ρA, ρB; kwargs...)
     ρ = permutedims(a.vector.ρ)                       # (N+1) × n  ->  n × (N+1)
@@ -136,6 +145,7 @@ function barycenter(G::MarkovGraph, refs::Vector{<:AbstractVector}, λ::Abstract
     elseif method == :sinkhorn
         return _barycenter_sinkhorn(G, refs, λ; kwargs...)
     end
+    _require_geometric(G, "barycenter")
     kw = Dict{Symbol,Any}(kwargs)
     geodesic_steps = get(kw, :geodesic_steps, 100)
     geodesic_tol   = get(kw, :geodesic_tol, 1e-10)
@@ -182,6 +192,7 @@ function analysis(G::MarkovGraph, target::AbstractVector, refs::Vector{<:Abstrac
     method == :socp     && return analyze_socp(G, target, refs; kwargs...)
     method == :shooting && return analyze_shooting(G, target, refs; kwargs...)
     method == :sinkhorn && return _analysis_sinkhorn(G, target, refs; kwargs...)
+    _require_geometric(G, "analysis")
     return analysis(target, reduce(hcat, refs), Matrix(G.Q); kwargs...)
 end
 

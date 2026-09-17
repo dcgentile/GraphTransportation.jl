@@ -1,13 +1,13 @@
 """
-    weighted_laplacian(G::MarkovGraph, ν; mean=GeometricMean()) -> SparseMatrixCSC
+    weighted_laplacian(G::MarkovGraph, ν) -> SparseMatrixCSC
 
 The `n × n` weighted graph Laplacian `L_θ(ν) = ∇ᵀ Diag(κ ∘ θ(ν)) ∇`, i.e.
 `(L φ)(x) = Σ_y κ_{xy} θ(ν_x, ν_y) (φ(x) − φ(y))`. Symmetric positive semidefinite with
 kernel spanned by the constants, and related to the Hamiltonian flow by
 `π ∘ ρ̇ = L_θ(ν) φ` (equivalently `ρ̇ = −div(θ(ν)∘∇φ)`, see `hamiltonian_flow`).
 """
-function weighted_laplacian(G::MarkovGraph, ν::AbstractVector; mean::AdmissibleMean=GeometricMean())
-    w = G.κ .* metric_tensor(G, ν, mean)
+function weighted_laplacian(G::MarkovGraph, ν::AbstractVector)
+    w = G.κ .* metric_tensor(G, ν)          # θ = G.mean
     I = Int[]; J = Int[]; V = Float64[]
     for (e, (x, y)) in enumerate(G.E)
         push!(I, x); push!(J, x); push!(V,  w[e])
@@ -19,7 +19,7 @@ function weighted_laplacian(G::MarkovGraph, ν::AbstractVector; mean::Admissible
 end
 
 """
-    solve_weighted_laplacian(G::MarkovGraph, ν, b; mean=GeometricMean()) -> φ
+    solve_weighted_laplacian(G::MarkovGraph, ν, b) -> φ
 
 Solve `L_θ(ν) φ = b` for the unique solution in the gauge `⟨φ, 1⟩_π = 0`. `b` must be
 orthogonal to the constants (`sum(b) ≈ 0`), which every right-hand side arising here
@@ -27,32 +27,32 @@ is (`π ∘ (target − ν)` for two probability densities, or `∇ᵀ(κ ∘ m)
 Implemented via the rank-one regularization `(L + π πᵀ) φ = b`: for such `b` this has
 the same solution as `L φ = b` and enforces the gauge automatically.
 """
-function solve_weighted_laplacian(G::MarkovGraph, ν::AbstractVector, b::AbstractVector; mean::AdmissibleMean=GeometricMean())
+function solve_weighted_laplacian(G::MarkovGraph, ν::AbstractVector, b::AbstractVector)
     @assert abs(sum(b)) ≤ 1e-8 * max(1.0, maximum(abs, b)) "right-hand side must be orthogonal to constants (sum(b) = $(sum(b)))"
-    A = Matrix(weighted_laplacian(G, ν; mean=mean)) .+ G.π * G.π'   # dense Cholesky; see the module docstring on scaling
+    A = Matrix(weighted_laplacian(G, ν)) .+ G.π * G.π'   # dense Cholesky; see the module docstring on scaling
     return cholesky(Symmetric(A)) \ b
 end
 
 """
-    momentum_to_potential(G::MarkovGraph, ν, m; mean=GeometricMean()) -> φ
+    momentum_to_potential(G::MarkovGraph, ν, m) -> φ
 
 Recover the potential `φ` with `m = θ(ν) ∘ ∇φ` (gauge `⟨φ, 1⟩_π = 0`) from a momentum
 edge vector `m`, by solving `L_θ(ν) φ = ∇ᵀ(κ ∘ m)`. If `m` is not exactly a gradient
 field this returns the `θ(ν)`-weighted least-squares projection, i.e. the potential of
 the gradient part of `m` in the Hodge sense.
 """
-function momentum_to_potential(G::MarkovGraph, ν::AbstractVector, m::AbstractVector; mean::AdmissibleMean=GeometricMean())
+function momentum_to_potential(G::MarkovGraph, ν::AbstractVector, m::AbstractVector)
     @assert length(m) == length(G.E)
     b = zeros(G.n)
     for (e, (x, y)) in enumerate(G.E)
         b[x] += G.κ[e] * m[e]
         b[y] -= G.κ[e] * m[e]
     end
-    return solve_weighted_laplacian(G, ν, b; mean=mean)
+    return solve_weighted_laplacian(G, ν, b)
 end
 
 """
-    exp_map(G::MarkovGraph, ν, tangent; t=1.0, nsteps=150, kind=:auto, floor_rtol=1e-6, mean=GeometricMean()) -> ρ_end
+    exp_map(G::MarkovGraph, ν, tangent; t=1.0, nsteps=150, kind=:auto, floor_rtol=1e-6) -> ρ_end
 
 The Riemannian exponential map at `ν`. Integrates the Hamiltonian flow
 (`integrate_hamiltonian`) from `(ν, φ0)` for time `t` and returns the endpoint density.
@@ -68,8 +68,7 @@ Requires `ν` strictly positive (see `ρ_floor`); errors, rather than returning 
 if the flow hits the positivity floor before time `t`.
 """
 function exp_map(G::MarkovGraph, ν::AbstractVector, tangent::AbstractVector;
-                 t::Float64=1.0, nsteps::Int=150, kind::Symbol=:auto, floor_rtol::Float64=1e-6,
-                 mean::AdmissibleMean=GeometricMean())
+                 t::Float64=1.0, nsteps::Int=150, kind::Symbol=:auto, floor_rtol::Float64=1e-6)
     n, nE = G.n, length(G.E)
     if kind == :auto
         L = length(tangent)
@@ -85,11 +84,11 @@ function exp_map(G::MarkovGraph, ν::AbstractVector, tangent::AbstractVector;
         @assert length(tangent) == n
         tangent .- dot(tangent, G.π)   # gauge ⟨φ0, 1⟩_π = 0 (π sums to one)
     elseif kind == :momentum
-        momentum_to_potential(G, ν, tangent; mean=mean)
+        momentum_to_potential(G, ν, tangent)
     else
         throw(ArgumentError("kind must be :auto, :potential or :momentum, got $kind"))
     end
-    ρ_path, _ = integrate_hamiltonian(G, ν, φ0; nsteps=nsteps, T=t, floor_rtol=floor_rtol, mean=mean)
+    ρ_path, _ = integrate_hamiltonian(G, ν, φ0; nsteps=nsteps, T=t, floor_rtol=floor_rtol)
     return ρ_path[:, end]
 end
 
@@ -104,7 +103,7 @@ end
 
 """
     log_map(G::MarkovGraph, ν, target; φ0_init=nothing, tol=1e-9, maxiters=50, nsteps=150,
-            floor_rtol=1e-6, verbose=false, mean=GeometricMean()) -> (; φ0, m0, W2, iters, residual)
+            floor_rtol=1e-6, verbose=false) -> (; φ0, m0, W2, iters, residual)
 
 The Riemannian logarithm at `ν`, by single shooting. Solves
 `F(φ0) := ρ(1; ν, φ0) − target = 0` with a damped Newton iteration over the mean-zero
@@ -133,7 +132,7 @@ mollify with `log_map_mollified`). Requires `ν` and `target` strictly positive 
 """
 function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
                  φ0_init=nothing, tol::Float64=1e-9, maxiters::Int=50, nsteps::Int=150,
-                 floor_rtol::Float64=1e-6, verbose::Bool=false, mean::AdmissibleMean=GeometricMean())
+                 floor_rtol::Float64=1e-6, verbose::Bool=false)
     n = G.n
     floor_val = ρ_floor(G; rtol=floor_rtol)
     @assert minimum(ν) > floor_val && minimum(target) > floor_val "log_map requires strictly positive endpoints (see ρ_floor); " *
@@ -144,14 +143,14 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
     # Full residual (all n components; the last is redundant but harmless for the norm).
     function shoot(z)
         φ0 = _reduced_to_potential(G, z)
-        ρ_path, _ = integrate_hamiltonian(G, ν, φ0; nsteps=nsteps, T=1.0, floor_rtol=floor_rtol, mean=mean)
+        ρ_path, _ = integrate_hamiltonian(G, ν, φ0; nsteps=nsteps, T=1.0, floor_rtol=floor_rtol)
         return ρ_path[:, end] .- target
     end
     F_reduced(z) = shoot(z)[1:n-1]
     resnorm(F) = norm(F .* sqrtπ)
 
     φ0 = if φ0_init === nothing
-        solve_weighted_laplacian(G, ν, G.π .* (target .- ν); mean=mean)
+        solve_weighted_laplacian(G, ν, G.π .* (target .- ν))
     else
         φ0_init .- dot(φ0_init, G.π)
     end
@@ -208,13 +207,13 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
     end
 
     φ0 = _reduced_to_potential(G, z)
-    m0 = metric_tensor(G, ν, mean) .* graph_gradient(G, φ0)
-    W2 = 2 * hamiltonian(G, ν, φ0; mean=mean)
+    m0 = metric_tensor(G, ν) .* graph_gradient(G, φ0)
+    W2 = 2 * hamiltonian(G, ν, φ0)
     return (; φ0, m0, W2, iters, residual=r)
 end
 
 """
-    analyze_shooting(G::MarkovGraph, target, refs; nsteps=150, tol=1e-9, φ0_inits=nothing, mean=GeometricMean(),
+    analyze_shooting(G::MarkovGraph, target, refs; nsteps=150, tol=1e-9, φ0_inits=nothing,
                      compute_condition=false, return_system=false) -> λ̂ (or (λ̂, A))
 
 The `:shooting` analysis backend: like `analyze_socp`, but each reference's potential
@@ -234,13 +233,13 @@ descent's. A barycenter synthesized by either of those is therefore recovered on
 the `analyze_socp` docstring for why synthesis and analysis conventions must match.
 """
 function analyze_shooting(G::MarkovGraph, target::AbstractVector, refs::Vector{<:AbstractVector};
-                          nsteps::Int=150, tol::Float64=1e-9, φ0_inits=nothing, mean::AdmissibleMean=GeometricMean(),
+                          nsteps::Int=150, tol::Float64=1e-9, φ0_inits=nothing,
                           compute_condition::Bool=false, return_system::Bool=false)
     potentials = map(eachindex(refs)) do i
         init = φ0_inits === nothing ? nothing : φ0_inits[i]
-        log_map(G, target, refs[i]; nsteps=nsteps, tol=tol, φ0_init=init, mean=mean).φ0
+        log_map(G, target, refs[i]; nsteps=nsteps, tol=tol, φ0_init=init).φ0
     end
-    return potential_gram_qp(G, target, potentials; mean=mean,
+    return potential_gram_qp(G, target, potentials;
                              compute_condition=compute_condition, return_system=return_system)
 end
 
