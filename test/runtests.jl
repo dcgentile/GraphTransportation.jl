@@ -546,10 +546,10 @@ end
 @testset "geodesic_socp vs Chambolle-Pock (SOCP Module 1, spec §1.3.2)" begin
     # Cross-validate against the incumbent Chambolle-Pock solver on the 3-cycle,
     # 4-cycle, and 3x3 grid (Erbar Figs. 5-6 configurations). Unlike the exact §1.3.1
-    # two-node case, there's no closed form here, so - as with the adaptive step-size
+    # two-node case, there's no closed form here, so - as with the Chambolle-Pock step-size
     # regression test above - we check convergence to a common value as N grows rather
     # than a fixed tolerance at small N, since both solvers carry their own O(h) time-
-    # discretization error. Requires the `adaptive=false` fix above: with the buggy
+    # discretization error. Requires fixed-step Chambolle-Pock: with the former accelerated
     # accelerated default, this comparison would not converge (see the testset above).
     graphs = [
         ("3-cycle", triangle_markov_chain()),
@@ -907,46 +907,27 @@ end
     @test r.W2 ≈ r.W^2
 end
 
-@testset "chambolle_pock: accelerated (adaptive) step size is biased, not just slow" begin
-    # chambolle_pock_routine's `adaptive=true` schedule is Chambolle-Pock's Algorithm 2
-    # (accelerated, O(1/N²)), valid only when G or F* is strongly convex. Every term here
-    # (the K-cone / continuity-equation / J_Eq indicators, the homogeneous-degree-1 edge
-    # action) is not strongly convex, so that premise never holds. Confirmed empirically:
-    # on graphs with more than 2 nodes, `adaptive=true` converges (tightly, no
-    # non-convergence warning) to a value with a PERSISTENT relative bias against the
-    # independently-validated geodesic_socp (§1.3.1), rather than merely converging
-    # slowly - the two-node case happens not to expose this. `adaptive=false` is now the
-    # default for exactly this reason; this test locks that default in and documents why.
+@testset "chambolle_pock (fixed-step Algorithm 1) converges to the SOCP-validated value" begin
+    # Chambolle-Pock's accelerated Algorithm 2 schedule requires G or F* to be strongly
+    # convex; every term here (the K-cone / continuity-equation / J_Eq indicators, the
+    # homogeneous-degree-1 edge action) is not, and applying it anyway converged to a
+    # biased value on every graph with more than 2 nodes. The routine is now fixed-step
+    # only; this test ties it to the independently validated geodesic_socp (§1.3.1) so a
+    # regression of that kind cannot come back unnoticed.
     Q, π = triangle_markov_chain()
     G = MarkovGraph(Q, π)
     rng = MersenneTwister(2024)
     μ = (rand(rng, 3) .+ 0.1); μ ./= dot(μ, π)
     ν = (rand(rng, 3) .+ 0.1); ν ./= dot(ν, π)
 
-    @testset "default (adaptive=false) converges to the SOCP-validated value" begin
-        prev_err = Inf
-        for N in (10, 20, 50, 100)
-            W2_socp = geodesic_socp(G, μ, ν; N=N).W2
-            W2_cp = action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20))
-            err = abs(W2_cp - W2_socp) / W2_socp
-            @test err < 2.0 / N          # O(h), same pattern as §1.3.1
-            @test err < prev_err + 1e-9  # should not grow with N
-            prev_err = err
-        end
-    end
-
-    @testset "adaptive=true stays biased even as N grows (documents the known issue)" begin
-        W2_socp = geodesic_socp(G, μ, ν; N=100).W2
-        errs = [abs(action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20, adaptive=true)) - W2_socp) / W2_socp
-                for N in (100, 400)]
-        # if this ever starts passing, the acceleration bug has changed behavior (or been
-        # fixed) and this test - and the `adaptive` docs - need to be revisited. The bias
-        # magnitude itself is sensitive to the BLAS/LAPACK shipped with each Julia version
-        # (observed ~13% on 1.11/1.12/pre vs ~1% on 1.10) since this pushes an already-
-        # unstable, non-strongly-convex accelerated iteration to tol=1e-12 - so the bound
-        # here is set well below the smallest bias seen on any supported version, not at
-        # the ~10-12% level quoted in the original bug writeup.
-        @test all(e -> e > 1e-3, errs)
+    prev_err = Inf
+    for N in (10, 20, 50, 100)
+        W2_socp = geodesic_socp(G, μ, ν; N=N).W2
+        W2_cp = action(discrete_transport(Q, μ, ν; N=N, tol=1e-12, maxiters=2^20))
+        err = abs(W2_cp - W2_socp) / W2_socp
+        @test err < 2.0 / N          # O(h), same pattern as §1.3.1
+        @test err < prev_err + 1e-9  # should not grow with N
+        prev_err = err
     end
 end
 
