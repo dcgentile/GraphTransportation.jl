@@ -29,7 +29,7 @@ the same solution as `L φ = b` and enforces the gauge automatically.
 """
 function solve_weighted_laplacian(G::MarkovGraph, ν::AbstractVector, b::AbstractVector)
     @assert abs(sum(b)) ≤ 1e-8 * max(1.0, maximum(abs, b)) "right-hand side must be orthogonal to constants (sum(b) = $(sum(b)))"
-    A = Matrix(weighted_laplacian(G, ν)) .+ G.π * G.π'   # n is at most a few hundred; dense Cholesky is simplest
+    A = Matrix(weighted_laplacian(G, ν)) .+ G.π * G.π'   # dense Cholesky; see the module docstring on scaling
     return cholesky(Symmetric(A)) \ b
 end
 
@@ -71,14 +71,13 @@ function exp_map(G::MarkovGraph, ν::AbstractVector, tangent::AbstractVector;
                  t::Float64=1.0, nsteps::Int=150, kind::Symbol=:auto, floor_rtol::Float64=1e-6)
     n, nE = G.n, length(G.E)
     if kind == :auto
-        if length(tangent) == n && n != nE
-            kind = :potential
-        elseif length(tangent) == nE && n != nE
-            kind = :momentum
+        L = length(tangent)
+        if L != n && L != nE
+            throw(ArgumentError("tangent has length $L; expected n=$n (potential) or |E|=$nE (momentum)"))
         elseif n == nE
             throw(ArgumentError("n == |E| == $n, so the kind of `tangent` cannot be inferred; pass kind=:potential or kind=:momentum"))
         else
-            throw(ArgumentError("tangent has length $(length(tangent)); expected n=$n (potential) or |E|=$nE (momentum)"))
+            kind = L == n ? :potential : :momentum
         end
     end
     φ0 = if kind == :potential
@@ -114,7 +113,17 @@ removing one dimension), with the Jacobian computed by `ForwardDiff` through
 
 Initialization is the linearized geodesic `L_θ(ν) φ0 = π ∘ (target − ν)`, exact to first
 order in `target − ν` (spec §3.3), unless `φ0_init` (a potential) is given, e.g. from a
-previous solve at a nearby base point (spec §3.4 warm-start).
+previous solve at a nearby base point. This is the mechanism for spec §3.4's warm
+start; the (base, target)-keyed cache itself is not implemented, callers keep their
+own `φ0`. Cold starts on interior data take 2–4 Newton iterations; the initial guess
+is damped by halving if it overshoots the positivity floor (far-apart concentrated
+endpoints, ~9 iterations).
+
+Near the positivity floor the integrator's step bisection makes the residual
+piecewise-smooth in `φ0` (ForwardDiff differentiates whichever branch the trajectory
+took), so Newton can stall at the scale of those jumps; this is the failure mode for
+strongly mollified boundary data (`ε ≲ 1e-4`) and is reported as a line-search
+failure. Multiple shooting (spec §3.3) is not implemented.
 
 Returns the potential `φ0`, the momentum `m0 = θ(ν) ∘ ∇φ0`, the squared distance
 `W2 = 2H(ν, φ0)`, the Newton iteration count, and the final residual `‖F‖_π`. Errors if
@@ -127,7 +136,8 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
                  floor_rtol::Float64=1e-6, verbose::Bool=false)
     n = G.n
     floor_val = ρ_floor(G; rtol=floor_rtol)
-    @assert minimum(ν) > floor_val && minimum(target) > floor_val "log_map requires strictly positive endpoints (see ρ_floor)"
+    @assert minimum(ν) > floor_val && minimum(target) > floor_val "log_map requires strictly positive endpoints (see ρ_floor); " *
+        "for boundary-supported data use geodesic_socp (exact) or log_map_mollified (approximate)"
     @assert abs(dot(ν, G.π) - 1) < 1e-8 && abs(dot(target, G.π) - 1) < 1e-8 "endpoints must be probability densities"
 
     sqrtπ = sqrt.(G.π)
@@ -154,7 +164,7 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
         F = try
             shoot(z)
         catch err
-            err isa ErrorException || rethrow()
+            err isa PositivityFloorError || rethrow()
             k == 12 && error("log_map: no admissible initial potential found (endpoints too far apart for shooting); " *
                              "fall back to geodesic_socp or mollify the endpoints (spec §3.5).")
             z ./= 2
@@ -179,7 +189,7 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
             F_try = try
                 shoot(z_try)
             catch err
-                err isa ErrorException || rethrow()
+                err isa PositivityFloorError || rethrow()
                 nothing
             end
             if F_try !== nothing && resnorm(F_try) ≤ (1 - 1e-4 * α) * r
@@ -189,8 +199,10 @@ function log_map(G::MarkovGraph, ν::AbstractVector, target::AbstractVector;
             end
             α /= 2
         end
-        accepted || error("log_map: line search failed at iteration $(iters + 1) (residual $r); " *
-                          "the target may be too far from ν for single shooting, or the geodesic leaves the positive cone.")
+        accepted || error("log_map: line search failed at iteration $(iters + 1) (residual $r). " *
+                          "Near the positivity floor the integrator's step bisection makes the residual piecewise-smooth " *
+                          "in φ0, so Newton can stall at the scale of those jumps; otherwise the target may be too far " *
+                          "from ν for single shooting. Fall back to geodesic_socp or mollify (spec §3.5).")
         iters += 1
         verbose && @info "log_map" iter=iters residual=r step=α
     end
@@ -208,7 +220,10 @@ end
 Module 4's `:shooting` backend: like `analyze_socp`, but each reference's potential
 comes from `log_map(G, target, ref)` (the Hamiltonian velocity potential `φ0` at
 `target`) instead of the geodesic SOCP's endpoint dual. The Gram matrix and simplex QP
-are shared (`potential_gram_qp`). Requires strictly positive `target` and `refs`.
+are shared with `analyze_socp` (internal helper `potential_gram_qp`). Requires strictly
+positive `target` and `refs`; a failure on any one reference propagates (there is no
+per-reference fallback to the SOCP), and the same weighted Laplacian is refactored
+once per reference, which is negligible next to the Newton solves.
 
 `φ0_inits`, if given, is a vector of warm-start potentials, one per reference (spec §3.4).
 
@@ -245,8 +260,12 @@ raw per-`ε` distances. Levels whose shooting fails (very small `ε` makes the
 near-boundary geodesic stiff) are skipped with a warning as long as two remain.
 Results are flagged `approximate=true`; for boundary-supported data `geodesic_socp`
 needs no such fallback and is the reference. Empirically the raw `W` at the smallest
-`ε` is often already as accurate as the extrapolation (the mollification error can
-decay faster than `√ε`), so both are returned. The shooting tolerance `tol` defaults to a looser
+`ε` is often already as accurate as the extrapolation: on 5x5-grid probes the
+mollification error decayed faster than `√ε` (successive differences shrank by ~7x
+per decade of `ε`, vs. ~3.2x predicted), and the fit over-corrected by 0.3–0.5% while
+the raw smallest-`ε` value was within 0.05–0.15% of the SOCP reference. The `√ε` model
+is kept as specified; both values are returned so the numerics can be compared with
+the theory. The shooting tolerance `tol` defaults to a looser
 `1e-7` here (the result is approximate anyway, and the near-boundary trajectories make
 the last digits of the residual hard to reach). Remaining `kwargs` go to `log_map`.
 """
@@ -264,7 +283,9 @@ function log_map_mollified(G::MarkovGraph, ν::AbstractVector, target::AbstractV
         r_ε = try
             log_map(G, mollify(ν, ε), mollify(target, ε); φ0_init=(r === nothing ? nothing : r.φ0), tol=tol, kwargs...)
         catch err
-            err isa ErrorException || rethrow()
+            # log_map's own failures are ErrorExceptions; a floor violation raised while
+            # ForwardDiff evaluates the Jacobian escapes log_map as PositivityFloorError.
+            err isa Union{ErrorException,PositivityFloorError} || rethrow()
             @warn "log_map_mollified: shooting failed at ε=$ε, skipping this level" exception=err.msg
             continue
         end

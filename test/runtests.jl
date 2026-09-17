@@ -748,7 +748,7 @@ end
     # c0 large enough to drive r past the boundary -1 within [0,1]: the positivity
     # floor guard should catch this as an error, not silently return garbage or crash
     # with an uncaught DomainError.
-    @test_throws ErrorException integrate_hamiltonian(G, ρ0, [0.6, -0.6]; nsteps=400, T=1.0)
+    @test_throws PositivityFloorError integrate_hamiltonian(G, ρ0, [0.6, -0.6]; nsteps=400, T=1.0)
 end
 
 @testset "exp_map / weighted Laplacian (Module 3, spec §3.2)" begin
@@ -777,7 +777,7 @@ end
         @test exp_map(G, ν, φ; nsteps=100) ≈ ρ_path[:, end] rtol=1e-12
         @test exp_map(G, ν, φ .+ 3.0; nsteps=100) ≈ ρ_path[:, end] rtol=1e-12   # gauge-invariant
         @test exp_map(G, ν, m; nsteps=100) ≈ ρ_path[:, end] rtol=1e-8
-        @test exp_map(G, ν, φ; nsteps=100, t=0.5) ≈ ρ_path[:, 51] rtol=1e-10
+        @test exp_map(G, ν, φ; nsteps=50, t=0.5) ≈ ρ_path[:, 51] rtol=1e-12   # same h as the 100-step path
         @test dot(exp_map(G, ν, φ; nsteps=100), π) ≈ 1.0 atol=1e-10
     end
 
@@ -806,7 +806,10 @@ end
                 @test norm((exp_map(G, ν, r.φ0) .- μ) .* sqrt.(π)) < 1e-6   # spec (i)
                 @test norm((exp_map(G, ν, r.m0) .- μ) .* sqrt.(π)) < 1e-6   # via the momentum too
                 @test abs(dot(r.φ0, π)) < 1e-12                    # gauge
-                @test log_map(G, ν, μ; φ0_init=r.φ0).iters == 0    # warm start
+                @test log_map(G, ν, μ; φ0_init=r.φ0).iters == 0    # warm start from the solution
+                # warm start toward a nearby target: no more iterations than a cold start
+                μ2 = 0.98 .* μ .+ 0.02 .* ones(G.n)
+                @test log_map(G, ν, μ2; φ0_init=r.φ0).iters ≤ log_map(G, ν, μ2).iters
 
                 # (ii)/(iii): m0 and W2 vs Module 1, O(h) in the SOCP's h=1/N
                 prev = Inf
@@ -820,6 +823,9 @@ end
                 end
                 # The SOCP's endpoint potential is the gradient of W2, and the flow's φ0
                 # is the Hamiltonian velocity potential: φ_socp ≈ -2 φ0 (continuum limit).
+                # This (and the signed m0 comparison above) is what pins the flow's global
+                # sign: the Module 3.1 conservation tests pass equally for the time-reversed
+                # flow, and the two-node closed-form checks take absolute values.
                 sol = geodesic_socp(G, ν, μ; N=160)
                 @test graph_gradient(G, sol.φ0) ≈ -2 .* graph_gradient(G, r.φ0) rtol=0.05
             end
@@ -842,6 +848,10 @@ end
         A = Q .> 0
         conc(c) = (m = ones(G.n); m[c] *= 10; for j in 1:G.n; A[c, j] && (m[j] *= 10); end; m ./ dot(m, π))
         ν, μ = conc(1), conc(25)
+        # Premise: the undamped linearized guess really does hit the floor on this input
+        # (otherwise this testset would silently stop exercising the damping loop).
+        φ0_lin = solve_weighted_laplacian(G, ν, π .* (μ .- ν))
+        @test_throws PositivityFloorError integrate_hamiltonian(G, ν, φ0_lin; nsteps=150)
         r = log_map(G, ν, μ)
         @test r.residual < 1e-9
         @test norm((exp_map(G, ν, r.φ0) .- μ) .* sqrt.(π)) < 1e-6
@@ -856,6 +866,24 @@ end
     end
 end
 
+@testset "potential_gram_qp: Gram matrix is the Riemannian inner product at the target" begin
+    # Every recovery test uses an exactly stationary synthesized target, where the true λ
+    # minimizes the QP under *any* positive edge weighting - so none of them can tell
+    # κ∘θ from θ from 1. Pin the weighting directly against the dense definition
+    #   A_ij = ½ Σ_{x,y} θ(ν_x,ν_y) ∇φ_i(x,y) ∇φ_j(x,y) Q(x,y) π(x).
+    Q, π = triangle_markov_chain()
+    G = MarkovGraph(Q, π)
+    ν = [1.3, 0.8, 0.9]; ν ./= dot(ν, π)
+    φs = [[0.3, -0.1, -0.2], [0.0, 0.5, -0.5]]
+    _, A = GraphTransportation.potential_gram_qp(G, ν, φs; return_system=true)
+    θ = metric_tensor(ν)
+    A_ref = [0.5 * sum(θ[x, y] * (φi[x] - φi[y]) * (φj[x] - φj[y]) * Q[x, y] * π[x]
+                       for x in 1:3, y in 1:3)
+             for φi in φs, φj in φs]
+    @test A ≈ A_ref rtol=1e-12
+    @test A ≈ A' rtol=1e-12
+end
+
 @testset "analyze_shooting (Module 4 :shooting backend, spec §4)" begin
     Q, π = weighted_hypercube_markov_chain()
     G = MarkovGraph(Q, π)
@@ -865,9 +893,23 @@ end
 
     # Synthesized by the SOCP at fine N: the shooting backend checks stationarity in a
     # different discretization, so expect O(1/N) agreement, not solver tolerance.
-    ν, _, _ = barycenter_socp(G, refs, λ_true; N=80)
-    λ̂ = vec(analyze_shooting(G, ν, refs))
-    @test λ̂ ≈ λ_true atol=1e-2
+    # Check the rate, not just a single small error. The recovered λ̂ itself is a poor
+    # rate probe: it comes out of the SCS simplex QP, whose default tolerance leaves a
+    # platform-dependent floor of ~1e-5 to ~5e-4 on |λ̂-λ| (Julia 1.10 on CI sits at the
+    # top of that range), so |λ̂-λ| stops shrinking with N almost immediately. The
+    # quantity that is genuinely O(h) and involves no QP is the Gram-form residual of
+    # the *true* λ, λᵀAλ / max(diag A): measured 8e-7 to 1.3e-6 at N=2 and 4e-9 to 7e-9
+    # at N=10 on Julia 1.10/1.12 (a factor of 100-300). Require a factor of 10.
+    resid = Float64[]
+    local ν, λ̂
+    for N in (2, 10)
+        ν, _, _ = barycenter_socp(G, refs, λ_true; N=N)
+        λ̂_, A = analyze_shooting(G, ν, refs; return_system=true)
+        λ̂ = vec(λ̂_)
+        push!(resid, (λ_true' * A * λ_true) / maximum(diag(A)))
+    end
+    @test resid[2] < resid[1] / 10
+    @test λ̂ ≈ λ_true atol=1e-2        # loose: QP floor, see above
     @test sum(λ̂) ≈ 1.0 atol=1e-6
 
     # Same point, same reference potentials from the two backends: at fine N the SOCP's

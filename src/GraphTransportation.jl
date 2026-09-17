@@ -93,7 +93,7 @@ export barycenter_socp
 export analyze_socp
 
 # Hamiltonian shooting primitives (Module 3, spec.txt)
-export hamiltonian, hamiltonian_flow, integrate_hamiltonian, ρ_floor
+export hamiltonian, hamiltonian_flow, integrate_hamiltonian, ρ_floor, PositivityFloorError
 export weighted_laplacian, solve_weighted_laplacian, momentum_to_potential, exp_map, log_map, log_map_mollified, analyze_shooting
 
 # admissible means
