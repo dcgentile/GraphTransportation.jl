@@ -30,6 +30,9 @@ using Convex, SCS
 using ForwardDiff, Roots
 using ProgressMeter
 using JuMP, Clarabel
+# MathOptInterface is the modelling layer under JuMP. JuMP exports the common cones by
+# name (SecondOrderCone, RotatedSecondOrderCone) but the power cone only as
+# MOI.PowerCone(α); this alias lets src/socp/Geodesic.jl write MOI.PowerCone.
 const MOI = JuMP.MOI
 using Optim
 

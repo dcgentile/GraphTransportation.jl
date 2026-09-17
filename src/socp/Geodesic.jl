@@ -40,8 +40,13 @@ end
 Add the constraint `ϑ ≤ θ(ρ̄x, ρ̄y)` (the hypograph of the mean) in conic form:
 - `GeometricMean`: `[ρ̄x, ρ̄y, √2 ϑ] ∈ RSOC`, i.e. `ϑ² ≤ ρ̄x ρ̄y`.
 - `ArithmeticMean`: a linear row.
-- `HarmonicMean`: `ϑ ≤ 2st/(s+t)` ⟺ `(s−t)² ≤ (s+t)(s+t−2ϑ)`, one RSOC
-  `[s+t, s+t−2ϑ, √2 (s−t)]` (the `√2` is JuMP's `2xy ≥ z²` convention).
+- `HarmonicMean`: `ϑ ≤ 2st/(s+t)`. Multiply by `s+t > 0`: `(s+t)ϑ ≤ 2st`. Use the identity
+  `4st = (s+t)² − (s−t)²`, i.e. `2st = ((s+t)² − (s−t)²)/2`, so the inequality becomes
+  `2(s+t)ϑ ≤ (s+t)² − (s−t)²`, i.e. `(s−t)² ≤ (s+t)(s+t−2ϑ)` with `s+t−2ϑ ≥ 0`. That is a
+  rotated second-order cone `x·y ≥ z²` with `x = s+t`, `y = s+t−2ϑ`, `z = s−t`. JuMP's
+  `RotatedSecondOrderCone` is `2·x·y ≥ ‖z‖²`, so `z` is scaled by `√2` to cancel the 2:
+  `[s+t, s+t−2ϑ, √2 (s−t)]`. (The same `√2` scaling is why the geometric cone carries
+  `√2 ϑ`.) Verified against `2st/(s+t)` in the tests.
 - `QuadLogMean`: `K` power cones `[ρ̄x, ρ̄y, ϑ_k] ∈ PowerCone(α_k)` (`ρ̄x^{α_k} ρ̄y^{1−α_k} ≥ ϑ_k`)
   and the linear row `ϑ ≤ Σ_k w_k ϑ_k`.
 `LogarithmicMean` has no finite conic representation; pass a `QuadLogMean` instead.
