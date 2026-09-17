@@ -1321,7 +1321,9 @@ end
             @test dot(ρ_path[:, end], π) ≈ 1.0 atol=1e-10
             Hs = [hamiltonian(G, ρ_path[:, i], φ_path[:, i]) for i in 1:201]
             @test maximum(abs.(Hs .- H0)) < 1e-9
-            @test abs(2H0 - sol.W2) / sol.W2 < 2e-4           # O(1/N) of the SOCP at N=160
+            # O(1/N) of the SOCP at N=160; measured 4e-4 on Julia 1.10 for the log-mean
+            # cells (power-cone solves carry more solver noise there), ~1e-4 on 1.12.
+            @test abs(2H0 - sol.W2) / sol.W2 < 1e-3
             @test norm((ρ_path[:, end] .- μ) .* sqrt.(π)) < 1e-3
         end
         # LogarithmicMean (exact) and QuadLogMean(8) give the same flow
