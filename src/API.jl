@@ -130,9 +130,10 @@ densities on `G`) with weights `λ`, i.e. the minimizer of `J(ν) = Σᵢ λᵢ 
   precision of the log maps), or `:maxiters` (warns). Keywords: `h` (step, default 1,
   halved on a positivity-floor hit or an objective increase, doubled back toward its
   initial value after an accepted step), `maxiters` (200), `tol` (gradient-norm
-  threshold, 1e-6), `ftol` (relative objective decrease below which the descent stops,
-  1e-12), `log_tol` (residual tolerance of the log maps, 1e-12; the objective's noise
-  is roughly the square of the potentials' error, so this must be well below `ftol`),
+  threshold, 1e-5), `ftol` (relative objective decrease below which the descent stops,
+  1e-12; on the 49-node USA graph the objective's noise floor is about 1e-13 relative
+  and the gradient's about 1e-7), `log_tol` (residual tolerance of the log maps, 1e-12;
+  the objective's noise is roughly the square of the potentials' error),
   `nsteps` (integrator steps, 150), `init` (starting density, default the λ-weighted
   average of the references), `verbose`. Steps are accepted only on a strict objective
   decrease, so `J_hist` is monotone; a step's decrease is about `h‖g‖²`, so asking for
@@ -242,7 +243,7 @@ function _barycenter_sinkhorn(G::MarkovGraph, refs, λ; cost=nothing, epsilon=no
     return p ./ G.π, J, (; cost, epsilon, iters, marginal_errors)
 end
 
-function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters::Int=200, tol::Float64=1e-6,
+function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters::Int=200, tol::Float64=1e-5,
                               ftol::Float64=1e-12, nsteps::Int=150, log_tol::Float64=1e-12, init=nothing, verbose::Bool=false)
     active = findall(>(0), λ)
     ν = init === nothing ? sum(λ[i] .* refs[i] for i in active) : copy(init)
@@ -318,6 +319,7 @@ function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters
     if status == :stalled && length(J_hist) == iters   # record the accepted final point
         g = sum(λ[i] .* rs[i].φ0 for i in active)
         push!(J_hist, J); push!(grad_hist, sqrt(2 * hamiltonian(G, ν, g)))
+        grad_hist[end] < tol && (status = :converged)
     end
     status == :maxiters && @warn "barycenter(:shooting) reached maxiters=$maxiters with gradient norm $(grad_hist[end]) > tol=$tol"
     return ν, J, (; iters, status, J_hist, grad_hist, h)
