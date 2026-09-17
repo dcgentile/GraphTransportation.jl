@@ -238,21 +238,44 @@ function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters
     active = findall(>(0), λ)
     ν = init === nothing ? sum(λ[i] .* refs[i] for i in active) : copy(init)
     ν = ν ./ dot(ν, G.π)
-    φ_prev = Dict{Int,Any}(i => nothing for i in active)
+
+    # log-map ν to every active reference; warm-start from `inits`, retry cold if a
+    # warm-started Newton stalls; `nothing` if some reference cannot be reached
+    function logmaps(ν, inits)
+        out = Dict{Int,Any}()
+        for i in active
+            r = nothing
+            for init in (inits[i], nothing)
+                r = try
+                    log_map(G, ν, refs[i]; nsteps=nsteps, φ0_init=init)
+                catch err
+                    err isa Union{ErrorException,PositivityFloorError} || rethrow()
+                    nothing
+                end
+                r === nothing || break
+                init === nothing && break
+            end
+            r === nothing && return nothing
+            out[i] = r
+        end
+        return out
+    end
+    objective(rs) = sum(λ[i] * rs[i].W2 for i in active)
+
+    rs = logmaps(ν, Dict(i => nothing for i in active))
+    rs === nothing && error("barycenter(:shooting): a reference is not reachable by shooting from the initial point; use method=:socp")
     J_hist = Float64[]; grad_hist = Float64[]
     iters = 0
-    J = NaN
+    J = objective(rs)
     for k in 1:maxiters
-        rs = Dict(i => log_map(G, ν, refs[i]; nsteps=nsteps, φ0_init=φ_prev[i]) for i in active)
-        for i in active; φ_prev[i] = rs[i].φ0; end
-        J = sum(λ[i] * rs[i].W2 for i in active)
         g = sum(λ[i] .* rs[i].φ0 for i in active)          # Riemannian descent direction as a potential
         gnorm = sqrt(2 * hamiltonian(G, ν, g))              # its metric norm at ν
         push!(J_hist, J); push!(grad_hist, gnorm)
         verbose && @info "barycenter(:shooting)" iter=k J=J gradnorm=gnorm h=h
         gnorm < tol && break
-        # step along the geodesic; halve h on a floor hit or if the objective goes up
-        ν_new = nothing
+        # step along the geodesic; halve h on a floor hit, an unreachable reference, or an
+        # objective increase. The candidate's log maps are kept for the next iteration.
+        accepted = false
         for _ in 1:20
             candidate = try
                 exp_map(G, ν, h .* g; nsteps=nsteps)
@@ -261,15 +284,16 @@ function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters
                 nothing
             end
             if candidate !== nothing && minimum(candidate) > 0
-                J_new = sum(λ[i] * log_map(G, candidate, refs[i]; nsteps=nsteps, φ0_init=φ_prev[i]).W2 for i in active)
-                if J_new ≤ J + 1e-12
-                    ν_new = candidate; break
+                rs_new = logmaps(candidate, Dict(i => rs[i].φ0 for i in active))
+                if rs_new !== nothing && objective(rs_new) ≤ J + 1e-12
+                    ν, rs, J = candidate, rs_new, objective(rs_new)
+                    accepted = true
+                    break
                 end
             end
             h /= 2
         end
-        ν_new === nothing && error("barycenter(:shooting): no admissible step found at iteration $k (h=$h); the barycenter may touch the boundary — use method=:socp")
-        ν = ν_new
+        accepted || error("barycenter(:shooting): no admissible step found at iteration $k (h=$h); the barycenter may touch the boundary — use method=:socp")
         iters = k
     end
     iters == maxiters && grad_hist[end] ≥ tol && @warn "barycenter(:shooting) reached maxiters=$maxiters with gradient norm $(grad_hist[end]) > tol=$tol"
