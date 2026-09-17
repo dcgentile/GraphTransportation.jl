@@ -30,6 +30,7 @@ using Convex, SCS
 using ForwardDiff, Roots
 using ProgressMeter
 using JuMP, Clarabel
+using Optim
 
 # include general helper functions
 # --- core: graph calculus, Markov chains, graph constructors, the compact MarkovGraph

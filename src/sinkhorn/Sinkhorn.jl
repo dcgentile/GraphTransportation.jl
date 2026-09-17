@@ -79,6 +79,9 @@ ARGS
 - `iters`: number of Sinkhorn iterations
 """
 function sinkhorn_differentiate(coords, measures, target, cost, epsilon, iters)
+    # Algorithm 1 of Bonneel, Peyré & Cuturi (2016). Index convention: the paper's
+    # b^(0) = 1 is stored at slot 1 and its Sinkhorn iterations ℓ = 1..L at slots
+    # 2..iters, so `iters` slots give L = iters - 1 iterations.
     num_nodes, num_measures = size(measures)
     b = ones(num_nodes, num_measures, iters)
     w = zeros(num_measures)
@@ -104,7 +107,11 @@ function sinkhorn_differentiate(coords, measures, target, cost, epsilon, iters)
 
     if target !== nothing
         g = (p .- target) .* p
-        for l in (iters-1):-1:2
+        # Reverse loop over every forward iteration, ℓ = L, ..., 1 (slots iters, ..., 2).
+        # Starting one slot lower drops the top term of the sum: at small L that gives
+        # a wrong gradient (wrong sign at L = 2), and it only becomes negligible once
+        # the forward iterations have converged.
+        for l in iters:-1:2
             for m in 1:num_measures
                 w[m] = w[m] + dot(log.(phi[:, m, l]), g)
                 u = coords[m] .* g .- r[:, m]
@@ -139,33 +146,31 @@ end
 
 
 """
-    barycentric_loss(coordinates, measures, target, cost, epsilon)
+    barycentric_loss(α, measures, target, cost, epsilon; iters=256)
 
-Compute the barycenter of `measures` with coordinates given by the
-logarithmic change of variable applied to `coordinates`, and return
-the squared Euclidean loss between that barycenter and `target`.
+The regression objective `E_L(λ)` of Bonneel et al. (Eq. 12) with the squared Euclidean
+loss, as a function of the *unconstrained* variable `α` through the softmax change of
+variables `λ = softmax(α)` (`logarithmic_change_of_variable`). The same `iters` must be
+used for the objective and its gradient (`loss_gradient`).
 """
-function barycentric_loss(coordinates, measures, target, cost, epsilon)
-    bar, _ = sinkhorn_differentiate(
-        logarithmic_change_of_variable(coordinates),
-        measures, target, cost, epsilon, 1024
-    )
+function barycentric_loss(α, measures, target, cost, epsilon; iters=256)
+    bar, _ = sinkhorn_differentiate(logarithmic_change_of_variable(α), measures, target, cost, epsilon, iters)
     return sqeuc_loss(bar, target)
 end
 
 
 """
-    loss_gradient(coords, measures, cost, target, epsilon)
+    loss_gradient(α, measures, cost, target, epsilon; iters=256)
 
-Return the gradient of the barycentric loss w.r.t. coordinates,
-as computed by the Bonneel algorithm (the `w` component of `sinkhorn_differentiate`).
+Gradient of `barycentric_loss` with respect to the unconstrained variable `α`:
+`sinkhorn_differentiate` returns `∇_λ E_L` (Algorithm 1's `w`), and the softmax
+change of variables `λ = softmax(α)` contributes its Jacobian,
+`∇_α E = λ ∘ (∇_λ E − ⟨λ, ∇_λ E⟩)`. Checked against finite differences in the tests.
 """
-function loss_gradient(coords, measures, cost, target, epsilon)
-    _, w = sinkhorn_differentiate(
-        logarithmic_change_of_variable(coords),
-        measures, target, cost, epsilon, 2048
-    )
-    return w
+function loss_gradient(α, measures, cost, target, epsilon; iters=256)
+    λ = logarithmic_change_of_variable(α)
+    _, w = sinkhorn_differentiate(λ, measures, target, cost, epsilon, iters)
+    return λ .* (w .- dot(λ, w))
 end
 
 
@@ -192,22 +197,19 @@ end
 
 
 """
-    simplex_regression(measures, target, cost, epsilon)
+    simplex_regression(measures, target, cost, epsilon; iters=256, α0=zeros(S), optim_options=Optim.Options())
 
-Given a family of `measures`, a `target` histogram, a `cost` matrix, and a
-regularization parameter `epsilon`, find the barycentric coordinates that best
-approximate `target` w.r.t. the reference measures via L-BFGS optimization.
-
-Requires Optim.jl (`using Optim` must be available in the calling scope).
+Wasserstein barycentric coordinates of `target` with respect to the columns of
+`measures` (Bonneel, Peyré & Cuturi 2016, §4.3): minimize `E_L(λ) = ½‖P^(L)(λ) − target‖²`
+over the simplex by L-BFGS on `α` with `λ = softmax(α)`, using the gradient from
+`sinkhorn_differentiate` with the softmax Jacobian applied. `α0 = 0` is the paper's
+`λ0 = 1/S`. `iters` is the Sinkhorn iteration budget used for both the objective and the
+gradient. Returns `λ̂ ∈ Δ`.
 """
-function simplex_regression(measures, target, cost, epsilon)
-    num_measures = size(measures, 2)
-    x0 = fill(1.0 / num_measures, num_measures)
-    f(coords) = barycentric_loss(coords, measures, target, cost, epsilon)
-    function g!(G, coords)
-        grad = loss_gradient(coords, measures, cost, target, epsilon)
-        copyto!(G, grad)
-    end
-    result = Optim.optimize(f, g!, x0, Optim.LBFGS())
+function simplex_regression(measures, target, cost, epsilon; iters=256,
+                            α0=zeros(size(measures, 2)), optim_options=Optim.Options())
+    f(α)     = barycentric_loss(α, measures, target, cost, epsilon; iters=iters)
+    g!(G, α) = copyto!(G, loss_gradient(α, measures, cost, target, epsilon; iters=iters))
+    result = Optim.optimize(f, g!, α0, Optim.LBFGS(), optim_options)
     return logarithmic_change_of_variable(Optim.minimizer(result))
 end
