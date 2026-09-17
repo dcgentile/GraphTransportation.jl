@@ -100,6 +100,14 @@ finite_difference_operator
 ## Admissible means
 
 ```@docs
+AdmissibleMean
+GeometricMean
+ArithmeticMean
+HarmonicMean
+LogarithmicMean
+QuadLogMean
+partial_s
+partial_t
 geomean
 logmean
 logmean_partial_s

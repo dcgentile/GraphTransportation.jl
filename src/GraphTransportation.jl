@@ -36,6 +36,7 @@ using Optim
 # --- core: graph calculus, Markov chains, graph constructors, the compact MarkovGraph
 #     representation, and the analysis QP shared by all three methods
 include("core/GraphCalculus.jl")
+include("core/Means.jl")
 include("core/MarkovChains.jl")
 include("core/CommonGraphs.jl")
 include("core/MarkovGraph.jl")
@@ -103,6 +104,8 @@ export weighted_laplacian, solve_weighted_laplacian, momentum_to_potential, exp_
 
 # admissible means
 export geomean, logmean, logmean_partial_s, logmean_partial_t
+export AdmissibleMean, GeometricMean, ArithmeticMean, HarmonicMean, LogarithmicMean, QuadLogMean
+export partial_s, partial_t
 
 # data structures
 export ErbarVector, ErbarCache, ErbarBundle, combine!, assign!

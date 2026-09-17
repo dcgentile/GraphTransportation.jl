@@ -98,9 +98,10 @@ end
     metric_tensor(G::MarkovGraph, ρ::AbstractVector, mean=geomean) -> Vector{Float64}
 
 Compact-edge-vector counterpart of the dense [`metric_tensor`](@ref): `θ[e] = mean(ρ[x], ρ[y])`
-for the oriented edge `e = (x, y)`. Does **not** include the edge weight `κ`; the
-Riemannian inner product of two potential gradients at `ρ` is
-`⟨∇φ, ∇ψ⟩_ρ = Σ_e κ[e] θ[e] (∇φ)[e] (∇ψ)[e]`.
+for the oriented edge `e = (x, y)`. `mean` is any callable `(s, t) -> θ`, e.g. the
+function `geomean` (default) or an `AdmissibleMean` such as `HarmonicMean()`. Does
+**not** include the edge weight `κ`; the Riemannian inner product of two potential
+gradients at `ρ` is `⟨∇φ, ∇ψ⟩_ρ = Σ_e κ[e] θ[e] (∇φ)[e] (∇ψ)[e]`.
 """
 function metric_tensor(G::MarkovGraph, ρ::AbstractVector, mean=geomean)
     @assert length(ρ) == G.n
