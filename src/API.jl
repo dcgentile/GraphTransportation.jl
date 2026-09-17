@@ -125,7 +125,8 @@ densities on `G`) with weights `λ`, i.e. the minimizer of `J(ν) = Σᵢ λᵢ 
   every `AdmissibleMean`, including the exact `LogarithmicMean`, which the SOCP cannot
   represent. `info = (; iters, J_hist, grad_hist, h)`: the objective and the Riemannian
   gradient norm per iteration and the final step size. Keywords: `h` (step, default 1,
-  halved on a positivity-floor hit or an objective increase), `maxiters` (200), `tol`
+  halved on a positivity-floor hit or an objective increase beyond the log maps' noise,
+  doubled back toward its initial value after an accepted step), `maxiters` (200), `tol`
   (gradient-norm stopping threshold, 1e-7), `nsteps` (integrator steps, 150), `init`
   (starting density, default the λ-weighted average of the references), `verbose`.
   First-order, so it converges linearly; the SOCP remains the certificate.
@@ -267,6 +268,7 @@ function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters
     J_hist = Float64[]; grad_hist = Float64[]
     iters = 0
     J = objective(rs)
+    h0 = h
     for k in 1:maxiters
         g = sum(λ[i] .* rs[i].φ0 for i in active)          # Riemannian descent direction as a potential
         gnorm = sqrt(2 * hamiltonian(G, ν, g))              # its metric norm at ν
@@ -285,9 +287,11 @@ function _barycenter_shooting(G::MarkovGraph, refs, λ; h::Float64=1.0, maxiters
             end
             if candidate !== nothing && minimum(candidate) > 0
                 rs_new = logmaps(candidate, Dict(i => rs[i].φ0 for i in active))
-                if rs_new !== nothing && objective(rs_new) ≤ J + 1e-12
+                # accept unless J went up by more than the log maps' own noise (relative)
+                if rs_new !== nothing && objective(rs_new) ≤ J * (1 + 1e-9)
                     ν, rs, J = candidate, rs_new, objective(rs_new)
                     accepted = true
+                    h = min(2h, h0)          # let the step recover after a halving
                     break
                 end
             end
