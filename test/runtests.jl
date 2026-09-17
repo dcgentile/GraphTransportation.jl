@@ -896,14 +896,18 @@ end
     # Check the rate, not just a single small error (same pattern as the m0-vs-SOCP
     # block in the log_map testset): synthesize at two N and require the shooting
     # backend's recovery error to shrink as the SOCP's discretization is refined.
+    # Measured on this instance: 5.2e-4 (N=2), 8.4e-5 (N=5), 2.1e-5 (N=10), then a
+    # floor of ~1e-5 set by the SCS QP solve (N=20: 8e-6, N=80: 2.5e-5, and the floor
+    # moves with the Julia/BLAS version). So compare N values on the steep part of
+    # the curve, N=2 vs N=10, and ask for at least a halving (observed: 25x).
     errs = Float64[]
     local ν
-    for N in (20, 80)
+    for N in (2, 10)
         ν, _, _ = barycenter_socp(G, refs, λ_true; N=N)
         push!(errs, norm(vec(analyze_shooting(G, ν, refs)) .- λ_true))
     end
-    @test errs[2] < errs[1]
-    @test errs[2] < 1e-2
+    @test errs[2] < errs[1] / 2
+    @test errs[2] < 1e-3
     λ̂ = vec(analyze_shooting(G, ν, refs))
     @test sum(λ̂) ≈ 1.0 atol=1e-6
 
