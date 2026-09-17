@@ -60,7 +60,7 @@ same normalization as `barycenter_socp`'s `J` — the convention established in
 `BarycenterSOCPValidation.jl`.
 """
 function objective_at(G::MarkovGraph, refs, λ, ν; N)
-    sum(λ[i] * geodesic_socp(G, refs[i], ν; N=N).W2 for i in eachindex(refs))
+    sum(λ[i] * geodesic(G, refs[i], ν; N=N).W2 for i in eachindex(refs))
 end
 
 CACHE = "ma_house_socp_comparison.jld2"
@@ -76,7 +76,7 @@ if isfile(CACHE)
     # predate the current analyze_socp default; nothing is resynthesized.
     G = MarkovGraph(Q_unw, u_unw)
     refs = [M[:, i] for i in 1:n_measures]
-    rc_socp = vec(analyze_socp(G, ν_socp, refs; N=N))
+    rc_socp = vec(analysis(G, ν_socp, refs; N=N))
 else
     println("Running descent barycenter (fixed-step CP, N=$N, tol=$tol, geo_tol=$geo_tol, maxiters=$maxiters) ...")
     t_descent = @elapsed (bar_descent, diffs, variances) = barycenter(M, λ, Q_unw;
@@ -86,11 +86,11 @@ else
     println("Running SOCP barycenter ...")
     G = MarkovGraph(Q_unw, u_unw)
     refs = [M[:, i] for i in 1:n_measures]
-    t_socp = @elapsed (ν_socp, J_socp, geos_socp) = barycenter_socp(G, refs, λ; N=N)
+    t_socp = @elapsed (ν_socp, J_socp, geos_socp) = barycenter(G, refs, λ; N=N)
 
     println("Recovering barycentric coordinates (analysis vs analyze_socp) ...")
     rc_descent = vec(analysis(bar_descent, M, Q_unw; N=N, tol=geo_tol))
-    rc_socp    = vec(analyze_socp(G, ν_socp, refs; N=N))
+    rc_socp    = vec(analysis(G, ν_socp, refs; N=N))
 
     @save CACHE bar_descent diffs variances ν_socp J_socp rc_descent rc_socp t_descent t_socp
 end

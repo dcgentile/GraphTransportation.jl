@@ -57,7 +57,7 @@ for (name, target) in (("ν_socp", ν_socp), ("bar_descent", bar_descent)),
     local λ̂, Amat
     t = @elapsed redirect_stdout(devnull) do
         redirect_stderr(devnull) do
-            (λ̂_, Amat_) = analyze_socp(G, target, refs; N=N, convention=convention, return_system=true)
+            (λ̂_, Amat_) = analysis(G, target, refs; N=N, convention=convention, return_system=true)
             λ̂ = vec(λ̂_); Amat = Amat_
         end
     end

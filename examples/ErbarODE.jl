@@ -76,7 +76,7 @@ else
 
     # ── Discrete transport (geometric mean, Chambolle–Pock) ───────────────────
     println("Running discrete_transport (N=$N_dt) …")
-    geo = discrete_transport(Q, ρ_A, ρ_B; N=N_dt, tol=1e-10, progress=true)
+    geo = GraphTransportation.discrete_transport(Q, ρ_A, ρ_B; N=N_dt, tol=1e-10, progress=true)
 
     ts = range(0.0, 1.0, length=N_dt + 1)
 

@@ -25,12 +25,12 @@ norm_pi(v, π) = sqrt(sum(π .* v .^ 2))
 # artificially slow relative to the others.
 let
     G_warm = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5])
-    geodesic_socp(G_warm, [1.5, 0.5], [0.5, 1.5]; N=2)
-    barycenter_socp(G_warm, [[1.5, 0.5], [0.5, 1.5]], [0.5, 0.5]; N=2)
+    geodesic(G_warm, [1.5, 0.5], [0.5, 1.5]; N=2)
+    barycenter(G_warm, [[1.5, 0.5], [0.5, 1.5]], [0.5, 0.5]; N=2)
 end
 
 function objective_at(G::MarkovGraph, refs, λ, ν; N)
-    sum(λ[i] * geodesic_socp(G, refs[i], ν; N=N).W2 for i in eachindex(refs))
+    sum(λ[i] * geodesic(G, refs[i], ν; N=N).W2 for i in eachindex(refs))
 end
 
 function run_case(name, Q, π, M, λ; N=10, descent_kwargs=NamedTuple())
@@ -39,7 +39,7 @@ function run_case(name, Q, π, M, λ; N=10, descent_kwargs=NamedTuple())
 
     t_descent = @elapsed bar_descent = barycenter(M, λ, Q;
         h=0.1, geodesic_steps=N, verbose=false, descent_kwargs...)
-    t_socp = @elapsed (ν_socp, J_socp, geos_socp) = barycenter_socp(G, refs, λ; N=N)
+    t_socp = @elapsed (ν_socp, J_socp, geos_socp) = barycenter(G, refs, λ; N=N)
 
     discrepancy = norm_pi(bar_descent .- ν_socp, π)
     J_descent = objective_at(G, refs, λ, bar_descent; N=N)

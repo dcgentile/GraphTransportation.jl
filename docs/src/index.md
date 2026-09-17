@@ -10,19 +10,19 @@ Given a graph encoded as a Markov transition matrix `Q` with stationary distribu
 `π`, this package computes:
 
 - **Geodesics** between probability measures on the graph, as a single
-  second-order-cone program (`geodesic_socp`), or for strictly positive measures by
+  second-order-cone program (`geodesic`), or for strictly positive measures by
   Hamiltonian shooting (`log_map` / `exp_map`), which is faster and exact in time
 - **Discrete transport barycenters** (Fréchet means) as one joint convex program
-  solved to its global optimum (`barycenter_socp`)
+  solved to its global optimum (`barycenter`)
 - **Barycentric coordinate recovery** by solving a quadratic programme on the Gram
-  matrix of the geodesics' initial potentials (`analyze_socp`, `analyze_shooting`)
+  matrix of the geodesics' initial potentials (`analysis`, `analysis(...; method=:shooting)`)
 - **Entropic optimal transport barycenters** via the Sinkhorn algorithm, with
   simplex-regression-based coordinate recovery
 
-The original Galerkin-discretised Chambolle-Pock solver (`discrete_transport`) and the
-gradient-descent barycenter (`barycenter`, `analysis`) remain available as the
-reference implementation of the paper's algorithm, but the SOCP and shooting paths
-are the recommended tools: orders of magnitude faster, with certified optimality for
+Every function takes `method=:socp` (default), `:shooting`, or `:chambolle_pock`. The
+last is the paper's Galerkin-discretised Chambolle-Pock solver with gradient-descent
+barycenters, kept as the reference implementation; the SOCP and shooting paths are the
+recommended tools: orders of magnitude faster, with certified optimality for
 barycenters and coordinate recovery that is exact at the synthesis resolution.
 
 ## Quick start
@@ -40,16 +40,17 @@ G = MarkovGraph(Q, π)
 ν = [0.0, 2.0]
 
 # Discrete transport geodesic; W2 is the squared distance
-geo = geodesic_socp(G, μ, ν; N=20)
+geo = geodesic(G, μ, ν; N=20)            # method=:socp by default
 geo.W2, geo.ρ
 
 # Barycenter of μ and ν with weights (0.75, 0.25), and its recovered coordinates
-bary, J, _ = barycenter_socp(G, [μ, ν], [0.75, 0.25]; N=20)
-coords     = analyze_socp(G, bary, [μ, ν]; N=20)
+bary, J, _ = barycenter(G, [μ, ν], [0.75, 0.25]; N=20)
+coords     = analysis(G, bary, [μ, ν]; N=20)
 
-# For strictly positive measures, the shooting maps give exact-in-time geodesics
+# For strictly positive measures, Hamiltonian shooting is faster and exact in time
 ρ0 = [1.2, 0.8]; ρ1 = [0.6, 1.4]
-tangent = log_map(G, ρ0, ρ1)      # (; φ0, m0, W2, iters, residual)
+geodesic(G, ρ0, ρ1; method=:shooting).W2
+tangent = log_map(G, ρ0, ρ1)      # the underlying exp/log maps are also exported
 exp_map(G, ρ0, tangent.φ0) ≈ ρ1   # round trip
 ```
 
@@ -74,8 +75,8 @@ Each returns `(Q, π)` where `Q` is the row-stochastic transition matrix and
 
 The figure below shows the Barycentric Coding Model (BCM) on the 49-node
 USA contiguous-states graph. Each sub-graph is a discrete transport barycenter
-(`barycenter_socp`) whose position in the triangle reflects its recovered
-barycentric coordinates (`analyze_socp`) with respect to three reference measures
+(`barycenter`) whose position in the triangle reflects its recovered
+barycentric coordinates (`analysis`) with respect to three reference measures
 (corners).
 
 ![Barycentric coding model on the USA graph](assets/bcm.png)

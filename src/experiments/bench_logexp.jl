@@ -33,7 +33,7 @@ Qma, πma = ma_house_markov_chain(); cases["MA house (160)"] = MarkovGraph(Qma, 
 # JIT warm-up
 let G = cases["grid 5x5 (25)"], rng = MersenneTwister(0)
     ν = random_density(rng, G.π); μ = random_density(rng, G.π)
-    r = log_map(G, ν, μ); exp_map(G, ν, r.φ0); geodesic_socp(G, ν, μ; N=10)
+    r = log_map(G, ν, μ); exp_map(G, ν, r.φ0); geodesic(G, ν, μ; N=10)
 end
 
 const CACHE = "bench_logexp.jld2"
@@ -52,7 +52,7 @@ else
             tl = @elapsed r = log_map(G, ν, μ)
             push!(t_log, tl); push!(iters, r.iters)
             push!(roundtrip, norm((exp_map(G, ν, r.φ0) .- μ) .* sqrt.(G.π)))
-            ts = @elapsed sol = geodesic_socp(G, ν, μ; N=N_SOCP)
+            ts = @elapsed sol = geodesic(G, ν, μ; N=N_SOCP)
             push!(t_socp, ts)
             push!(W2_rel, abs(r.W2 - sol.W2) / sol.W2)
             push!(m0_rel, norm(r.m0 .- sol.m0) / norm(sol.m0))

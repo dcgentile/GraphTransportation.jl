@@ -46,7 +46,7 @@ function analyze_both(G, ν, refs, N)
         local λ̂, Amat
         t = @elapsed redirect_stdout(devnull) do
             redirect_stderr(devnull) do
-                (λ̂_, Amat_) = analyze_socp(G, ν, refs; N=N, convention=convention, return_system=true)
+                (λ̂_, Amat_) = analysis(G, ν, refs; N=N, convention=convention, return_system=true)
                 λ̂ = vec(λ̂_); Amat = Amat_
             end
         end
@@ -58,8 +58,8 @@ end
 
 let
     G_warm = MarkovGraph([0.0 1.0; 1.0 0.0], [0.5, 0.5])
-    geodesic_socp(G_warm, [1.5, 0.5], [0.5, 1.5]; N=2)
-    barycenter_socp(G_warm, [[1.5, 0.5], [0.5, 1.5]], [0.5, 0.5]; N=2)
+    geodesic(G_warm, [1.5, 0.5], [0.5, 1.5]; N=2)
+    barycenter(G_warm, [[1.5, 0.5], [0.5, 1.5]], [0.5, 0.5]; N=2)
 end
 
 const CACHE = "socp_native_resweep.jld2"
@@ -74,7 +74,7 @@ else
         println("$(sweep) k=$k (V=$(k*k)) d=$d centers=$centers")
         G, refs = build(k, centers)
         for N in Ns
-            t_synth = @elapsed (ν, J, _) = barycenter_socp(G, refs, λ; N=N, silent=true)
+            t_synth = @elapsed (ν, J, _) = barycenter(G, refs, λ; N=N, silent=true)
             both = analyze_both(G, ν, refs, N)
             @printf("  N=%-3d J=%.4g  momentum: err=%.3e ratio=%.3f | potential: err=%.3e ratio=%.3f λᵀAλ=%.2e  (synth %.1fs)\n",
                     N, J, both[:momentum].err, both[:momentum].ratio,

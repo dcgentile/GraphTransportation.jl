@@ -65,9 +65,15 @@ include("shooting/ExpLog.jl")
 # --- Sinkhorn: entropic barycenters and simplex-regression analysis
 include("sinkhorn/Sinkhorn.jl")
 
+# --- unified entry points (geodesic / transport_cost / barycenter / analysis; method=)
+include("API.jl")
+
 # core API
-# Chambolle-Pock (reference implementation)
-export discrete_transport, transport_cost, action, barycenter, analysis
+# unified API: one function per task, `method=:socp | :shooting | :chambolle_pock`
+export geodesic, transport_cost, barycenter, analysis, GeodesicSolution
+
+# Chambolle-Pock (reference implementation); discrete_transport is not exported
+export action
 
 # Sinkhorn
 export sinkhorn_barycenter, simplex_regression
@@ -88,14 +94,11 @@ export graph_gradient, add_graph_gradient!, graph_divergence, graph_divergence!
 export laplacian_from_transition, metric_tensor, avg_operator, finite_difference_operator
 
 # SOCP formulation: graph primitives, geodesics, barycenters, analysis
-export MarkovGraph
-export geodesic_socp, GeodesicSolution
-export barycenter_socp
-export analyze_socp
+export MarkovGraph   # geodesic_socp / barycenter_socp / analyze_socp are internal (use method=:socp)
 
 # Hamiltonian shooting: exp/log maps and the :shooting analysis backend
 export hamiltonian, hamiltonian_flow, integrate_hamiltonian, ρ_floor, PositivityFloorError
-export weighted_laplacian, solve_weighted_laplacian, momentum_to_potential, exp_map, log_map, log_map_mollified, analyze_shooting
+export weighted_laplacian, solve_weighted_laplacian, momentum_to_potential, exp_map, log_map, log_map_mollified   # analyze_shooting is internal (use method=:shooting)
 
 # admissible means
 export geomean, logmean, logmean_partial_s, logmean_partial_t
