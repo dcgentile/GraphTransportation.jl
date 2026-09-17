@@ -7,7 +7,7 @@ kernel spanned by the constants, and related to the Hamiltonian flow by
 `π ∘ ρ̇ = L_θ(ν) φ` (equivalently `ρ̇ = −div(θ(ν)∘∇φ)`, see `hamiltonian_flow`).
 """
 function weighted_laplacian(G::MarkovGraph, ν::AbstractVector)
-    w = G.κ .* metric_tensor(G, ν)
+    w = G.κ .* metric_tensor(G, ν)          # θ = G.mean
     I = Int[]; J = Int[]; V = Float64[]
     for (e, (x, y)) in enumerate(G.E)
         push!(I, x); push!(J, x); push!(V,  w[e])

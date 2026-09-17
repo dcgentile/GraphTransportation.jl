@@ -3,10 +3,13 @@ The Hamiltonian ODE system underlying the exponential/logarithmic maps. Valid on
 for **strictly positive** densities (`ρ_floor`-guarded); see `log_map_mollified` for
 the boundary-case fallback and `geodesic_socp` for the general case.
 
-State is `(ρ, φ) ∈ Rⁿ × Rⁿ`. Uses the geometric mean `θ(s,t) = √(st)` throughout,
-matching the SOCP formulation (`geodesic_socp`, `barycenter_socp`). Other admissible
-means (logarithmic, harmonic, arithmetic; see `geomean`/`logmean`) are a stated future
-goal for both formulations and are not yet configurable here.
+State is `(ρ, φ) ∈ Rⁿ × Rⁿ`. The mobility `θ` and its derivative `∂₁θ` come from the
+graph's `G.mean` (see `MarkovGraph`); the shooting maps accept every `AdmissibleMean`,
+including the exact `LogarithmicMean`, whereas the SOCP needs `QuadLogMean` for the
+logarithmic mean, so cross-validate with `MarkovGraph(G; mean=QuadLogMean(8))` on the
+SOCP side. Under the arithmetic mean the mobility does not vanish at an empty
+node, so the flow can legitimately drive a density through zero and hit the positivity
+floor; prefer `method=:socp` for that mean near the boundary.
 
 Scope and scaling. Everything here requires strictly positive densities: `log_map`
 and `analyze_shooting` throw on non-interior data rather than mollifying it; the
@@ -55,7 +58,7 @@ approximation (`log_map_mollified`) instead.
 """
 function hamiltonian(G::MarkovGraph, ρ::AbstractVector, φ::AbstractVector)
     ∇φ = graph_gradient(G, φ)
-    θ = [sqrt(ρ[x] * ρ[y]) for (x, y) in G.E]
+    θ = [G.mean(ρ[x], ρ[y]) for (x, y) in G.E]
     return 0.5 * sum(G.κ .* θ .* ∇φ .^ 2)
 end
 
@@ -65,20 +68,22 @@ end
 Equations of motion:
 
     ρ̇(x) = Σ_y θ(ρ(x),ρ(y)) (φ(x)-φ(y)) Q(x,y)  =  -div(θ(ρ)∘∇φ)(x)
-    φ̇(x) = -½ Σ_y ∂₁θ(ρ(x),ρ(y)) (φ(x)-φ(y))² Q(x,y),   ∂₁θ_geo(s,t) = ½√(t/s)
+    φ̇(x) = -½ Σ_y ∂₁θ(ρ(x),ρ(y)) (φ(x)-φ(y))² Q(x,y)
 
-Requires `ρ` strictly positive (see `ρ_floor`); `∂₁θ_geo` divides by `ρ(x)`.
+with `θ = G.mean` and `∂₁θ = partial_s(G.mean, ·, ·)` (for the geometric mean `½√(t/s)`,
+which divides by `ρ(x)`; hence the positivity floor). Requires `ρ` strictly positive.
 """
 function hamiltonian_flow(G::MarkovGraph, ρ::AbstractVector, φ::AbstractVector)
+    mean = G.mean
     ∇φ = graph_gradient(G, φ)
-    θ = [sqrt(ρ[x] * ρ[y]) for (x, y) in G.E]
+    θ = [mean(ρ[x], ρ[y]) for (x, y) in G.E]
     ρ̇ = .-graph_divergence(G, θ .* ∇φ)
 
     φ̇ = zeros(promote_type(eltype(ρ), eltype(φ)), G.n)
     for (e, (x, y)) in enumerate(G.E)
         Δφ² = ∇φ[e]^2
-        φ̇[x] -= 0.5 * (0.5 * sqrt(ρ[y] / ρ[x])) * Δφ² * G.Q[x, y]
-        φ̇[y] -= 0.5 * (0.5 * sqrt(ρ[x] / ρ[y])) * Δφ² * G.Q[y, x]
+        φ̇[x] -= 0.5 * partial_s(mean, ρ[x], ρ[y]) * Δφ² * G.Q[x, y]
+        φ̇[y] -= 0.5 * partial_s(mean, ρ[y], ρ[x]) * Δφ² * G.Q[y, x]
     end
     return ρ̇, φ̇
 end
