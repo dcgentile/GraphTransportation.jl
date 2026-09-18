@@ -60,7 +60,7 @@ julia --project=examples examples/<ScriptName>.jl
 
 | Script | Description |
 |--------|-------------|
-| `GridComparison.jl` | Compares WGD barycenter with Sinkhorn barycenters (shortest-path and diffusion-distance costs) on a 7×7 grid. |
+| `GridComparison.jl` | Compares the discrete transport barycenter (joint SOCP) with Sinkhorn barycenters (shortest-path and diffusion-distance costs) on a 7×7 grid, with coordinate recovery for each. |
 | `InitializationsGrid.jl` | Benchmarks sensitivity to warm-start initialisation on a 5×5 grid with five reference measures. |
 | `GridStepSizeVariations.jl` | Sweeps over geodesic step-count parameters on a 4×4 grid, reporting timing and output distance for cold vs. warm starts. |
 
@@ -71,8 +71,8 @@ DC) constructed from adjacency.
 
 | Script | Description |
 |--------|-------------|
-| `StatesComparison.jl` | Side-by-side comparison of WGD, Sinkhorn/shortest-path, and Sinkhorn/diffusion-distance barycenters on the USA graph. |
-| `EntropicComparison.jl` | Detailed comparison of Sinkhorn barycenters at diffusion-distance costs with varying time parameter `t ∈ {2, 4, 8, 16}` against the WGD baseline; California, Maine, and Tennessee as reference measures. |
+| `StatesComparison.jl` | Side-by-side comparison of the discrete transport (SOCP), Sinkhorn/shortest-path, and Sinkhorn/diffusion-distance barycenters on the USA graph. |
+| `EntropicComparison.jl` | Detailed comparison of Sinkhorn barycenters at diffusion-distance costs with varying time parameter `t ∈ {2, 4, 8, 16}` with coordinate recovery by `analysis(method=:sinkhorn)`; California, Maine, and Tennessee as reference measures. |
 | `StateInitializations.jl` | Benchmarks initialisation sensitivity on the USA graph with five geographically concentrated reference measures. |
 | `ParameterVariationsUSA.jl` | Heatmap of coordinate-recovery error across a grid of `(geodesic_steps, geodesic_tol)` parameter values on the USA graph. |
 | `WarmStartBenchmark.jl` | Timing comparison of cold vs. warm-started barycenter computation on the USA graph. |

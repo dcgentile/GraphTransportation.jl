@@ -1,7 +1,7 @@
 # StatesComparison.jl
 #
 # Compare three barycenter methods on the USA state adjacency graph (49 nodes):
-#   1. WGD via barycenter() + analysis()
+#   1. Discrete transport barycenter (joint SOCP, `barycenter`) + `analysis`
 #      (h=0.1, tol=1e-8, geodesic_tol=1e-10, geodesic_steps=3)
 #   2. Sinkhorn with normalized squared shortest-path cost  (ε=0.125)
 #   3. Sinkhorn with normalized squared diffusion-distance cost, t=diameter  (ε=0.125)
@@ -11,8 +11,8 @@
 # Weights: w = [0.5, 0.3, 0.2]
 #
 # Coordinate recovery:
-#   WGD       → GraphTransportation.analysis()
-#   Sinkhorn  → simplex_regression()
+#   transport → analysis(G, ν, refs; N)
+#   Sinkhorn  → analysis(G, ν, refs; method=:sinkhorn, cost, epsilon)
 #
 # Two output figures:
 #   states_comparison_density.pdf  — all panels shown as densities w.r.t. u
@@ -22,7 +22,6 @@
 # (load_usa_mc reads ./data/states.shp relative to the working directory)
 
 using GraphTransportation
-using Optim                                     # required by simplex_regression
 using CairoMakie, GraphMakie
 using Graphs
 using Shapefile, LibGEOS
@@ -30,25 +29,8 @@ using LinearAlgebra, SparseArrays, Statistics
 using JLD2
 using LaTeXStrings
 
-# Include Sinkhorn.jl directly so that simplex_regression can see Optim in the
-# calling scope.
 include("./ExperimentUtils.jl")
-include("../src/sinkhorn/Sinkhorn.jl")
 
-# Helper functions needed by form_diffusion_map_from_graph in ExperimentUtils.jl.
-function adj_mat_to_markov_chain(adj_mat)
-    row_sums = vec(sum(adj_mat, dims=2))
-    return Diagonal(1.0 ./ row_sums) * adj_mat
-end
-
-function find_markov_steady_state(p)
-    dim = size(p, 1)
-    q = p - I(dim)
-    q = hcat(q, ones(dim))
-    QTQ = q * q'
-    bQT = ones(dim)
-    return QTQ \ bQT
-end
 
 # ── USA graph setup ────────────────────────────────────────────────────────────
 Q, sstate, geo_cx, geo_cy = load_usa_mc()
@@ -72,11 +54,7 @@ const IDX_ME = 37   # Maine       (far northeast)
 # ── Parameters ─────────────────────────────────────────────────────────────────
 const WEIGHTS   = [0.5, 0.3, 0.2]
 const REG       = 0.0125
-const H         = 0.1
-const TOL       = 1e-10
-const GEO_TOL   = 1e-12
-const GEO_STEPS = 3
-const MAXITERS  = 8192
+const GEO_STEPS = 20     # time steps of the joint SOCP (and of its analysis)
 
 # ── Reference measures ─────────────────────────────────────────────────────────
 # random_geographic_concentration returns a probability measure (sums to 1).
@@ -84,22 +62,20 @@ const MAXITERS  = 8192
 μ2 = random_geographic_concentration(adj; center=IDX_TN)
 μ3 = random_geographic_concentration(adj; center=IDX_ME)
 
-M_prob = hcat(μ1, μ2, μ3)                             # probability measures
-M_dens = hcat(μ1 ./ sstate, μ2 ./ sstate, μ3 ./ sstate)  # densities w.r.t. u
+G = MarkovGraph(Q, sstate)
+refs = [μ1 ./ sstate, μ2 ./ sstate, μ3 ./ sstate]     # densities w.r.t. u
 
 # ── Cost matrices ──────────────────────────────────────────────────────────────
 println("Computing cost matrices..."); flush(stdout)
 
-sp_dist = compute_graph_metric(adj)
-sp_cost = sp_dist .^ 2
-sp_cost ./= maximum(sp_cost)
+# Both ground costs are normalized to [0, 1] (ground_cost's default).
+sp_cost = ground_cost(G, :shortest_path)
 
 # DIFF_T = graph diameter: smallest t such that no pair of nodes has zero diffusion distance.
-const DIFF_T = Int(maximum(sp_dist))
+const DIFF_T = graph_diameter(G)
 println("Graph diameter = $DIFF_T  (setting DIFF_T = $DIFF_T)"); flush(stdout)
 
-diff_cost = form_diffusion_map_from_graph(adj, DIFF_T) .^ 2
-diff_cost ./= maximum(diff_cost)
+diff_cost = ground_cost(G, :diffusion; t=DIFF_T)
 
 # ── Computation (with per-result JLD2 caching) ────────────────────────────────
 # Each result is saved immediately after computation so a killed run loses at
@@ -139,27 +115,25 @@ if isfile(CACHE)
 end
 
 if isnothing(bar_wgd) || isnothing(rc_wgd) || wgd_fresh_run
-    println("=== WGD barycenter ==="); flush(stdout)
-    bar_wgd = barycenter(M_dens, WEIGHTS, Q;
-                         h=H, tol=TOL, maxiters=MAXITERS,
-                         geodesic_tol=GEO_TOL, geodesic_steps=GEO_STEPS)
-    rc_wgd = vec(analysis(bar_wgd, M_dens, Q; N=GEO_STEPS, tol=GEO_TOL))
-    println("  WGD recovered: $(round.(rc_wgd; sigdigits=4))"); flush(stdout)
+    println("=== discrete transport barycenter (SOCP) ==="); flush(stdout)
+    bar_wgd, _, _ = barycenter(G, refs, WEIGHTS; N=GEO_STEPS)
+    rc_wgd = vec(analysis(G, bar_wgd, refs; N=GEO_STEPS))
+    println("  SOCP recovered: $(round.(rc_wgd; sigdigits=4))"); flush(stdout)
     update_cache!(CACHE, "bar_wgd" => bar_wgd, "rc_wgd" => rc_wgd)
 end
 
 if isnothing(bar_sp) || isnothing(rc_sp) || sp_fresh_run
     println("=== Sinkhorn barycenter (shortest-path cost) ==="); flush(stdout)
-    bar_sp = sinkhorn_barycenter(WEIGHTS, M_prob, nothing, sp_cost, REG)
-    rc_sp  = simplex_regression(M_prob, bar_sp, sp_cost, REG)
+    bar_sp = barycenter(G, refs, WEIGHTS; method=:sinkhorn, cost=sp_cost, epsilon=REG)[1] .* sstate   # probability vector
+    rc_sp  = analysis(G, bar_sp ./ sstate, refs; method=:sinkhorn, cost=sp_cost, epsilon=REG)
     println("  SP  recovered: $(round.(rc_sp;  sigdigits=4))"); flush(stdout)
     update_cache!(CACHE, "bar_sp" => bar_sp, "rc_sp" => rc_sp)
 end
 
 if isnothing(bar_diff) || isnothing(rc_diff) || diffusion_fresh_run
     println("=== Sinkhorn barycenter (diffusion cost, t=$DIFF_T) ==="); flush(stdout)
-    bar_diff = sinkhorn_barycenter(WEIGHTS, M_prob, nothing, diff_cost, REG)
-    rc_diff  = simplex_regression(M_prob, bar_diff, diff_cost, REG)
+    bar_diff = barycenter(G, refs, WEIGHTS; method=:sinkhorn, cost=diff_cost, epsilon=REG)[1] .* sstate
+    rc_diff  = analysis(G, bar_diff ./ sstate, refs; method=:sinkhorn, cost=diff_cost, epsilon=REG)
     println("  Diff recovered: $(round.(rc_diff; sigdigits=4))"); flush(stdout)
     update_cache!(CACHE, "bar_diff" => bar_diff, "rc_diff" => rc_diff)
 end
@@ -168,7 +142,7 @@ end
 rel_err(rc) = norm(rc .- WEIGHTS) / norm(WEIGHTS)
 
 println("\nTrue coordinates:        $(round.(WEIGHTS;   sigdigits=3))")
-println("WGD recovered:           $(round.(rc_wgd;   sigdigits=3))" *
+println("SOCP recovered:          $(round.(rc_wgd;   sigdigits=3))" *
         "  rel_err=$(round(rel_err(rc_wgd);  sigdigits=3))")
 println("Sinkhorn/SP recovered:   $(round.(rc_sp;    sigdigits=3))" *
         "  rel_err=$(round(rel_err(rc_sp);   sigdigits=3))")
@@ -228,8 +202,8 @@ draw_panel!(fig_dens[1, 2], μ2 ./ sstate; title=L"\nu_2")
 draw_panel!(fig_dens[1, 3], μ3 ./ sstate; title=L"\nu_3")
 
 draw_panel!(fig_dens[2, 1], bar_wgd;
-    title=L"\nu_\lambda\ \text{Wasserstein Gradient Descent}",
-    sublabels=bary_sublabels(rc_wgd; params="h=$(H),\\ \\delta_g = $(TOL)"))
+    title=L"\nu_\lambda\ \text{discrete transport (SOCP)}",
+    sublabels=bary_sublabels(rc_wgd; params="N = $(GEO_STEPS)"))
 draw_panel!(fig_dens[2, 2], bar_sp ./ sstate;
     title=L"\nu_\lambda\ \text{Sinkhorn, Shortest Path Cost}",
     sublabels=bary_sublabels(rc_sp; params="\\varepsilon_{\\mathrm{reg}} = $(REG)"))
@@ -251,8 +225,8 @@ draw_panel!(fig_prob[1, 2], μ2; title=L"\nu_2")
 draw_panel!(fig_prob[1, 3], μ3; title=L"\nu_3")
 
 draw_panel!(fig_prob[2, 1], bar_wgd .* sstate;
-    title=L"\nu_\lambda\ \text{Wasserstein Gradient Descent}",
-    sublabels=bary_sublabels(rc_wgd; params="h=$(H),\\ \\delta_g = $(TOL)"))
+    title=L"\nu_\lambda\ \text{discrete transport (SOCP)}",
+    sublabels=bary_sublabels(rc_wgd; params="N = $(GEO_STEPS)"))
 draw_panel!(fig_prob[2, 2], bar_sp;
     title=L"\nu_\lambda\ \text{Sinkhorn, Shortest Path Cost}",
     sublabels=bary_sublabels(rc_sp; params="\\varepsilon_{\\mathrm{reg}} = $(REG)"))

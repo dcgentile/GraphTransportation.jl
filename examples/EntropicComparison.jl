@@ -10,39 +10,16 @@
 #   California (node 15), Maine (node 37), Tennessee (node 22)
 # with barycentric weights (0.5, 0.3, 0.2).
 #
-# Coordinate recovery: simplex_regression()
+# Coordinate recovery: analysis(G, ν, refs; method=:sinkhorn, cost, epsilon)
 #
 # Run from src/experiments/ so that ./data/states.shp resolves correctly.
 
 using GraphTransportation
-using Optim                                     # required by simplex_regression
 using CairoMakie, GraphMakie
 using Graphs
 using Shapefile, LibGEOS
 using LinearAlgebra, SparseArrays, Statistics
 using JLD2
-
-# Include Sinkhorn.jl directly so that simplex_regression can see Optim in the
-# calling scope. (GraphTransportation exports these names too; the include
-# shadows them with identical definitions that have Optim available.)
-include("../src/sinkhorn/Sinkhorn.jl")
-
-# Helper functions needed by form_diffusion_map_from_graph in ExperimentUtils.jl.
-# These are simple random-walk utilities not exported from GraphTransportation;
-# the definitions here follow the pattern in experiments/SAMPTA.jl.
-function adj_mat_to_markov_chain(adj_mat)
-    row_sums = vec(sum(adj_mat, dims=2))
-    return Diagonal(1.0 ./ row_sums) * adj_mat
-end
-
-function find_markov_steady_state(p)
-    dim = size(p, 1)
-    q = p - I(dim)
-    q = hcat(q, ones(dim))
-    QTQ = q * q'
-    bQT = ones(dim)
-    return QTQ \ bQT
-end
 
 include("./ExperimentUtils.jl")
 
@@ -77,7 +54,8 @@ const DIFF_TIMES = [2, 4, 8, 16]    # diffusion time parameters (t=2 under inves
 μ_ME = random_geographic_concentration(adj; center=IDX_ME)
 μ_TN = random_geographic_concentration(adj; center=IDX_TN)
 
-M_prob = hcat(μ_CA, μ_ME, μ_TN)
+G = MarkovGraph(Qusa, sstate)
+refs = [μ_CA ./ sstate, μ_ME ./ sstate, μ_TN ./ sstate]   # densities w.r.t. u
 # M_dens = hcat(μ_CA ./ sstate, μ_ME ./ sstate, μ_TN ./ sstate) # WGD densities (disabled)
 
 # ── Cost matrices ──────────────────────────────────────────────────────────────
@@ -89,13 +67,9 @@ println("Computing cost matrices...")
 # squared shortest-path distances at ε=0.125, and similarly for squared
 # diffusion distances at small t.  Normalization keeps the max kernel
 # exponent at -1/ε while preserving the relative structure of the cost.
-sp_cost = compute_graph_metric(adj) .^ 2
-sp_cost ./= maximum(sp_cost)
+sp_cost = ground_cost(G, :shortest_path)
 
-diff_costs = map(DIFF_TIMES) do t
-    D = form_diffusion_map_from_graph(adj, t) .^ 2
-    D ./ maximum(D)
-end
+diff_costs = [ground_cost(G, :diffusion; t=t) for t in DIFF_TIMES]
 
 # ── Kernel diagnostics ─────────────────────────────────────────────────────────
 # At REG=0.01 the kernel K = exp(-C/ε) decays fast; sparsity is the fraction of
@@ -120,24 +94,6 @@ K_diffs = map(enumerate(DIFF_TIMES)) do (i, t)
 end
 println()
 
-# Local override of simplex_regression with iteration cap and convergence tracing.
-# The default (no Options) allows 1000 LBFGS iterations; each calls loss_gradient
-# which runs 2048 Sinkhorn steps.  At ε=0.01 the kernel is nearly singular so
-# gradients may be NaN/Inf — cap at 200 iterations and print the result summary.
-function simplex_regression_traced(measures, target, cost, epsilon; maxiters=200)
-    num_measures = size(measures, 2)
-    x0 = fill(1.0 / num_measures, num_measures)
-    f(coords)    = barycentric_loss(coords, measures, target, cost, epsilon)
-    function g!(G, coords)
-        grad = loss_gradient(coords, measures, cost, target, epsilon)
-        copyto!(G, grad)
-    end
-    opts   = Optim.Options(iterations=maxiters, show_trace=false)
-    result = Optim.optimize(f, g!, x0, Optim.LBFGS(), opts)
-    println("    Optim: $(Optim.summary(result))  converged=$(Optim.converged(result))  iters=$(result.iterations)  f=$(round(Optim.minimum(result); sigdigits=4))  |g|=$(round(Optim.g_residual(result); sigdigits=4))")
-    flush(stdout)
-    return logarithmic_change_of_variable(Optim.minimizer(result))
-end
 
 # ── Computation (with JLD2 caching) ───────────────────────────────────────────
 const CACHE = "entropic_comparison.jld2"
@@ -154,23 +110,23 @@ else
     # rc_wgd = vec(analysis(bar_wgd, M_dens, Qusa; N=steps))
 
     println("=== Sinkhorn barycenter (squared shortest-path cost) ==="); flush(stdout)
-    bar_sp = sinkhorn_barycenter(WEIGHTS, M_prob, nothing, sp_cost, REG)
+    bar_sp = barycenter(G, refs, WEIGHTS; method=:sinkhorn, cost=sp_cost, epsilon=REG)[1] .* sstate   # probability vector
     println("  barycenter sum = $(sum(bar_sp))  min = $(minimum(bar_sp))"); flush(stdout)
-    rc_sp  = simplex_regression_traced(M_prob, bar_sp, sp_cost, REG)
+    rc_sp  = analysis(G, bar_sp ./ sstate, refs; method=:sinkhorn, cost=sp_cost, epsilon=REG)
     println("  → recovered: $(round.(rc_sp; sigdigits=4))"); flush(stdout)
 
     bars_diff = zeros(n, length(DIFF_TIMES))
     rcs_diff  = zeros(3, length(DIFF_TIMES))
     for (i, t) in enumerate(DIFF_TIMES)
         println("=== Sinkhorn barycenter (diffusion cost, t=$t) ==="); flush(stdout)
-        bars_diff[:, i] = sinkhorn_barycenter(WEIGHTS, M_prob, nothing, diff_costs[i], REG)
+        bars_diff[:, i] = barycenter(G, refs, WEIGHTS; method=:sinkhorn, cost=diff_costs[i], epsilon=REG)[1] .* sstate
         println("  barycenter sum = $(sum(bars_diff[:, i]))  min = $(minimum(bars_diff[:, i]))"); flush(stdout)
-        println("  Attempting simplex_regression (t=$t)..."); flush(stdout)
+        println("  Attempting analysis(method=:sinkhorn) (t=$t)..."); flush(stdout)
         try
-            rcs_diff[:, i] = simplex_regression_traced(M_prob, bars_diff[:, i], diff_costs[i], REG)
+            rcs_diff[:, i] = analysis(G, bars_diff[:, i] ./ sstate, refs; method=:sinkhorn, cost=diff_costs[i], epsilon=REG)
             println("  → recovered: $(round.(rcs_diff[:, i]; sigdigits=4))"); flush(stdout)
         catch e
-            println("  !! simplex_regression FAILED (t=$t): $e"); flush(stdout)
+            println("  !! analysis(method=:sinkhorn) FAILED (t=$t): $e"); flush(stdout)
             rcs_diff[:, i] .= NaN
         end
     end

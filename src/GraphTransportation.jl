@@ -8,7 +8,7 @@ discrete metric measure spaces*.
 The package provides:
 - **Geodesics** (`discrete_transport`, `transport_cost`): compute discrete
   transport geodesics between probability measures on a graph via a
-  Galerkin-discretised Chambolle-Pock primal-dual algorithm.
+  Galerkin-discretized Chambolle-Pock primal-dual algorithm.
 - **Barycenters** (`barycenter`): compute discrete transport Fréchet means via
   gradient descent.
 - **Coordinate recovery** (`analysis`): recover barycentric coordinates of a
@@ -46,7 +46,7 @@ include("core/CommonGraphs.jl")
 include("core/MarkovGraph.jl")
 include("core/Analysis.jl")
 
-# --- Chambolle-Pock: the paper's reference implementation (Galerkin-discretised
+# --- Chambolle-Pock: the paper's reference implementation (Galerkin-discretized
 #     primal-dual geodesics, gradient-descent barycenters, momentum-based analysis)
 include("chambolle_pock/ProximalAvgIndicator.jl")
 include("chambolle_pock/ProximalAction.jl")

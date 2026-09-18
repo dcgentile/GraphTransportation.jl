@@ -2,11 +2,11 @@
     form_ceh_system(Q, N) -> LU
 
 Assemble and factorise the `(NV+1) × (NV+1)` linear system whose solution
-gives the Lagrange multiplier for the projection onto the Galerkin-discretised
+gives the Lagrange multiplier for the projection onto the Galerkin-discretized
 continuity equation constraint set (Erbar et al. 2020, eqn. 10).
 
 The system matrix is essentially the differential operator `D = ∂t² + L` where
-`L` is the graph Laplacian of `Q`.  A mean-zero normalisation constraint is
+`L` is the graph Laplacian of `Q`.  A mean-zero normalization constraint is
 appended (ones border, zero corner) to ensure a unique solution.
 
 Returns an `LU` factorisation for efficient repeated solves.
@@ -73,7 +73,7 @@ end
 """
     proj_CE!(ρ, m, μ, ν, Q, A=nothing) -> (ρ, m)
 
-Project `(ρ, m)` in-place onto the Galerkin-discretised continuity equation
+Project `(ρ, m)` in-place onto the Galerkin-discretized continuity equation
 constraint set.  If `φ` solves the linear system `A·φ = b`, the update is:
 
     ρ[1,:]   .= μ
@@ -128,7 +128,7 @@ end
 Project onto the intersection of the continuity-equation constraint set and the
 non-negativity constraint via the POCS (Projections onto Convex Sets) algorithm.
 
-Because discretised curves are not continuous, a continuity-equation-satisfying
+Because discretized curves are not continuous, a continuity-equation-satisfying
 sequence can still leave the probability simplex; this POCS loop enforces both
 constraints simultaneously.
 """

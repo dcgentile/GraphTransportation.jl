@@ -133,7 +133,7 @@ end
     weighted_hypercube_markov_chain() -> (Q, π)
 
 Construct a randomly weighted random walk Markov chain on the 4-cube (16 nodes,
-32 edges).  Edge weights are drawn uniformly from `{1, …, 10}` and symmetrised,
+32 edges).  Edge weights are drawn uniformly from `{1, …, 10}` and symmetrized,
 so the stationary distribution is non-uniform.  Results vary across calls.
 """
 function weighted_hypercube_markov_chain()
@@ -199,7 +199,7 @@ end
     grid_markov_chain(n) -> (Q, π)
 
 Construct the uniform random walk Markov chain on the `n × n` grid graph
-(`n²` nodes with nearest-neighbour edges).
+(`n²` nodes with nearest-neighbor edges).
 """
 function grid_markov_chain(n)
     E = Tuple{Int,Int}[]

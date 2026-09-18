@@ -13,7 +13,7 @@ gives the squared discrete transport distance.
 # Arguments
 - `Q`: row-stochastic Markov transition matrix defining the graph
 - `μ`, `ν`: probability densities w.r.t. the stationary distribution of `Q`
-- `N`: number of time steps for the geodesic discretisation (default 64)
+- `N`: number of time steps for the geodesic discretization (default 64)
 - `σ`, `τ`: Chambolle-Pock step sizes; must satisfy `σ·τ < 1` (default 0.5)
 - `maxiters`: maximum Chambolle-Pock iterations (default 65536)
 - `tol`: convergence tolerance on the density change between iterates
@@ -55,7 +55,7 @@ computed as `√(action(discrete_transport(Q, μ, ν; ...)))`.
 # Arguments
 - `Q`: row-stochastic Markov transition matrix defining the graph
 - `μ`, `ν`: probability densities w.r.t. the stationary distribution of `Q`
-- `N`: number of time steps for the geodesic discretisation (default 64)
+- `N`: number of time steps for the geodesic discretization (default 64)
 - `σ`, `τ`: Chambolle-Pock step sizes; must satisfy `σ·τ < 1` (default 0.5)
 - `maxiters`: maximum Chambolle-Pock iterations (default 65536)
 - `tol`: convergence tolerance on the density change between iterates
