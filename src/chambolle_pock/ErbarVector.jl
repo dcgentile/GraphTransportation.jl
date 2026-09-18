@@ -2,7 +2,7 @@
     ErbarVector{M, T}
 
 An element of the Hilbert space H described in equation (27) of Erbar et al.
-2020, representing a discretised curve `(ρ, m)` together with the auxiliary
+2020, representing a discretized curve `(ρ, m)` together with the auxiliary
 variables `(θ, ρ_minus, ρ_plus, ρ_avg, q)` used by the Chambolle-Pock solver.
 
 Type parameters:

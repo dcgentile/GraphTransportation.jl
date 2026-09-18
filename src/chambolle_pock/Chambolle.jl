@@ -215,7 +215,7 @@ Compute the proximal mapping of G in place, writing the result into `targ`.
 
 G is an indicator function, so its proximal mapping is a projection.  It
 decomposes as three independent projections:
-  - `proj_CE!`         — projection onto the Galerkin-discretised continuity
+  - `proj_CE!`         — projection onto the Galerkin-discretized continuity
                          equation constraint set
   - `project_K!`       — element-wise projection onto Script K
   - `project_IJeq!`    — projection onto J_Eq (equality of ρ_avg and q)
