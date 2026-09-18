@@ -1,8 +1,10 @@
 # GraphTransportation.jl
 
-A Julia package for discrete transport geometry on graphs, implementing the framework
-of Erbar, Rumpf, Schmitzer, and Simon —
-*Computation of optimal transport on discrete metric measure spaces*.
+Optimal transport geometry for probability measures on graphs. A graph is given as a
+reversible Markov chain; the package equips the measures on it with the discrete
+transport metric of Maas and of Chow, Huang, Li and Zhou, for any admissible mean, and
+computes geodesics, barycenters and barycentric coordinates in that geometry. The
+literature behind each part is collected on the [References](citations.md) page.
 
 ## Overview
 
@@ -19,11 +21,12 @@ Given a graph encoded as a Markov transition matrix `Q` with stationary distribu
 - **Entropic optimal transport barycenters** via the Sinkhorn algorithm, with
   simplex-regression-based coordinate recovery
 
-Every function takes `method=:socp` (default), `:shooting`, or `:chambolle_pock`. The
-last is the paper's Galerkin-discretised Chambolle-Pock solver with gradient-descent
-barycenters, kept as the reference implementation; the SOCP and shooting paths are the
-recommended tools: orders of magnitude faster, with certified optimality for
-barycenters and coordinate recovery that is exact at the synthesis resolution.
+Every function takes `method=:socp` (default), `:shooting`, `:chambolle_pock` or
+`:sinkhorn`. The third is the Galerkin-discretized primal-dual scheme of Erbar, Rumpf,
+Schmitzer and Simon with gradient-descent barycenters, kept as a reference
+implementation; the SOCP and shooting paths are the recommended tools: orders of
+magnitude faster, with certified optimality for barycenters and coordinate recovery
+that is exact at the synthesis resolution.
 
 ## Quick start
 

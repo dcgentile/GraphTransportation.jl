@@ -20,6 +20,7 @@ makedocs(
         "Tutorial"  => "tutorial.md",
         "Examples"  => "examples.md",
         "API"       => "api.md",
+        "References" => "citations.md",
     ],
     checkdocs = :exports,
 )
