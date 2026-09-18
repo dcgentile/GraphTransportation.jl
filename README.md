@@ -68,7 +68,8 @@ transport_cost(MarkovGraph(G; mean=HarmonicMean()), a, b; N=20)
 The package accompanies
 
 > D. Gentile, J. M. Murphy. *Static and dynamic approaches to computing barycenters of
-> probability measures on graphs.* Preprint, 2026.
+> probability measures on graphs.* arXiv:2603.26940, 2026.
+> [https://arxiv.org/abs/2603.26940](https://arxiv.org/abs/2603.26940)
 
 The literature behind each part of the package (the discrete transport metric, its
 computation, barycenters and coordinates, entropic transport) is collected on the
