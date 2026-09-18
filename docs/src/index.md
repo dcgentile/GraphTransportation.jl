@@ -1,8 +1,10 @@
 # GraphTransportation.jl
 
-A Julia package for discrete transport geometry on graphs, implementing the framework
-of Erbar, Rumpf, Schmitzer, and Simon —
-*Computation of optimal transport on discrete metric measure spaces*.
+Optimal transport geometry for probability measures on graphs. A graph is given as a
+reversible Markov chain; the package equips the measures on it with the discrete
+transport metric of Maas and of Chow, Huang, Li and Zhou, for any admissible mean, and
+computes geodesics, barycenters and barycentric coordinates in that geometry. The
+literature behind each part is collected on the [References](citations.md) page.
 
 ## Overview
 
