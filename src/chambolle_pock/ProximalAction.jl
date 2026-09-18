@@ -82,7 +82,7 @@ stationarity condition, which reduces to the depressed cubic
 
 When the discriminant D = (4(2+x)/3)³ + (4y)² ≥ 0 there is one real root,
 solved directly via Cardano's formula. When D < 0 there are three real roots
-(trigonometric method); the one minimising the squared distance to (x,y) is chosen.
+(trigonometric method); the one minimizing the squared distance to (x,y) is chosen.
 
 Returns:
 - (p, q): projected point satisfying p = -0.25*q²

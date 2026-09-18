@@ -73,7 +73,7 @@ end
     stationary_from_transition(Q) -> π
 
 Compute the stationary distribution of a row-stochastic transition matrix `Q`
-by solving the linear system `(Q' - I)π = 0` with the normalisation constraint
+by solving the linear system `(Q' - I)π = 0` with the normalization constraint
 `sum(π) = 1`.  The overdetermined system is assembled and solved via least
 squares (`\\`).
 """

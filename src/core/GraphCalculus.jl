@@ -176,7 +176,7 @@ Return the sparse time-averaging operator of size `(N-1) × N`.
 
 Row `i` contains 0.5 at columns `i` and `i+1`, so multiplying by a length-`N`
 vector computes the average of each consecutive pair.  In the Erbar et al. 2020
-discretisation, this maps the node density curve ρ ∈ V_{n,h}^1 (N+1 time
+discretization, this maps the node density curve ρ ∈ V_{n,h}^1 (N+1 time
 points) to its time-averaged version ρ_avg ∈ V_{n,h}^0 (N time points) via
 `avg_operator(N+1) * ρ`.
 """

@@ -3,7 +3,7 @@
 
 Abstract supertype of the means `θ(s, t)` (mobilities) that define a discrete transport
 metric: `‖∇φ‖²_ρ = Σ_e κ_e θ(ρ_x, ρ_y) (∇φ)_e²`. An admissible mean is continuous,
-symmetric, positively 1-homogeneous, concave, positive on `(0,∞)²` and normalised so
+symmetric, positively 1-homogeneous, concave, positive on `(0,∞)²` and normalized so
 `θ(s, s) = s` (Maas 2011). Concavity is what makes the action `m²/θ` jointly convex,
 hence the geodesic/barycenter programs convex.
 
@@ -13,7 +13,7 @@ generic in the element type so `ForwardDiff` can differentiate through them.
 
 For all `s, t > 0`: `HarmonicMean() ≤ GeometricMean() ≤ LogarithmicMean() ≤ ArithmeticMean()`.
 The arithmetic mean is the only one with `θ(0, t) ≠ 0`, so it is the only one under which
-mass can flow out of an empty node; see the package documentation on boundary behaviour.
+mass can flow out of an empty node; see the package documentation on boundary behavior.
 """
 abstract type AdmissibleMean end
 
