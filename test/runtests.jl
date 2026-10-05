@@ -886,6 +886,32 @@ end
     @test A ≈ A' rtol=1e-12
 end
 
+@testset "solve_simplex_qp (exact simplex QP)" begin
+    rng = MersenneTwister(3)
+    for p in (2, 3, 5)
+        B = randn(rng, p + 2, p); A = B' * B
+        λ = GraphTransportation.solve_simplex_qp(A)
+        @test all(>=(0), λ)
+        @test sum(λ) ≈ 1 atol=1e-14
+        # KKT: (Aλ)_i = λ'Aλ on the support, ≥ λ'Aλ off it
+        r = A * λ .- dot(λ, A * λ)
+        @test all(abs.(r[λ .> 0]) .< 1e-10) && all(r[λ .== 0] .>= -1e-10)
+        # conic fallback agrees to its own tolerance
+        @test GraphTransportation._simplex_qp_conic(A) ≈ λ atol=1e-3
+    end
+    # interior minimizer recovered to rounding: A = diag-dominant with known λ*
+    A = [2.0 0.5 0.0; 0.5 3.0 0.5; 0.0 0.5 1.0]
+    λ = GraphTransportation.solve_simplex_qp(A)
+    @test A * λ ≈ fill(dot(λ, A * λ), 3) atol=1e-14
+    # vertex solution: a dominated reference gets exactly zero weight
+    @test GraphTransportation.solve_simplex_qp([1.0 0.0; 0.0 4.0]) ≈ [0.8, 0.2]
+    @test GraphTransportation.solve_simplex_qp([1.0 2.0; 2.0 5.0]) == [1.0, 0.0]
+    # singular (duplicate reference): still a valid simplex point with the optimal value
+    λ = GraphTransportation.solve_simplex_qp([1.0 1.0; 1.0 1.0])
+    @test sum(λ) ≈ 1
+    @test all(>=(0), λ)
+end
+
 @testset "analyze_shooting (:shooting analysis backend)" begin
     Q, π = weighted_hypercube_markov_chain()
     G = MarkovGraph(Q, π)
@@ -896,9 +922,8 @@ end
     # Synthesized by the SOCP at fine N: the shooting backend checks stationarity in a
     # different discretization, so expect O(1/N) agreement, not solver tolerance.
     # Check the rate, not just a single small error. The recovered λ̂ itself is a poor
-    # rate probe: it comes out of the SCS simplex QP, whose default tolerance leaves a
-    # platform-dependent floor of ~1e-5 to ~5e-4 on |λ̂-λ| (Julia 1.10 on CI sits at the
-    # top of that range), so |λ̂-λ| stops shrinking with N almost immediately. The
+    # rate probe: the Gram matrix itself is only O(h)-accurate, so |λ̂-λ| stops shrinking with N
+    # almost immediately. The
     # quantity that is genuinely O(h) and involves no QP is the Gram-form residual of
     # the *true* λ, λᵀAλ / max(diag A): measured 8e-7 to 1.3e-6 at N=2 and 4e-9 to 7e-9
     # at N=10 on Julia 1.10/1.12 (a factor of 100-300). Require a factor of 10.
@@ -1077,6 +1102,10 @@ end
         @test abs(J_sh - J_fine) / J_fine < 5e-3
         @test J_at(ν_sh) ≥ J_at(ν) - 1e-6
         @test vec(analysis(G, ν_sh, refs; method=:shooting)) ≈ λ atol=1e-3   # exact in its own convention
+        # exact simplex QP: the recovery is limited by the barycenter's convergence, not by the QP solve
+        ν_tight, _, info_tight = barycenter(G, refs, λ; method=:shooting, tol=1e-8)
+        @test info_tight.status == :converged
+        @test vec(analysis(G, ν_tight, refs; method=:shooting)) ≈ λ atol=1e-8
         @test_throws ArgumentError barycenter(G, refs, λ; method=:sinkhorn_descent)
     end
 end

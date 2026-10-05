@@ -30,7 +30,7 @@ The mobility for both the geodesic solves and the Gram-matrix weighting is `G.me
 recovery is exact for a target synthesized on the same graph (same mean).
 
 `refs` is a vector of reference probability densities on `G`. Returns the recovered
-weight vector `λ̂` (from `Convex.jl`/SCS on the small `p × p` Gram matrix), or
+weight vector `λ̂` (exact simplex QP on the small `p × p` Gram matrix), or
 `(λ̂, A)` if `return_system=true`.
 """
 function analyze_socp(G::MarkovGraph, target::AbstractVector, refs::Vector{<:AbstractVector};

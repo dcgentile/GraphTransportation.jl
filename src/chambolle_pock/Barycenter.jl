@@ -194,7 +194,7 @@ The method proceeds in three steps:
   2. Assemble the `p × p` Gram matrix `A[i,j] = ⟨log_ν(M[:,i]),
      log_ν(M[:,j])⟩_{g(ν)}` under the metric tensor `g(ν)`.
   3. Solve the simplex-constrained quadratic programme `min_{w≥0, Σw=1} w'Aw`
-     using Convex.jl / SCS, which recovers the weights at the discrete transport
+     exactly (`solve_simplex_qp`), which recovers the weights at the discrete transport
      barycenter.
 
 Optional keyword arguments:
