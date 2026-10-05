@@ -18,7 +18,9 @@
 #   states_comparison_density.pdf  — all panels shown as densities w.r.t. u
 #   states_comparison_prob.pdf     — all panels shown as probability measures
 #
-# Data: examples/data/states.shp (source: https://hub.arcgis.com/datasets/usdot::states/)
+# Data: examples/data/states.shp, a US Census Bureau cartographic boundary file
+# (cb_<year>_us_state_<res>, https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html);
+# US government work, public domain. Vintage and resolution were not recorded.
 
 using GraphTransportation
 using CairoMakie, GraphMakie
