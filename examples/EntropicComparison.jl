@@ -12,7 +12,9 @@
 #
 # Coordinate recovery: analysis(G, ν, refs; method=:sinkhorn, cost, epsilon)
 #
-# Data: examples/data/states.shp (source: https://hub.arcgis.com/datasets/usdot::states/)
+# Data: examples/data/states.shp, a US Census Bureau cartographic boundary file
+# (cb_<year>_us_state_<res>, https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html);
+# US government work, public domain. Vintage and resolution were not recorded.
 
 using GraphTransportation
 using CairoMakie, GraphMakie
