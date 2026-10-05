@@ -16,3 +16,4 @@ nbs/
 **/nbs/
 experiments/
 src/experiments/
+.claude/worktrees/
