@@ -12,9 +12,11 @@
 #
 # Coordinate recovery: analysis(G, ν, refs; method=:sinkhorn, cost, epsilon)
 #
-# Data: examples/data/states.shp, a US Census Bureau cartographic boundary file
-# (cb_<year>_us_state_<res>, https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html);
-# US government work, public domain. Vintage and resolution were not recorded.
+# Data: examples/data/states.shp is the US Census Bureau cartographic boundary
+# file cb_2018_us_state_500k (https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_state_500k.zip),
+# restricted to the 48 contiguous states + DC (49 records). Verified against the
+# download: same vertices and ALAND/AWATER; ring order differs (re-exported).
+# US government work, public domain.
 
 using GraphTransportation
 using CairoMakie, GraphMakie
