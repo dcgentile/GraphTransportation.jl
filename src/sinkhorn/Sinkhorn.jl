@@ -145,6 +145,12 @@ function sinkhorn_barycenter(coords, measures, target, cost, epsilon; iters=256)
 end
 
 
+function _check_finite(x, epsilon)
+    all(isfinite, x) || error("Sinkhorn iteration produced NaN/Inf (epsilon = $epsilon); ",
+                              "the kernel exp(-cost/epsilon) is likely underflowing, so increase epsilon")
+    return x
+end
+
 """
     barycentric_loss(α, measures, target, cost, epsilon; iters=256)
 
@@ -152,9 +158,13 @@ The regression objective `E_L(λ)` of Bonneel et al. (Eq. 12) with the squared E
 loss, as a function of the *unconstrained* variable `α` through the softmax change of
 variables `λ = softmax(α)` (`logarithmic_change_of_variable`). The same `iters` must be
 used for the objective and its gradient (`loss_gradient`).
+
+Throws an `ErrorException` if the Sinkhorn iteration produces NaN/Inf (typically `epsilon`
+too small for `cost`, so that `exp(-cost/epsilon)` underflows).
 """
 function barycentric_loss(α, measures, target, cost, epsilon; iters=256)
     bar, _ = sinkhorn_differentiate(logarithmic_change_of_variable(α), measures, target, cost, epsilon, iters)
+    _check_finite(bar, epsilon)
     return sqeuc_loss(bar, target)
 end
 
@@ -166,10 +176,12 @@ Gradient of `barycentric_loss` with respect to the unconstrained variable `α`:
 `sinkhorn_differentiate` returns `∇_λ E_L` (Algorithm 1's `w`), and the softmax
 change of variables `λ = softmax(α)` contributes its Jacobian,
 `∇_α E = λ ∘ (∇_λ E − ⟨λ, ∇_λ E⟩)`. Checked against finite differences in the tests.
+Throws like `barycentric_loss` if the iteration produces NaN/Inf.
 """
 function loss_gradient(α, measures, cost, target, epsilon; iters=256)
     λ = logarithmic_change_of_variable(α)
     _, w = sinkhorn_differentiate(λ, measures, target, cost, epsilon, iters)
+    _check_finite(w, epsilon)
     return λ .* (w .- dot(λ, w))
 end
 

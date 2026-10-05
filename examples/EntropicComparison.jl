@@ -12,7 +12,9 @@
 #
 # Coordinate recovery: analysis(G, ν, refs; method=:sinkhorn, cost, epsilon)
 #
-# Run from src/experiments/ so that ./data/states.shp resolves correctly.
+# Data: examples/data/states.shp, a US Census Bureau cartographic boundary file
+# (cb_<year>_us_state_<res>, https://www.census.gov/geographies/mapping-files/time-series/geo/cartographic-boundary.html);
+# US government work, public domain. Vintage and resolution were not recorded.
 
 using GraphTransportation
 using CairoMakie, GraphMakie
@@ -24,7 +26,6 @@ using JLD2
 include("./ExperimentUtils.jl")
 
 # ── USA graph setup ────────────────────────────────────────────────────────────
-# load_usa_mc() reads ./data/states.shp; must be run from src/experiments/.
 Qusa, sstate, geo_cx, geo_cy = load_usa_mc()
 n = length(sstate)
 

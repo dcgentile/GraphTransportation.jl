@@ -1157,6 +1157,14 @@ end
         @test abs(sum(SK.loss_gradient(α, M, cost, q, ε; iters=40))) < 1e-12   # tangent to the simplex
     end
 
+    # A kernel that underflows must fail loudly, not hand NaN to L-BFGS.
+    @testset "non-finite Sinkhorn output throws" begin
+        α = [0.2, -0.1, 0.3]
+        c = cost .+ 1.0   # no zero diagonal: exp(-c/ε) underflows to an all-zero kernel
+        @test_throws ErrorException SK.barycentric_loss(α, M, q, c, 1e-3; iters=40)
+        @test_throws ErrorException SK.loss_gradient(α, M, c, q, 1e-3; iters=40)
+    end
+
     @testset "simplex_regression recovers the synthesis weights" begin
         target = sinkhorn_barycenter(λ, M, nothing, cost, ε; iters=256)
         λ̂ = simplex_regression(M, target, cost, ε; iters=256)

@@ -1,7 +1,6 @@
-/Manifest.toml
+**/Manifest.toml
 /.ipynb_checkpoints/
 /docs/build/
-/docs/Manifest.toml
 /docs/src/examples.md
 
 # experiment outputs
@@ -16,3 +15,4 @@ nbs/
 **/nbs/
 experiments/
 src/experiments/
+.claude/worktrees/
