@@ -35,7 +35,7 @@ function load_usa_mc()
         return Q, sstate
     end
 
-    shapes = Shapefile.Handle("./data/states.shp").shapes
+    shapes = Shapefile.Handle(joinpath(@__DIR__, "data", "states.shp")).shapes
     n = length(shapes)
 
     adj = [touches(shapes[i], shapes[j]) || intersects(shapes[i], shapes[j])

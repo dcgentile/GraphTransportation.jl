@@ -18,8 +18,7 @@
 #   states_comparison_density.pdf  — all panels shown as densities w.r.t. u
 #   states_comparison_prob.pdf     — all panels shown as probability measures
 #
-# Run from src/experiments/ with --project=.
-# (load_usa_mc reads ./data/states.shp relative to the working directory)
+# Data: examples/data/states.shp (source: https://hub.arcgis.com/datasets/usdot::states/)
 
 using GraphTransportation
 using CairoMakie, GraphMakie
