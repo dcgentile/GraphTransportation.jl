@@ -8,7 +8,7 @@ Shared Gram-matrix-assembly and simplex-QP-solve core of `analysis`: given the i
 tangent vectors (dense `V × V` antisymmetric matrices, one per reference) of the
 geodesics from a target measure to each reference, and the target's metric tensor `g`,
 assembles `A[i,j] = Σ_{x,y} tangent_vectors[i][x,y] * tangent_vectors[j][x,y] * g[x,y]`
-and solves `min_{w≥0, Σw=1} w'Aw` via Convex.jl/SCS. Factored out of `analysis` so
+and solves `min_{w≥0, Σw=1} w'Aw` exactly (`solve_simplex_qp`). Factored out of `analysis` so
 `analyze_socp` (which sources tangent vectors from `geodesic_socp` instead of
 `discrete_transport`) can reuse the exact same, already-validated Gram/QP formulation
 rather than re-deriving it. Returns `λ̂` as a `Vector` (or `(λ̂, A)` with
@@ -26,20 +26,53 @@ function solve_barycentric_coordinates_qp(tangent_vectors, g; compute_condition=
         κ = maximum(e) / minimum(e)
         println("Estimated condition number of analysis matrix: $(κ)")
     end
-    # solve the QP
-    n = size(A, 1)
-    x = Variable(n)
-    problem = minimize(quadform(x, A))
-    # Simplex constraints
-    problem.constraints = vcat(problem.constraints, [x >= 0])
-    problem.constraints = vcat(problem.constraints, [sum(x) == 1])
+    λ = solve_simplex_qp(A)
+    return return_system ? (λ, A) : λ
+end
 
-    Convex.solve!(problem, SCS.Optimizer)
-    if return_system
-        return (vec(x.value), A)
+# Largest p for which `solve_simplex_qp` enumerates all 2^p - 1 supports.
+const SIMPLEX_QP_ENUM_MAX = 12
+
+"""
+    solve_simplex_qp(A) -> λ
+
+Minimize `λᵀAλ` over the probability simplex for a symmetric positive semidefinite `A`.
+For small `p` this is exact to rounding: the minimizer has some support `S` on which it
+solves the KKT system `A_SS x = c·1, Σx = 1` (solved as the bordered system
+`[A_SS 1; 1ᵀ 0]`, which stays nonsingular when `A_SS` is singular with a null vector off
+the sum-zero hyperplane — exactly the case `c = 0` of an exactly recovered barycenter, where
+`A_SS⁻¹1` does not exist). Every support is tried, candidates with a negative entry are
+dropped, and the best objective wins (`2^p - 1` small solves). Beyond
+`SIMPLEX_QP_ENUM_MAX` references, or if no support yields a candidate (singular `A`), falls
+back to Clarabel at its default (~1e-8) tolerance.
+"""
+function solve_simplex_qp(A::AbstractMatrix)
+    p = size(A, 1)
+    p <= SIMPLEX_QP_ENUM_MAX || return _simplex_qp_conic(A)
+    best, λbest = Inf, nothing
+    for mask in 1:(2^p - 1)
+        S = [i for i in 1:p if (mask >> (i - 1)) & 1 == 1]
+        k = length(S)
+        K = [A[S, S] ones(k); ones(1, k) 0.0]
+        sol = try K \ [zeros(k); 1.0] catch; continue end
+        all(isfinite, sol) || continue
+        x = sol[1:k]
+        all(>=(0), x) || continue
+        λ = zeros(p); λ[S] = x
+        f = dot(λ, A * λ)
+        f < best && ((best, λbest) = (f, λ))
     end
+    λbest === nothing ? _simplex_qp_conic(A) : λbest
+end
 
-    vec(x.value)  # optimal solution
+function _simplex_qp_conic(A)
+    n = size(A, 1)
+    # the minimizer is invariant under A -> cA, and the solver stops on absolute tolerances
+    A = A ./ max(maximum(abs, A), floatmin())
+    x = Variable(n)
+    problem = minimize(quadform(x, Symmetric(A)), [x >= 0, sum(x) == 1])
+    Convex.solve!(problem, Clarabel.Optimizer; silent=true)
+    return vec(x.value)
 end
 
 """
